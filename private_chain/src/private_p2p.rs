@@ -9,6 +9,7 @@ use libp2p::{
 use tokio::{
     sync::mpsc,
 };
+use std::io;
 use std::collections::HashMap;
 use log::{error, info};
 use once_cell::sync::Lazy;
@@ -18,12 +19,13 @@ use crate::private_block;
 use crate::private_pbft;
 use crate::private_pbft::PRIVATE_PBFT_PREPREPARED_TOPIC;
 use crate::private_block::handle_create_block_pbft;
-
+use crate::account_root::AccountRoot;
 // main.rs
 use crate::Publisher;
 pub static KEYS: Lazy<identity::Keypair> = Lazy::new(identity::Keypair::generate_ed25519);
 pub static PEER_ID: Lazy<PeerId> = Lazy::new(|| PeerId::from(KEYS.public()));
 pub static CHAIN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("chains"));
+pub static GENESIS_BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("genesis_private_block"));
 pub static PRIVATE_TXN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("private_transactions"));
 pub static PRIVATE_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("private_pbft_prepared"));
 pub static PRIVATE_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("private_pbft_commit"));
@@ -62,6 +64,8 @@ pub struct PrivateAppBehaviour {
     pub txn: Txn,
     #[behaviour(ignore)]
     pub pbft: PBFTNode,
+    #[behaviour(ignore)]
+    pub account_r: AccountRoot,
 }
 
 impl PrivateAppBehaviour {
@@ -70,6 +74,7 @@ impl PrivateAppBehaviour {
         app: PrivateApp,
         txn:Txn,
         pbft:PBFTNode,
+        account_r:AccountRoot,
         response_sender: mpsc::UnboundedSender<PrivateChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
     ) -> Self {
@@ -77,6 +82,7 @@ impl PrivateAppBehaviour {
             app,
             txn,
             pbft,
+            account_r,
             floodsub: Floodsub::new(*PEER_ID),
             mdns: Mdns::new(Default::default())
                 .await
@@ -86,6 +92,7 @@ impl PrivateAppBehaviour {
         };
         behaviour.floodsub.subscribe(CHAIN_TOPIC.clone());
         behaviour.floodsub.subscribe(private_block::PRIVATE_BLOCK_TOPIC.clone());
+        behaviour.floodsub.subscribe(GENESIS_BLOCK_TOPIC.clone());
         behaviour.floodsub.subscribe(PRIVATE_TXN_TOPIC.clone());
         behaviour.floodsub.subscribe(PRIVATE_PBFT_PREPREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(PRIVATE_PBFT_PREPARED_TOPIC.clone());
@@ -116,7 +123,22 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                         error!("error sending response via channel, {}", e);
                     }
                 }
-            } else if msg.topics[0]==Topic::new("private_blocks"){
+            } else if msg.topics[0]==Topic::new("genesis_private_block"){
+                match serde_json::from_slice::<PrivateBlock>(&msg.data) {
+                    Ok(block) => {
+                        info!("Received new GENESIS block from {}", msg.source.to_string());
+                        self.app.try_add_genesis()
+                    },
+                    Err(err) => {
+                        error!(
+                            "Error deserializing GENESIS block from {}: {}",
+                            msg.source.to_string(),
+                            err
+                        );
+                    }
+                }
+            }
+            else if msg.topics[0]==Topic::new("private_blocks"){
                 match serde_json::from_slice::<PrivateBlock>(&msg.data) {
                     Ok(block) => {
                         info!("Received new block from {}", msg.source.to_string());
@@ -231,4 +253,71 @@ pub fn handle_print_raw_txn(swarm: &Swarm<PrivateAppBehaviour>) {
     info!("{}", pretty_json);
 }
 
+pub fn handle_print_peers(swarm: &Swarm<PrivateAppBehaviour>) {
+    let peers = get_list_peers(swarm);
+    peers.iter().for_each(|p| info!("{}", p));
+}
 
+pub fn handle_start_chain(swarm: &mut Swarm<PrivateAppBehaviour>){
+    let mut steps = 0;
+    let mut chain_name = String::new();
+    let mut start_block = String::new();
+    loop{
+        if steps==0{
+            println!("Enter your Chain name: ");
+            io::stdin().read_line(&mut chain_name).expect("Failed to read line");
+        }else if steps==1 {
+            println!("Start your Genesis Block (Y/N): ");
+            io::stdin().read_line(&mut start_block).expect("Failed to read line");
+            println!("{}",start_block);
+            if start_block.trim()=="y".to_string(){
+                println!("Starting...");
+                println!("Setting up Genesis Block for Chain: {}",chain_name);
+                println!("Setup completed...start using today!");
+                swarm.behaviour_mut().app.genesis();
+                let the_genesis_block =swarm.behaviour_mut().app.blocks.last().expect("there is at least one block");
+                match serde_json::to_vec::<PrivateBlock>(the_genesis_block) {
+                    Ok(block) => {
+                        info!("Block: {:?}", block);
+                        info!("Generating Genesis block for chain: {}", chain_name);
+                        swarm
+                        .behaviour_mut()
+                        .floodsub
+                        .publish(GENESIS_BLOCK_TOPIC.clone(), block);
+                    },
+                    Err(err) => {
+                        error!(
+                            "Error deserializing Genesis Block, {}",
+                            err
+                        );
+                    }
+                }
+
+                break;
+            }else {
+                println!("Looks like you have decided to not continue with the setup, try again later!");
+                break;
+            }
+        }
+      
+        if chain_name.is_empty() {
+            println!("You entered an empty string!");
+           
+        } else {
+            println!("Chain name: {}", chain_name);
+            let peers_list = get_list_peers(swarm);
+            println!("Checking on number of Private Validator... looks like you have {}",peers_list.len());
+            if  peers_list.len()>=2 {
+                println!("Looks like you have sufficient private validator");
+                steps+=1;
+            }else{
+                println!("Looks like you have insufficient private validator, setup at least 2 of them and try again!");
+                break;
+            }
+
+
+        }
+
+    }
+
+}

@@ -1,5 +1,4 @@
 use chrono::prelude::*;
-use super::{App};
 use libp2p::{
     floodsub::{Topic},
     swarm::{Swarm},
@@ -8,7 +7,6 @@ use log::{ info, warn};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest};
 use once_cell::sync::Lazy;
-use crate::private_p2p::PrivateAppBehaviour;
 
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
 
@@ -29,7 +27,7 @@ pub fn generate_public_address() -> String {
 }
 
 impl AccountRoot {
-    pub fn new(id: u64,nodes:Vec<String>) -> Self {
+    pub fn new() -> Self {
         let now = Utc::now();
         let timestamp: i64 = now.timestamp();
         AccountRoot {
@@ -45,6 +43,10 @@ impl AccountRoot {
 
     pub fn verify_validator(id:u64)->bool {
         true
+    }
+    pub fn add_network_name(&mut self,name:String){
+        self.network_name=Some(name.to_string());
+        
     }
 
 }

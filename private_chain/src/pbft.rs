@@ -13,17 +13,17 @@ use once_cell::sync::Lazy;
 use rand::thread_rng;
 use rand::distributions::Alphanumeric;
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::p2p::AppBehaviour;
+use crate::private_p2p::PrivateAppBehaviour;
 
-pub static PRIVATE_PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("private_pbft_pre_prepared"));
-pub static PRIVATE_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_commit"));
+pub static PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_pre_prepared"));
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum Message {
     PrePrepare(u64), // View number, Content
     Prepare(u64),       // View number, Sequence number
     Commit(u64),        // View number, Sequence number
 }
-pub struct PrivatePBFTNode {
+pub struct PBFTNode {
     id: String,
     verification_hash:String,
     view: u64,
@@ -33,11 +33,11 @@ pub struct PrivatePBFTNode {
     txn: Vec<String>,
 }
 
-// pub fn get_total_pbft_view(swarm: &Swarm<AppBehaviour>)->u64 {
-//     let view_value = swarm.behaviour().pbft.view;
-//     view_value
-// }
-pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
+pub fn get_total_pbft_view(swarm: &Swarm<PrivateAppBehaviour>)->u64 {
+    let view_value = swarm.behaviour().pbft.view;
+    view_value
+}
+pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<PrivateAppBehaviour>) {
     if let Some(data) = cmd.strip_prefix("create txn") {
         let behaviour =swarm.behaviour_mut();
         let mut i: i64 =0;
@@ -85,12 +85,12 @@ pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
         //behaviour.txn.transactions.push(root_hash.clone());
         behaviour
             .floodsub
-            .publish(PRIVATE_PBFT_PREPREPARED_TOPIC.clone(), serialised_dictionary);
+            .publish(PBFT_PREPREPARED_TOPIC.clone(), serialised_dictionary);
     }
 
 }
 
-impl PrivatePBFTNode {
+impl PBFTNode {
     pub fn new(id: String)-> Self{
         // Initialize libp2p transport
         // ...

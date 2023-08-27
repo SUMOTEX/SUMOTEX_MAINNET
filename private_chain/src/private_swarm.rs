@@ -1,4 +1,4 @@
-use super::{App,Txn,pbft::PBFTNode};
+use super::{PrivateApp,Txn,pbft::PBFTNode};
 use libp2p::{
     core::upgrade,
     noise::{Keypair, NoiseConfig, X25519Spec},
@@ -15,7 +15,7 @@ use log::{ info};
 use crate::private_p2p::PEER_ID;
 use crate::private_p2p::PrivateAppBehaviour;
 use crate::private_p2p::KEYS;
-use crate::PrivateApp;
+use crate::account_root::AccountRoot;
 type MySwarm = Swarm<PrivateAppBehaviour>;
 
 pub async fn  create_swarm() -> MySwarm {
@@ -33,7 +33,13 @@ pub async fn  create_swarm() -> MySwarm {
         .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
         .boxed();
-    let private_behaviour = PrivateAppBehaviour::new(PrivateApp::new(),Txn::new(),PBFTNode::new(PEER_ID.clone().to_string()),response_sender, init_sender.clone()).await;
+    let private_behaviour = PrivateAppBehaviour::new(
+            PrivateApp::new(),
+            Txn::new(),
+            PBFTNode::new(PEER_ID.clone().to_string()),
+            AccountRoot::new(),
+            response_sender, 
+            init_sender.clone()).await;
     let swarm = SwarmBuilder::new(transp, private_behaviour, *PEER_ID)
         .executor(Box::new(|fut| {
             spawn(fut);
