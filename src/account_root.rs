@@ -6,26 +6,45 @@ use libp2p::{
 };
 use log::{ info, warn};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::{Digest};
 use once_cell::sync::Lazy;
-use crate::p2p::AppBehaviour;
+use crate::private_p2p::PrivateAppBehaviour;
 
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
 
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AccountRoot {
-    pub id: u64,
+    pub public_address: String,
     pub nodes:Vec<String>, // Nodes
+    pub balance: f64,
     pub transactions:Vec<String>, //Transactions hash
+    pub network_name:Option<String>,
     pub created_timestamp: i64,
     pub nonce: u64,
 }
+pub fn generate_public_address() -> String {
+    format!("{}",rand::random::<u64>())
 
-impl RootAccount {
+}
 
-    pub fn new(id: u64, previous_hash: String, txn:Vec<String>) -> Self {
+impl AccountRoot {
+    pub fn new(id: u64,nodes:Vec<String>) -> Self {
         let now = Utc::now();
+        let timestamp: i64 = now.timestamp();
+        AccountRoot {
+            public_address: generate_public_address(),
+            balance: 1000000.0,
+            nonce: 1,
+            nodes:vec![],
+            transactions:vec![],
+            network_name:None,
+            created_timestamp:timestamp
+        }
+    }
+
+    pub fn verify_validator(id:u64)->bool {
+        true
     }
 
 }

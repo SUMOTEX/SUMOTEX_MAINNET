@@ -1,5 +1,4 @@
-use sha2::{Sha256};
-use super::{App,Txn,PublicTxn, pbft::PBFTNode,public_block::Block};
+use super::{PrivateApp,Txn, pbft::PBFTNode,private_block::PrivateBlock};
 use libp2p::{
     floodsub::{Floodsub,FloodsubEvent,Topic},
     core::{identity},
@@ -15,9 +14,9 @@ use log::{error, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::time::{SystemTime, UNIX_EPOCH};
 use crate::private_block;
 use crate::private_pbft;
+use crate::private_pbft::PRIVATE_PBFT_PREPREPARED_TOPIC;
 use crate::private_block::handle_create_block_pbft;
 
 // main.rs
@@ -31,18 +30,18 @@ pub static PRIVATE_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pri
 
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct ChainResponse {
-    pub blocks: Vec<Block>,
+pub struct PrivateChainResponse {
+    pub blocks: Vec<PrivateBlock>,
     pub receiver: String,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
-pub struct LocalChainRequest {
+pub struct PrivateLocalChainRequest {
     pub from_peer_id: String,
 }
 
 pub enum EventType {
-    LocalChainResponse(ChainResponse),
+    LocalChainResponse(PrivateChainResponse),
     Input(String),
     Init,
     Publish(String, String), // Publish a message to a topic
@@ -50,28 +49,28 @@ pub enum EventType {
 }
 
 #[derive(NetworkBehaviour)]
-pub struct AppBehaviour {
+pub struct PrivateAppBehaviour {
     pub floodsub: Floodsub,
     pub mdns: Mdns,
     #[behaviour(ignore)]
-    pub response_sender: mpsc::UnboundedSender<ChainResponse>,
+    pub response_sender: mpsc::UnboundedSender<PrivateChainResponse>,
     #[behaviour(ignore)]
     pub init_sender: mpsc::UnboundedSender<bool>,
     #[behaviour(ignore)]
-    pub app: App,
+    pub app: PrivateApp,
     #[behaviour(ignore)]
     pub txn: Txn,
     #[behaviour(ignore)]
     pub pbft: PBFTNode,
 }
 
-impl AppBehaviour {
+impl PrivateAppBehaviour {
     // Create an Identify service
     pub async fn new(
-        app: App,
+        app: PrivateApp,
         txn:Txn,
         pbft:PBFTNode,
-        response_sender: mpsc::UnboundedSender<ChainResponse>,
+        response_sender: mpsc::UnboundedSender<PrivateChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
     ) -> Self {
         let mut behaviour = Self {
@@ -86,31 +85,31 @@ impl AppBehaviour {
             init_sender,
         };
         behaviour.floodsub.subscribe(CHAIN_TOPIC.clone());
-        behaviour.floodsub.subscribe(private_block::BLOCK_TOPIC.clone());
-        behaviour.floodsub.subscribe(TXN_TOPIC.clone());
-        behaviour.floodsub.subscribe(private_pbft::PBFT_PREPREPARED_TOPIC.clone());
+        behaviour.floodsub.subscribe(private_block::PRIVATE_BLOCK_TOPIC.clone());
+        behaviour.floodsub.subscribe(PRIVATE_TXN_TOPIC.clone());
+        behaviour.floodsub.subscribe(PRIVATE_PBFT_PREPREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(PRIVATE_PBFT_PREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(PRIVATE_PBFT_COMMIT_TOPIC.clone());
         behaviour
     }
 }
 // incoming event handler
-impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
+impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
     fn inject_event(&mut self, event: FloodsubEvent) {
         if let FloodsubEvent::Message(msg) = event {
             // if msg.topics[0]
             info!("Response from {:?}:", msg);
-            if let Ok(resp) = serde_json::from_slice::<ChainResponse>(&msg.data) {
+            if let Ok(resp) = serde_json::from_slice::<PrivateChainResponse>(&msg.data) {
                 if resp.receiver == PEER_ID.to_string() {
                     info!("Response from {}:", msg.source);
                     resp.blocks.iter().for_each(|r| info!("{:?}", r));
                     self.app.blocks = self.app.choose_chain(self.app.blocks.clone(), resp.blocks);
                 }
-            } else if let Ok(resp) = serde_json::from_slice::<LocalChainRequest>(&msg.data) {
+            } else if let Ok(resp) = serde_json::from_slice::<PrivateLocalChainRequest>(&msg.data) {
                 info!("sending local chain to {}", msg.source.to_string());
                 let peer_id = resp.from_peer_id;
                 if PEER_ID.to_string() == peer_id {
-                    if let Err(e) = self.response_sender.send(ChainResponse {
+                    if let Err(e) = self.response_sender.send(PrivateChainResponse {
                         blocks: self.app.blocks.clone(),
                         receiver: msg.source.to_string(),
                     }) {
@@ -118,7 +117,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                 }
             } else if msg.topics[0]==Topic::new("private_blocks"){
-                match serde_json::from_slice::<Block>(&msg.data) {
+                match serde_json::from_slice::<PrivateBlock>(&msg.data) {
                     Ok(block) => {
                         info!("Received new block from {}", msg.source.to_string());
                         self.app.try_add_block(block);
@@ -166,7 +165,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     let created_block=handle_create_block_pbft(self.app.clone(),root,txn);
                     println!("The Created Block After Validity: {:?}",created_block);
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
-                    self.app.blocks.push(created_block);
+                    //self.app.blocks.push(created_block);
                     println!("BLOCKS {:?}",self.app.blocks);
                     publisher.publish_block("private_blocks".to_string(),json.as_bytes().to_vec())
                 }
@@ -176,7 +175,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
         }
     }
 }
-impl NetworkBehaviourEventProcess<MdnsEvent> for AppBehaviour {
+impl NetworkBehaviourEventProcess<MdnsEvent> for PrivateAppBehaviour {
     fn inject_event(&mut self, event: MdnsEvent) {
         match event {
             MdnsEvent::Discovered(discovered_list) => {
@@ -198,7 +197,7 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for AppBehaviour {
 pub fn trigger_publish(sender: mpsc::UnboundedSender<(String, String)>, title: String, message: String) {
     sender.send((title, message)).expect("Can send publish private event");
 }
-pub fn get_list_peers(swarm: &Swarm<AppBehaviour>) -> Vec<String> {
+pub fn get_list_peers(swarm: &Swarm<PrivateAppBehaviour>) -> Vec<String> {
     info!("Private Validators:");
     let nodes = swarm.behaviour().mdns.discovered_nodes();
     let mut unique_peers = HashSet::new();
@@ -208,24 +207,24 @@ pub fn get_list_peers(swarm: &Swarm<AppBehaviour>) -> Vec<String> {
     unique_peers.iter().map(|p| p.to_string()).collect()
 }
 
-pub fn handle_print_private_peers(swarm: &Swarm<AppBehaviour>) {
+pub fn handle_print_private_peers(swarm: &Swarm<PrivateAppBehaviour>) {
     let peers = get_list_peers(swarm);
     peers.iter().for_each(|p| info!("{}", p));
 }
 
-pub fn handle_print_chain(swarm: &Swarm<AppBehaviour>) {
+pub fn handle_print_chain(swarm: &Swarm<PrivateAppBehaviour>) {
     info!("SUMOTEX Private Blockchain:");
     let pretty_json =
         serde_json::to_string_pretty(&swarm.behaviour().app.blocks).expect("can jsonify blocks");
     info!("{}", pretty_json);
 }
-pub fn handle_print_private_txn(swarm: &Swarm<AppBehaviour>) {
+pub fn handle_print_private_txn(swarm: &Swarm<PrivateAppBehaviour>) {
     info!("Private Transactions:");
     let pretty_json =
         serde_json::to_string_pretty(&swarm.behaviour().txn.transactions).expect("can jsonify transactions");
     info!("{}", pretty_json);
 }
-pub fn handle_print_raw_txn(swarm: &Swarm<AppBehaviour>) {
+pub fn handle_print_raw_txn(swarm: &Swarm<PrivateAppBehaviour>) {
     info!("Private Raw Transactions:");
     let pretty_json =
         serde_json::to_string_pretty(&swarm.behaviour().txn.hashed_txn).expect("can jsonify transactions");

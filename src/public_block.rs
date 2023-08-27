@@ -19,7 +19,7 @@ pub struct Block {
     pub public_hash: String,
     pub previous_hash: String,
     pub private_hash:Option<String>,
-    pub transactions:Vec<String>, // determine txn
+    pub transactions:Option<Vec<String>>, // determine txn
     pub timestamp: i64,
     pub nonce: u64,
 }
@@ -110,7 +110,6 @@ pub fn handle_create_block_pbft(app:App,root_hash:String,txn:Vec<String>)-> Bloc
 }
 
 impl Block {
-
     pub fn new(id: u64, previous_hash: String, txn:Vec<String>) -> Self {
         let now = Utc::now();
         let txn_item = txn;
@@ -122,25 +121,25 @@ impl Block {
             private_hash,
             timestamp: now.timestamp(),
             previous_hash,
-            transactions:txn_item,
+            transactions:Some(txn_item),
             nonce,
         }
     }
 
     pub fn is_block_valid(block: &Block, previous_block: &Block) -> bool {
         if block.previous_hash != previous_block.public_hash {
-            warn!("block with id: {} has wrong previous hash", block.id);
+            warn!("Public block with id: {} has wrong previous hash", block.id);
             return false;
         } else if !hash_to_binary_representation(
             &hex::decode(&block.public_hash).expect("can decode from hex"),
         )
         .starts_with(DIFFICULTY_PREFIX)
         {
-            warn!("block with id: {} has invalid difficulty", block.id);
+            warn!("Public block with id: {} has invalid difficulty", block.id);
             return false;
         } else if block.id != previous_block.id + 1 {
             warn!(
-                "block with id: {} is not the next block after the latest: {}",
+                "Public block with id: {} is not the next block after the latest: {}",
                 block.id, previous_block.id
             );
             return false;
@@ -151,7 +150,7 @@ impl Block {
             block.nonce,
         )) != block.public_hash
         {
-            warn!("block with id: {} has invalid hash", block.id);
+            warn!("Public block with id: {} has invalid hash", block.id);
             return false;
         }
         true

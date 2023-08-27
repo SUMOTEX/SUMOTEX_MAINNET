@@ -16,7 +16,7 @@ use std::time::{SystemTime, UNIX_EPOCH};
 use crate::p2p::AppBehaviour;
 
 pub static PRIVATE_PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("private_pbft_pre_prepared"));
-
+pub static PRIVATE_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_commit"));
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum Message {
     PrePrepare(u64), // View number, Content
@@ -33,10 +33,10 @@ pub struct PrivatePBFTNode {
     txn: Vec<String>,
 }
 
-pub fn get_total_pbft_view(swarm: &Swarm<AppBehaviour>)->u64 {
-    let view_value = swarm.behaviour().pbft.view;
-    view_value
-}
+// pub fn get_total_pbft_view(swarm: &Swarm<AppBehaviour>)->u64 {
+//     let view_value = swarm.behaviour().pbft.view;
+//     view_value
+// }
 pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
     if let Some(data) = cmd.strip_prefix("create txn") {
         let behaviour =swarm.behaviour_mut();
@@ -85,7 +85,7 @@ pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
         //behaviour.txn.transactions.push(root_hash.clone());
         behaviour
             .floodsub
-            .publish(PBFT_PREPREPARED_TOPIC.clone(), serialised_dictionary);
+            .publish(PRIVATE_PBFT_PREPREPARED_TOPIC.clone(), serialised_dictionary);
     }
 
 }

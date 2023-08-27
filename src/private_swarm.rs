@@ -12,15 +12,15 @@ use tokio::{
 };
 use libp2p::Transport;
 use log::{ info};
-use crate::p2p::PEER_ID;
-use crate::p2p::AppBehaviour;
-use crate::p2p::KEYS;
+use crate::private_p2p::PEER_ID;
+use crate::private_p2p::PrivateAppBehaviour;
+use crate::private_p2p::KEYS;
+use crate::PrivateApp;
+type MySwarm = Swarm<PrivateAppBehaviour>;
 
-type MySwarm = Swarm<AppBehaviour>;
-
-pub async fn  create_private_swarm() -> MySwarm {
+pub async fn  create_swarm() -> MySwarm {
     // Create and initialize your swarm here
-    info!("Peer Id: {}", PEER_ID.clone());
+    info!("Private Peer Id: {}", PEER_ID.clone());
     let (response_sender, _response_rcv) = mpsc::unbounded_channel();
     let (init_sender,  _init_rcv) = mpsc::unbounded_channel();
     let auth_keys = Keypair::<X25519Spec>::new()
@@ -33,8 +33,8 @@ pub async fn  create_private_swarm() -> MySwarm {
         .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
         .boxed();
-    let behaviour = AppBehaviour::new(App::new(),Txn::new(),PBFTNode::new(PEER_ID.clone().to_string()), response_sender, init_sender.clone()).await;
-    let swarm = SwarmBuilder::new(transp, behaviour, *PEER_ID)
+    let private_behaviour = PrivateAppBehaviour::new(PrivateApp::new(),Txn::new(),PBFTNode::new(PEER_ID.clone().to_string()),response_sender, init_sender.clone()).await;
+    let swarm = SwarmBuilder::new(transp, private_behaviour, *PEER_ID)
         .executor(Box::new(|fut| {
             spawn(fut);
         }))
