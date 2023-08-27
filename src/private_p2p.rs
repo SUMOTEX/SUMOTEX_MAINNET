@@ -1,5 +1,5 @@
-use sha2::{Sha256, Digest};
-use super::{App,Txn,PublicTxn, PBFTNode,Block};
+use sha2::{Sha256};
+use super::{App,Txn,PublicTxn, pbft::PBFTNode,public_block::Block};
 use libp2p::{
     floodsub::{Floodsub,FloodsubEvent,Topic},
     core::{identity},
@@ -16,20 +16,18 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use std::time::{SystemTime, UNIX_EPOCH};
-use crate::verkle_tree::VerkleTree;
-use rand::{thread_rng, Rng};
-use rand::distributions::Alphanumeric;
+use crate::private_block;
+use crate::private_pbft;
+use crate::private_block::handle_create_block_pbft;
+
 // main.rs
 use crate::Publisher;
-
 pub static KEYS: Lazy<identity::Keypair> = Lazy::new(identity::Keypair::generate_ed25519);
 pub static PEER_ID: Lazy<PeerId> = Lazy::new(|| PeerId::from(KEYS.public()));
 pub static CHAIN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("chains"));
-pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
-pub static TXN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("transactions"));
-pub static PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_pre_prepared"));
-pub static PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_prepared"));
-pub static PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_commit"));
+pub static PRIVATE_TXN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("private_transactions"));
+pub static PRIVATE_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("private_pbft_prepared"));
+pub static PRIVATE_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("private_pbft_commit"));
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -48,6 +46,7 @@ pub enum EventType {
     Input(String),
     Init,
     Publish(String, String), // Publish a message to a topic
+    PublishBlock(String,Vec<u8>),
 }
 
 #[derive(NetworkBehaviour)]
@@ -87,11 +86,11 @@ impl AppBehaviour {
             init_sender,
         };
         behaviour.floodsub.subscribe(CHAIN_TOPIC.clone());
-        behaviour.floodsub.subscribe(BLOCK_TOPIC.clone());
+        behaviour.floodsub.subscribe(private_block::BLOCK_TOPIC.clone());
         behaviour.floodsub.subscribe(TXN_TOPIC.clone());
-        behaviour.floodsub.subscribe(PBFT_PREPREPARED_TOPIC.clone());
-        behaviour.floodsub.subscribe(PBFT_PREPARED_TOPIC.clone());
-        behaviour.floodsub.subscribe(PBFT_COMMIT_TOPIC.clone());
+        behaviour.floodsub.subscribe(private_pbft::PBFT_PREPREPARED_TOPIC.clone());
+        behaviour.floodsub.subscribe(PRIVATE_PBFT_PREPARED_TOPIC.clone());
+        behaviour.floodsub.subscribe(PRIVATE_PBFT_COMMIT_TOPIC.clone());
         behaviour
     }
 }
@@ -118,12 +117,21 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         error!("error sending response via channel, {}", e);
                     }
                 }
-            } else if msg.topics[0]==Topic::new("blocks"){
-                if let Ok(block) = serde_json::from_slice::<Block>(&msg.data) {
-                    info!("received new block from {}", msg.source.to_string());
-                    self.app.try_add_block(block);
+            } else if msg.topics[0]==Topic::new("private_blocks"){
+                match serde_json::from_slice::<Block>(&msg.data) {
+                    Ok(block) => {
+                        info!("Received new block from {}", msg.source.to_string());
+                        self.app.try_add_block(block);
+                    },
+                    Err(err) => {
+                        error!(
+                            "Error deserializing block from {}: {}",
+                            msg.source.to_string(),
+                            err
+                        );
+                    }
                 }
-            } else if msg.topics[0]==Topic::new("pbft_pre_prepared") {
+            } else if msg.topics[0]==Topic::new("private_pbft_pre_prepared") {
                 let received_serialized_data =msg.data;
                 let deserialized_data: HashMap<String, HashMap<String, String>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
@@ -131,27 +139,25 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 info!("The new txn from {:?}", deserialized_data);
                 for (key, inner_map) in deserialized_data.iter() {
                     //TODO ADD the hash to database.
-                    
-                    println!("The Mapping Inner Txn: {:?}",inner_map);
                     let (valid_txn,txn_hashes) = self.txn.is_txn_valid(key.to_string(),inner_map.clone());
                     if valid_txn {
                         let created_block=self.pbft.pre_prepare(key.to_string(),txn_hashes.clone());
                         if let Some(publisher) = Publisher::get(){
-                            publisher.publish("pbft_prepared".to_string(), the_pbft_hash.to_string());
+                            publisher.publish("private_pbft_prepared".to_string(), the_pbft_hash.to_string());
                             self.pbft.prepare("PBFT Valid and prepare".to_string());
                         }
                     }
                 }
             }
-            else if msg.topics[0]==Topic::new("pbft_prepared"){
+            else if msg.topics[0]==Topic::new("private_pbft_prepared"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
                 info!("RECEIVED PBFT PREPARED: {:?}",json_string);
                 if let Some(publisher) = Publisher::get(){
-                    publisher.publish("pbft_commit".to_string(), json_string.to_string());
+                    publisher.publish("private_pbft_commit".to_string(), json_string.to_string());
                 }
 
-            }else if msg.topics[0]==Topic::new("pbft_commit"){
+            }else if msg.topics[0]==Topic::new("private_pbft_commit"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
                 self.pbft.commit("COMMIT READY".to_string());
@@ -161,21 +167,11 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     println!("The Created Block After Validity: {:?}",created_block);
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
                     self.app.blocks.push(created_block);
-                    publisher.publish("blocks".to_string(),json)
+                    println!("BLOCKS {:?}",self.app.blocks);
+                    publisher.publish_block("private_blocks".to_string(),json.as_bytes().to_vec())
                 }
             }
-            else if msg.topics[0]==Topic::new("transactions")  {
-                // let received_serialized_data:HashMap<String, Vec<String>> =serde_json::from_slice(&msg.data).expect("Deserialization failed");
-                // println!("Source: {:?}",received_serialized_data);
-                //self.txn.try_add_hash_txn(received_serialized_data);
-                // let validity = self.txn.is_txn_valid();
-                // if validity{
-                //     println!("hello, txn valid")
-                // }
-                // info!("SerializeTxn: {:?}", deserialized_data["key"]);
-                // if(self.txn.is_txn_valid(&deserialized_data["key"],&deserialized_data["value"])){
-                //     println!("Valid");
-                // };
+            else if msg.topics[0]==Topic::new("private_transactions")  {
             }
         }
     }
@@ -198,15 +194,12 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for AppBehaviour {
         }
     }
 }
-pub fn get_total_pbft_view(swarm: &Swarm<AppBehaviour>)->u64 {
-    let view_value = swarm.behaviour().pbft.view;
-    view_value
-}
+
 pub fn trigger_publish(sender: mpsc::UnboundedSender<(String, String)>, title: String, message: String) {
-    sender.send((title, message)).expect("Can send publish event");
+    sender.send((title, message)).expect("Can send publish private event");
 }
 pub fn get_list_peers(swarm: &Swarm<AppBehaviour>) -> Vec<String> {
-    info!("Validators:");
+    info!("Private Validators:");
     let nodes = swarm.behaviour().mdns.discovered_nodes();
     let mut unique_peers = HashSet::new();
     for peer in nodes {
@@ -215,122 +208,28 @@ pub fn get_list_peers(swarm: &Swarm<AppBehaviour>) -> Vec<String> {
     unique_peers.iter().map(|p| p.to_string()).collect()
 }
 
-pub fn handle_print_peers(swarm: &Swarm<AppBehaviour>) {
+pub fn handle_print_private_peers(swarm: &Swarm<AppBehaviour>) {
     let peers = get_list_peers(swarm);
     peers.iter().for_each(|p| info!("{}", p));
 }
 
 pub fn handle_print_chain(swarm: &Swarm<AppBehaviour>) {
-    info!("SUMOTEX Blockchain:");
+    info!("SUMOTEX Private Blockchain:");
     let pretty_json =
         serde_json::to_string_pretty(&swarm.behaviour().app.blocks).expect("can jsonify blocks");
     info!("{}", pretty_json);
 }
-pub fn handle_print_txn(swarm: &Swarm<AppBehaviour>) {
-    info!("Transactions:");
+pub fn handle_print_private_txn(swarm: &Swarm<AppBehaviour>) {
+    info!("Private Transactions:");
     let pretty_json =
         serde_json::to_string_pretty(&swarm.behaviour().txn.transactions).expect("can jsonify transactions");
     info!("{}", pretty_json);
 }
 pub fn handle_print_raw_txn(swarm: &Swarm<AppBehaviour>) {
-    info!("Raw Transactions:");
+    info!("Private Raw Transactions:");
     let pretty_json =
         serde_json::to_string_pretty(&swarm.behaviour().txn.hashed_txn).expect("can jsonify transactions");
     info!("{}", pretty_json);
 }
 
-pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
-    if let Some(data) = cmd.strip_prefix("create b") {
-        let behaviour = swarm.behaviour_mut();
-        let latest_block = behaviour
-            .app
-            .blocks
-            .last()
-            .expect("there is at least one block");
-        let block = Block::new(
-            latest_block.id + 1,
-            latest_block.public_hash.clone(),
-            //TODO txn
-            ["TEST BLOCK CREATION WITH TXN".to_string()].to_vec()
-        );
-        let json = serde_json::to_string(&block).expect("can jsonify request");
-        behaviour.app.blocks.push(block);
-        info!("broadcasting new block");
-        behaviour
-            .floodsub
-            .publish(BLOCK_TOPIC.clone(), json.as_bytes());
-    }
-}
-pub fn handle_finalised_block(swarm: &mut Swarm<AppBehaviour>, block:Block){
-    let behaviour = swarm.behaviour_mut();
-    let json = serde_json::to_string(&block).expect("can jsonify request");
-    behaviour.app.blocks.push(block);
-    info!("broadcasting new block");
-    behaviour
-        .floodsub
-        .publish(BLOCK_TOPIC.clone(), json.as_bytes());
-}
-pub fn handle_create_block_pbft(app:App,root_hash:String,txn:Vec<String>)-> Block{
-    let app = app.blocks.last().expect("There should be at least one block");
-    let latest_block = app;
-    let block = Block::new(
-        latest_block.id +1,
-        latest_block.public_hash.clone(),
-        txn
-    );
-    let json = serde_json::to_string(&block).expect("can jsonify request");
-    block
-}
 
-pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
-    if let Some(data) = cmd.strip_prefix("create txn") {
-        let behaviour =swarm.behaviour_mut();
-        let mut i: i64 =0;
-        let mut verkle_tree = VerkleTree::new();
-        let mut transactions: HashMap<String, String>= HashMap::new();
-        while i<5 {
-            let r = thread_rng()
-            .sample_iter(&Alphanumeric)
-            .take(20)
-            .collect::<Vec<_>>();
-            let s = String::from_utf8_lossy(&r);
-            let current_timestamp: i64 = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs() as i64;
-            let mut latest_txn = PublicTxn{
-                txn_hash:s.to_string(),
-                nonce:i,
-                value:data.to_owned(),
-                status:1,
-                timestamp: current_timestamp
-            };
-            let serialized_data = serde_json::to_string(&latest_txn).expect("can jsonify request");
-            // Hash the serialized data
-            let mut hasher = Sha256::new();
-            hasher.update(&serialized_data);
-            let hash_result = hasher.finalize();
-             // Convert the hash bytes to a hexadecimal string
-            let hash_hex_string = format!("{:x}", hash_result);
-            i = i+1;
-            verkle_tree.insert(s.as_bytes().to_vec(), hash_result.to_vec());
-            let mut dictionary_data = std::collections::HashMap::new();
-            dictionary_data.insert("key".to_string(), s.to_string());
-            dictionary_data.insert("value".to_string(), serialized_data.to_string());
-            // Serialize the dictionary data (using a suitable serialization format)
-            let serialised_txn = serde_json::to_vec(&dictionary_data).unwrap();
-            transactions.insert(s.to_string(),serialized_data.to_string());
-            //behaviour.floodsub.publish(TXN_TOPIC.clone(),s.to_string());
-        }
-        let root_hash = verkle_tree.get_root_string();
-        let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
-        map.insert(root_hash.clone(),transactions);
-        let serialised_dictionary = serde_json::to_vec(&map).unwrap();
-        info!("Broadcasting Transactions to nodes");
-        //behaviour.txn.transactions.push(root_hash.clone());
-        behaviour
-            .floodsub
-            .publish(PBFT_PREPREPARED_TOPIC.clone(), serialised_dictionary);
-    }
-
-}

@@ -1,5 +1,4 @@
-use sha2::{Sha256};
-use super::{App,Txn,PublicTxn, pbft::PBFTNode,public_block::Block};
+use super::{App,Txn, pbft::PBFTNode,public_block::Block};
 use libp2p::{
     floodsub::{Floodsub,FloodsubEvent,Topic},
     core::{identity},
@@ -15,7 +14,6 @@ use log::{error, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
-use std::time::{SystemTime, UNIX_EPOCH};
 use crate::public_block;
 use crate::pbft;
 use crate::public_block::handle_create_block_pbft;

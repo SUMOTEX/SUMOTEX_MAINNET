@@ -18,6 +18,7 @@ pub struct Block {
     pub id: u64,
     pub public_hash: String,
     pub previous_hash: String,
+    pub private_hash:Option<String>,
     pub transactions:Vec<String>, // determine txn
     pub timestamp: i64,
     pub nonce: u64,
@@ -113,10 +114,12 @@ impl Block {
     pub fn new(id: u64, previous_hash: String, txn:Vec<String>) -> Self {
         let now = Utc::now();
         let txn_item = txn;
+        let private_hash=Some("PrivateHash".to_string());
         let (nonce, public_hash) = mine_block(id, now.timestamp(), &previous_hash);
         Self {
             id,
             public_hash,
+            private_hash,
             timestamp: now.timestamp(),
             previous_hash,
             transactions:txn_item,

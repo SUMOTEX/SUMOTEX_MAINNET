@@ -7,6 +7,8 @@ use libp2p::{
     tcp::TokioTcpConfig,
     Transport,
 };
+use libp2p::identity::{Keypair as IdentityKeypair};
+use libp2p::PeerId;
 use crate::verkle_tree::VerkleTree;
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -18,6 +20,7 @@ use tokio::{
     sync::mpsc,
     time::sleep,
 };
+use futures::future::FutureExt;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 use libp2p::futures::StreamExt;
@@ -25,6 +28,7 @@ use rand::Rng;
 mod verkle_tree;
 mod p2p;
 mod swarm;
+mod private_swarm;
 mod publisher;
 mod public_block;
 mod pbft;
@@ -66,16 +70,6 @@ pub struct App {
 
 
 
-
-
-
-fn hash_to_binary_representation(hash: &[u8]) -> String {
-    let mut res: String = String::default();
-    for c in hash {
-        res.push_str(&format!("{:b}", c));
-    }
-    res
-}
 impl Txn {
     fn new() -> Self {
         Self { transactions: vec![],hashed_txn: vec![] }
@@ -131,6 +125,7 @@ impl App {
             id: 0,
             timestamp: Utc::now().timestamp(),
             previous_hash: String::from("00Genesis"),
+            private_hash:Some(String::from("00")),
             transactions:(vec!["".to_string()]),
             nonce: 1,
             public_hash: "0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c43".to_string(),
@@ -193,6 +188,14 @@ async fn main() {
         .into_authentic(&p2p::KEYS)
         .expect("can create auth keys");
 
+    let key_public_net = IdentityKeypair::generate_ed25519();
+    let local_peer_id_net1 = PeerId::from(key_public_net.public()); 
+
+    let key_private_net =  IdentityKeypair::generate_ed25519();
+    let local_peer_id_net2 = PeerId::from(key_private_net.public());
+
+    let bridge_key = IdentityKeypair::generate_ed25519();
+    let bridge_peer_id = PeerId::from(bridge_key.public());
     // Create and initialize your swarm here
     info!("Peer Id: {}", p2p::PEER_ID.clone());
     let transp = TokioTcpConfig::new()
@@ -202,17 +205,17 @@ async fn main() {
         .boxed();
         
     let behaviour = p2p::AppBehaviour::new(App::new(),Txn::new(),pbft::PBFTNode::new(p2p::PEER_ID.clone().to_string()), response_sender, init_sender.clone()).await;
-    let mut swarm = swarm::create_swarm().await;
+    let mut swarm_public_net = swarm::create_swarm().await;
 
     let mut stdin = BufReader::new(stdin()).lines();
 
     Swarm::listen_on(
-        &mut swarm,
+        &mut swarm_public_net,
         "/ip4/0.0.0.0/tcp/0"
             .parse()
             .expect("can get a local socket"),
     )
-    .expect("swarm can be started");
+    .expect("swarm_public_net can be started");
     spawn(async move {
         sleep(Duration::from_secs(1)).await;
         info!("sending init event");
@@ -220,88 +223,87 @@ async fn main() {
     });
 
     loop {
-        let evt = {
-            select! {
-                line = stdin.next_line() => Some(p2p::EventType::Input(line.expect("can get line").expect("can read line from stdin"))),
-                response = response_rcv.recv() => {
-                    Some(p2p::EventType::LocalChainResponse(response.expect("response exists")))
-                },
-                _init = init_rcv.recv() => {
-                    Some(p2p::EventType::Init)
-                }
-                event = swarm.select_next_some() => {
-                    //info!("Unhandled Swarm Event: {:?}", event);
-                    None
-                },
-                publish = publish_receiver.recv() => {
-                    let (title, message) = publish.clone().expect("Publish exists");
-                    info!("Publish Swarm Event: {:?}", title);
-                    Some(p2p::EventType::Publish(title, message))
-                },
-                publish_block = publish_bytes_receiver.recv()=>{
-                    let (title, message) = publish_block.clone().expect("Publish Block exists");
-                    Some(p2p::EventType::PublishBlock(title, message.into()))
-                }
-             }
-        };
-
-        if let Some(event) = evt {
-            match event {
-                p2p::EventType::Init => {
-                    let peers = p2p::get_list_peers(&swarm);
-                    swarm.behaviour_mut().app.genesis();
-                    info!("Connected nodes: {}", peers.len());
-                    if !peers.is_empty() {
-                        let req = p2p::LocalChainRequest {
-                            from_peer_id: peers
-                                .iter()
-                                .last()
-                                .expect("at least one peer")
-                                .to_string(),
-                        };
-
-                        let json = serde_json::to_string(&req).expect("can jsonify request");
-                        swarm
-                            .behaviour_mut()
-                            .floodsub
-                            .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
+            let evt = 
+                select! {
+                    line = stdin.next_line() => Some(p2p::EventType::Input(line.expect("can get line").expect("can read line from stdin"))),
+                    response = response_rcv.recv() => {
+                        Some(p2p::EventType::LocalChainResponse(response.expect("response exists")))
+                    },
+                    _init = init_rcv.recv() => {
+                        Some(p2p::EventType::Init)
                     }
-                }
-                p2p::EventType::LocalChainResponse(resp) => {
-                    let json = serde_json::to_string(&resp).expect("can jsonify response");
-                    swarm
-                        .behaviour_mut()
-                        .floodsub
-                        .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
-                }
-                p2p::EventType::Publish(title,message)=>{
-                    let title_json = serde_json::to_string(&title).expect("can jsonify title");
-                    let topic_str = title_json.trim_matches('"');
-                    let topic = libp2p::floodsub::Topic::new(topic_str);
-                    let message_json = serde_json::to_string(&message).expect("can jsonify message");
-                    let peers = p2p::get_list_peers(&swarm);
-                    let pbft_node_views = pbft::get_total_pbft_view(&swarm);
-                    // println!("Number of NODES: {:?}",peers.len());
-                    // println!("PBFT Node number of views for consensus {:?}",pbft_node_views);
-                    swarm.behaviour_mut().floodsub.publish(topic,message_json.as_bytes())
-                }
-                p2p::EventType::PublishBlock(title,message)=>{
-                    let title_json = serde_json::to_string(&title).expect("can jsonify title");
-                    let topic_str = title_json.trim_matches('"');
-                    let topic = libp2p::floodsub::Topic::new(topic_str);
-                    let message_json = serde_json::to_string(&message).expect("can jsonify message");
-                    swarm.behaviour_mut().floodsub.publish(topic,message)
-                }
-                p2p::EventType::Input(line) => match line.as_str() {
-                    "ls p" => p2p::handle_print_peers(&swarm),
-                    cmd if cmd.starts_with("ls c") => p2p::handle_print_chain(&swarm),
-                    cmd if cmd.starts_with("ls t") => p2p::handle_print_txn(&swarm),
-                    cmd if cmd.starts_with("ls rt") => p2p::handle_print_raw_txn(&swarm),
-                    cmd if cmd.starts_with("create b") => public_block::handle_create_block(cmd, &mut swarm),
-                    cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, &mut swarm),
-                    _ => error!("unknown command"),  
-                },
+                    event = swarm_public_net.select_next_some() => {
+                        //info!("Unhandled Swarm Event: {:?}", event);
+                        None
+                    },
+                    publish = publish_receiver.recv() => {
+                        let (title, message) = publish.clone().expect("Publish exists");
+                        info!("Publish Swarm Event: {:?}", title);
+                        Some(p2p::EventType::Publish(title, message))
+                    },
+                    publish_block = publish_bytes_receiver.recv()=>{
+                        let (title, message) = publish_block.clone().expect("Publish Block exists");
+                        Some(p2p::EventType::PublishBlock(title, message.into()))
+                    }
+                };
+                if let Some(event) = evt {
+                    match event {
+                        p2p::EventType::Init => {
+                            let peers = p2p::get_list_peers(&swarm_public_net);
+                            swarm_public_net.behaviour_mut().app.genesis();
+                            info!("Connected nodes: {}", peers.len());
+                            if !peers.is_empty() {
+                                let req = p2p::LocalChainRequest {
+                                    from_peer_id: peers
+                                        .iter()
+                                        .last()
+                                        .expect("at least one peer")
+                                        .to_string(),
+                                };
+        
+                                let json = serde_json::to_string(&req).expect("can jsonify request");
+                                swarm_public_net
+                                    .behaviour_mut()
+                                    .floodsub
+                                    .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
+                            }
+                        }
+                        p2p::EventType::LocalChainResponse(resp) => {
+                            let json = serde_json::to_string(&resp).expect("can jsonify response");
+                            swarm_public_net
+                                .behaviour_mut()
+                                .floodsub
+                                .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
+                        }
+                        p2p::EventType::Publish(title,message)=>{
+                            let title_json = serde_json::to_string(&title).expect("can jsonify title");
+                            let topic_str = title_json.trim_matches('"');
+                            let topic = libp2p::floodsub::Topic::new(topic_str);
+                            let message_json = serde_json::to_string(&message).expect("can jsonify message");
+                            let peers = p2p::get_list_peers(&swarm_public_net);
+                            let pbft_node_views = pbft::get_total_pbft_view(&swarm_public_net);
+                            // println!("Number of NODES: {:?}",peers.len());
+                            // println!("PBFT Node number of views for consensus {:?}",pbft_node_views);
+                            swarm_public_net.behaviour_mut().floodsub.publish(topic,message_json.as_bytes())
+                        }
+                        p2p::EventType::PublishBlock(title,message)=>{
+                            let title_json = serde_json::to_string(&title).expect("can jsonify title");
+                            let topic_str = title_json.trim_matches('"');
+                            let topic = libp2p::floodsub::Topic::new(topic_str);
+                            let message_json = serde_json::to_string(&message).expect("can jsonify message");
+                            swarm_public_net.behaviour_mut().floodsub.publish(topic,message)
+                        }
+                        p2p::EventType::Input(line) => match line.as_str() {
+                            "ls p" => p2p::handle_print_peers(&swarm_public_net),
+                            cmd if cmd.starts_with("ls c") => p2p::handle_print_chain(&swarm_public_net),
+                            cmd if cmd.starts_with("ls t") => p2p::handle_print_txn(&swarm_public_net),
+                            cmd if cmd.starts_with("ls rt") => p2p::handle_print_raw_txn(&swarm_public_net),
+                            cmd if cmd.starts_with("create b") => public_block::handle_create_block(cmd, &mut swarm_public_net),
+                            cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, &mut swarm_public_net),
+                            cmd if cmd.starts_with("create pn")=> { private_swarm::create_private_swarm().await; },
+                            _ => error!("unknown command"),  
+                        },
+                    }
             }
         }
-    }
 }
