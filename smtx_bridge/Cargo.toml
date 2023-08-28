@@ -1,0 +1,11 @@
+[package]
+name = "smtx_bridge"
+version = "0.1.0"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+async-std = "1.9"
+libp2p = { version = "0.39", features = ["mdns", "yamux", "tcp-tokio", "dns-tokio"] }
+tokio = { version = "1", features = ["full"] }

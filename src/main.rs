@@ -3,9 +3,14 @@ use libp2p::{
     core::upgrade,
     mplex,
     noise::{Keypair, NoiseConfig, X25519Spec},
-    swarm::{Swarm},
+    swarm::{Swarm,SwarmEvent},
     tcp::TokioTcpConfig,
     Transport,
+};
+use libp2p::core::UpgradeInfo;
+use libp2p::swarm::{
+    ProtocolsHandler, SubstreamProtocol,
+    protocols_handler::multi::MultiHandler,
 };
 use libp2p::identity::{Keypair as IdentityKeypair};
 use libp2p::PeerId;
@@ -33,11 +38,17 @@ mod pbft;
 use publisher::Publisher;
 
 
+enum CustomEvent {
+    ReceivedRequest(PeerId, Vec<u8>),
+    ReceivedResponse(PeerId, Vec<u8>),
+    // ... potentially other custom events specific to your application
+}
 
 pub struct Txn{
     pub transactions: Vec<String>,
     pub hashed_txn:Vec<String>,
 }
+
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PublicTxn{
@@ -167,13 +178,18 @@ impl App {
             panic!("local and remote chains are both invalid");
         }
     }
+    pub fn send_message(&mut self, peer_id: String, message: String) {
+        println!("Mainnet Peer ID: {:?} Message: {:?}",peer_id.to_string(),message);
+        // Implement the logic here to send the message to the desired peer.
+        // This would typically involve queuing the message and having your
+        // protocol handler process the message from the queue.
+    }
 }
 
 
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
-
     //info!("Peer Id: {}", p2p::PEER_ID.clone());
     let (response_sender, mut response_rcv) = mpsc::unbounded_channel();
     let (init_sender, mut init_rcv) = mpsc::unbounded_channel();
@@ -186,7 +202,7 @@ async fn main() {
         .expect("can create auth keys");
 
     // Create and initialize your swarm here
-    info!("Peer Id: {}", p2p::PEER_ID.clone());
+    info!("Peer Id: {}", "12D3KooWSHD7vtVa4zCiTNEjUt3o1zL4FMVZkPzjFUEVipkDQoPi");
     let transp = TokioTcpConfig::new()
         .upgrade(upgrade::Version::V1)
         .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
@@ -196,7 +212,7 @@ async fn main() {
     let public_behaviour = p2p::AppBehaviour::new(
         App::new(),
         Txn::new(),
-        pbft::PBFTNode::new(p2p::PEER_ID.clone().to_string()),
+        pbft::PBFTNode::new("12D3KooWSHD7vtVa4zCiTNEjUt3o1zL4FMVZkPzjFUEVipkDQoPi".to_string()),
         response_sender,
         init_sender.clone()).await;
 
@@ -204,9 +220,10 @@ async fn main() {
     let mut swarm_public_net = swarm::create_swarm().await;
     let mut stdin = BufReader::new(stdin()).lines();
 
+    //TODO: Change ipv4 for public net
     Swarm::listen_on(
         &mut swarm_public_net,
-        "/ip4/0.0.0.0/tcp/0"
+        "/ip4/0.0.0.0/tcp/8088"
             .parse()
             .expect("can get a local socket"),
     )
@@ -217,9 +234,19 @@ async fn main() {
         info!("sending init event");
         init_sender.send(true).expect("can send init event");
     });
-
     loop {
-            let public_evt = 
+            match swarm_public_net.select_next_some().await {
+                SwarmEvent::Behaviour(SMTXProtocolEvent::MessageReceived(peer, message)) => {
+                    println!("Received message from {}: {}", peer, message);
+                    None;
+                    // Further processing of the message if required
+                }
+                // Handle other swarm events
+                _ => {}
+            }
+        }
+    loop {
+                let public_evt = 
                 select! {
                     line = stdin.next_line() => Some(p2p::EventType::Input(line.expect("can get line").expect("can read line from stdin"))),
                     response = response_rcv.recv() => {
@@ -229,9 +256,8 @@ async fn main() {
                         Some(p2p::EventType::Init)
                     }
                     event = swarm_public_net.select_next_some() => {
-                        //info!("Unhandled Swarm Event: {:?}", event);
                         None
-                    },
+                    }
                     publish = publish_receiver.recv() => {
                         let (title, message) = publish.clone().expect("Publish exists");
                         info!("Publish Swarm Event: {:?}", title);
@@ -242,6 +268,7 @@ async fn main() {
                         Some(p2p::EventType::PublishBlock(title, message.into()))
                     }
                 };
+    
                 if let Some(event) = public_evt {
                     match event {
                         p2p::EventType::Init => {

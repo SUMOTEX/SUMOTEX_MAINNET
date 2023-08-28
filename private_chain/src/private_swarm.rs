@@ -16,6 +16,7 @@ use crate::private_p2p::PEER_ID;
 use crate::private_p2p::PrivateAppBehaviour;
 use crate::private_p2p::KEYS;
 use crate::account_root::AccountRoot;
+use crate::smtx_protocol::SMTXProtocol;
 type MySwarm = Swarm<PrivateAppBehaviour>;
 
 pub async fn  create_swarm() -> MySwarm {
@@ -38,6 +39,7 @@ pub async fn  create_swarm() -> MySwarm {
             Txn::new(),
             PBFTNode::new(PEER_ID.clone().to_string()),
             AccountRoot::new(),
+            SMTXProtocol,
             response_sender, 
             init_sender.clone()).await;
     let swarm = SwarmBuilder::new(transp, private_behaviour, *PEER_ID)

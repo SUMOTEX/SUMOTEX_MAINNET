@@ -1,15 +1,15 @@
 use chrono::prelude::*;
 use libp2p::{
-    core::upgrade,
+    core::{
+        upgrade::{self},
+    },
     mplex,
     noise::{Keypair, NoiseConfig, X25519Spec},
     swarm::{Swarm},
     tcp::TokioTcpConfig,
     Transport,
-    multiaddr::Protocol,
+    PeerId,
 };
-use libp2p::identity::{Keypair as IdentityKeypair};
-use libp2p::PeerId;
 use crate::verkle_tree::VerkleTree;
 use log::{error, info};
 use serde::{Deserialize, Serialize};
@@ -21,10 +21,8 @@ use tokio::{
     sync::mpsc,
     time::sleep,
 };
-use futures::future::FutureExt;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
-use std::io;
 use std::str::FromStr;
 use libp2p::Multiaddr;
 use libp2p::futures::StreamExt;
@@ -36,11 +34,16 @@ mod private_block;
 mod pbft;
 mod private_pbft;
 mod account_root;
+mod smtx_protocol;
 use publisher::Publisher;
 use crate::account_root::AccountRoot;
+use crate::smtx_protocol::SMTXProtocol;
 
-
-
+enum CustomEvent {
+    ReceivedRequest(PeerId, Vec<u8>),
+    ReceivedResponse(PeerId, Vec<u8>),
+    // ... potentially other custom events specific to your application
+}
 pub struct Txn{
     pub transactions: Vec<String>,
     pub hashed_txn:Vec<String>,
@@ -189,10 +192,10 @@ impl PrivateApp {
         }
     }
 }
-
-
+#![allow(warnings)]
 #[tokio::main]
 async fn main() {
+
     pretty_env_logger::init();
     info!("Peer Id: {}", private_p2p::PEER_ID.clone());
     let mut whitelisted_peers = vec![
@@ -203,7 +206,8 @@ async fn main() {
         "/ip4/0.0.0.0/tcp/8085",
         "/ip4/0.0.0.0/tcp/8086",
         "/ip4/0.0.0.0/tcp/8087",
-        "/ip4/0.0.0.0/tcp/8088",
+        "/ip4/0.0.0.0/tcp/8089",
+        "/ip4/0.0.0.0/tcp/8090",
         // ... other addresses
         ];
     
@@ -219,31 +223,43 @@ async fn main() {
         .expect("can create auth keys");
 
     // Create and initialize your swarm here
+    const SMTX_TESTNET_PROTOCOL: &str = "smtxtestnet/1.0.0";
+    const SMTX_TESTNET_PROTOCOL_BYTES: &[u8] = b"/smtxtestnet/1.0.0";
     info!("Private Network Peer Id: {}", private_p2p::PEER_ID.clone());
     let transp = TokioTcpConfig::new()
         .upgrade(upgrade::Version::V1)
         .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
         .boxed();
-
-
     let private_behaviour = private_p2p::PrivateAppBehaviour::new(
         PrivateApp::new(),
         Txn::new(),
         pbft::PBFTNode::new(private_p2p::PEER_ID.clone().to_string()),
         AccountRoot::new(),
+        SMTXProtocol,
         response_private_sender, 
         init_private_sender.clone()).await;
     let mut swarm_private_net = private_swarm::create_swarm().await;
-    
     let mut stdin = BufReader::new(stdin()).lines();
+    //TODO: Make the publicnet validators dynamics connection randomised
+    let public_chain_peer_id = "12D3KooWSHD7vtVa4zCiTNEjUt3o1zL4FMVZkPzjFUEVipkDQoPi".to_string();
+    let public_net_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/8088/p2p/{}",public_chain_peer_id).parse().unwrap();
+    swarm_private_net.dial_addr(public_net_addr).expect("Failed to dial Public SMTX");
+    let remote_peer_id = PeerId::from_str(&public_chain_peer_id).expect("Failed to pass PeerId");
+    // Obtain the negotiated socket
+    let smtx_protocol = SMTXProtocol::new();
+        if let Err(err) = smtx_protocol.send_message(&mut connected_socket, "Hello, remote peer!").await {
+            eprintln!("Failed to send message: {:?}", err);
+        }
+    
+    
+    // Inform the swarm to send a message to the dialed peer.
+
     loop {
         if let Some(port) = whitelisted_peers.pop() {
-            info!("{}", port);
-            let the_address = Multiaddr::from_str(&format!("{}",port)).expect("Failed to parse multiaddr");
-            // Swarm::listen_on(
-            //     &mut swarm_private_net,
-            //    the_address).expect("swarm_private_net can be started");
+            let address_str = format!("{}",port);
+            let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");        
+            info!("{:?}", the_address.clone());
             match Swarm::listen_on(&mut swarm_private_net, the_address.clone()) {
                 Ok(_) => {
                     info!("Listening on {:?}", the_address.clone());
@@ -265,6 +281,7 @@ async fn main() {
     }
 
     loop {
+        
         let private_evt = 
             select! {
                 line = stdin.next_line() => 
@@ -277,7 +294,6 @@ async fn main() {
                     Some(private_p2p::EventType::Init)
                 }
                 event = swarm_private_net.select_next_some() => {
-                    //info!("Unhandled Swarm Event: {:?}", event);
                     None
                 },
                 publish = publish_receiver.recv() => {

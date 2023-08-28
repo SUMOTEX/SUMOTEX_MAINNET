@@ -1,11 +1,8 @@
 use chrono::prelude::*;
 use libp2p::{
     floodsub::{Topic},
-    swarm::{Swarm},
 };
-use log::{ info, warn};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest};
 use once_cell::sync::Lazy;
 
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));

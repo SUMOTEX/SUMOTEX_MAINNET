@@ -3,23 +3,24 @@ use libp2p::{
     floodsub::{Floodsub,FloodsubEvent,Topic},
     core::{identity},
     mdns::{Mdns,MdnsEvent},
-    NetworkBehaviour, PeerId,
+     PeerId,
     swarm::{Swarm,NetworkBehaviourEventProcess},
 };
 use tokio::{
     sync::mpsc,
 };
 use std::io;
+use libp2p::NetworkBehaviour;
 use std::collections::HashMap;
 use log::{error, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use crate::private_block;
-use crate::private_pbft;
 use crate::private_pbft::PRIVATE_PBFT_PREPREPARED_TOPIC;
 use crate::private_block::handle_create_block_pbft;
 use crate::account_root::AccountRoot;
+use crate::smtx_protocol::SMTXProtocol;
 // main.rs
 use crate::Publisher;
 pub static KEYS: Lazy<identity::Keypair> = Lazy::new(identity::Keypair::generate_ed25519);
@@ -66,6 +67,9 @@ pub struct PrivateAppBehaviour {
     pub pbft: PBFTNode,
     #[behaviour(ignore)]
     pub account_r: AccountRoot,
+    #[behaviour(ignore)]
+    pub smtx_protocol: SMTXProtocol,
+    
 }
 
 impl PrivateAppBehaviour {
@@ -75,6 +79,7 @@ impl PrivateAppBehaviour {
         txn:Txn,
         pbft:PBFTNode,
         account_r:AccountRoot,
+        smtx_protocol:SMTXProtocol,
         response_sender: mpsc::UnboundedSender<PrivateChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
     ) -> Self {
@@ -83,6 +88,7 @@ impl PrivateAppBehaviour {
             txn,
             pbft,
             account_r,
+            smtx_protocol,
             floodsub: Floodsub::new(*PEER_ID),
             mdns: Mdns::new(Default::default())
                 .await
@@ -99,7 +105,14 @@ impl PrivateAppBehaviour {
         behaviour.floodsub.subscribe(PRIVATE_PBFT_COMMIT_TOPIC.clone());
         behaviour
     }
+    fn send_message(&mut self, peer_id: PeerId, message: String) {
+        // Here, you'll need to integrate with your actual protocol implementation to send the message.
+        // Depending on how you implemented your protocol, this might involve
+        // sending the message directly, or queuing it to be sent when polled.
+    }
 }
+
+
 // incoming event handler
 impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
     fn inject_event(&mut self, event: FloodsubEvent) {
@@ -216,6 +229,7 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for PrivateAppBehaviour {
     }
 }
 
+
 pub fn trigger_publish(sender: mpsc::UnboundedSender<(String, String)>, title: String, message: String) {
     sender.send((title, message)).expect("Can send publish private event");
 }
@@ -257,7 +271,23 @@ pub fn handle_print_peers(swarm: &Swarm<PrivateAppBehaviour>) {
     let peers = get_list_peers(swarm);
     peers.iter().for_each(|p| info!("{}", p));
 }
-
+pub fn handle_response(data: Vec<u8>) {
+    // Convert the data into a String
+    if let Ok(response_str) = String::from_utf8(data) {
+        // Print or process the response string
+        println!("Received response: {}", response_str);
+        
+        // Based on the response string, you might perform other actions
+        // For instance, you could:
+        // - Update some data structures
+        // - Trigger other network events or requests
+        // - Notify the user or other parts of your system
+        // ... etc.
+        
+    } else {
+        eprintln!("Failed to decode the response data into a string.");
+    }
+}
 pub fn handle_start_chain(swarm: &mut Swarm<PrivateAppBehaviour>){
     let mut steps = 0;
     let mut chain_name = String::new();

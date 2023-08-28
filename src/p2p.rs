@@ -46,6 +46,7 @@ pub enum EventType {
     Init,
     Publish(String, String), // Publish a message to a topic
     PublishBlock(String,Vec<u8>),
+    //Bridge(String,String)
 }
 
 #[derive(NetworkBehaviour)]
@@ -91,6 +92,24 @@ impl AppBehaviour {
         behaviour.floodsub.subscribe(PBFT_PREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(PBFT_COMMIT_TOPIC.clone());
         behaviour
+    }
+    fn send_message(&mut self, target: PeerId, message: String) {
+        println!("{:?}",target)
+        // Logic to send the message to the target PeerId
+    }
+}
+#[derive(Debug, Clone)]
+enum MyProtocolEvent {
+    MessageReceived(PeerId, String),
+}
+
+impl NetworkBehaviourEventProcess<MyProtocolEvent> for AppBehaviour {
+    fn inject_event(&mut self, event: MyProtocolEvent) {
+        match event {
+            MyProtocolEvent::MessageReceived(peer, message) => {
+                println!("Received message from {}: {}", peer, message);
+            }
+        }
     }
 }
 // incoming event handler
