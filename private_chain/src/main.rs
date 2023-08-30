@@ -292,7 +292,7 @@ async fn main() {
     Swarm::dial_addr(&mut swarm_private_net, target_peer_addr).expect("Failed to dial");
     let peer_id = "QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z";
     // The key we want to put/get in the DHT
-    let key = Key::new(b"some_key");
+    let key = Key::new(b"QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z");
 
     // Put a record to DHT
     let record = Record {
