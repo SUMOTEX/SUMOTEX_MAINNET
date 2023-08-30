@@ -2,7 +2,7 @@ use super::{PrivateApp,Txn,pbft::PBFTNode};
 use libp2p::{
     core::upgrade,
     noise::{Keypair, NoiseConfig, X25519Spec},
-    mplex,
+    mplex,mdns,noise,
     tcp::TokioTcpConfig,
     swarm::{Swarm,SwarmBuilder},
 };
@@ -10,13 +10,18 @@ use tokio::{
     sync::mpsc,
      spawn,
 };
+use libp2p::kad::record::store::MemoryStore;
+use libp2p::kad::{
+    record::Key, AddProviderOk, GetProvidersOk, GetRecordOk, Kademlia, KademliaEvent, PeerRecord,
+    PutRecordOk, QueryResult, Quorum, Record,
+};
 use libp2p::Transport;
 use log::{ info};
 use crate::private_p2p::PEER_ID;
 use crate::private_p2p::PrivateAppBehaviour;
 use crate::private_p2p::KEYS;
 use crate::account_root::AccountRoot;
-use crate::smtx_protocol::SMTXProtocol;
+use crate::private_p2p;
 type MySwarm = Swarm<PrivateAppBehaviour>;
 
 pub async fn  create_swarm() -> MySwarm {
@@ -28,7 +33,8 @@ pub async fn  create_swarm() -> MySwarm {
         .into_authentic(&KEYS)
         .expect("can create auth keys");
     // Convert to AuthenticKeypair
-    
+    let store = MemoryStore::new(PEER_ID.clone());
+    let kademlia = Kademlia::new(PEER_ID.clone(), store);
     let transp = TokioTcpConfig::new()
         .upgrade(upgrade::Version::V1)
         .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
@@ -39,14 +45,15 @@ pub async fn  create_swarm() -> MySwarm {
             Txn::new(),
             PBFTNode::new(PEER_ID.clone().to_string()),
             AccountRoot::new(),
-            SMTXProtocol,
+            kademlia,
             response_sender, 
             init_sender.clone()).await;
+
     let swarm = SwarmBuilder::new(transp, private_behaviour, *PEER_ID)
         .executor(Box::new(|fut| {
             spawn(fut);
         }))
-        .build();
+        .build();   
     swarm
 
 }

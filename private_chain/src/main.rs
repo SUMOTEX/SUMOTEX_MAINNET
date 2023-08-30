@@ -4,11 +4,17 @@ use libp2p::{
         upgrade::{self},
     },
     mplex,
+    identity, noise,
     noise::{Keypair, NoiseConfig, X25519Spec},
-    swarm::{Swarm},
+    swarm::{Swarm,SwarmBuilder},
     tcp::TokioTcpConfig,
     Transport,
     PeerId,
+};
+use libp2p::kad::record::store::MemoryStore;
+use libp2p::kad::{
+    record::Key, AddProviderOk, GetProvidersOk, GetRecordOk, Kademlia, KademliaEvent, PeerRecord,
+    PutRecordOk, QueryResult, Record,Quorum
 };
 use crate::verkle_tree::VerkleTree;
 use log::{error, info};
@@ -34,10 +40,8 @@ mod private_block;
 mod pbft;
 mod private_pbft;
 mod account_root;
-mod smtx_protocol;
 use publisher::Publisher;
 use crate::account_root::AccountRoot;
-use crate::smtx_protocol::SMTXProtocol;
 
 enum CustomEvent {
     ReceivedRequest(PeerId, Vec<u8>),
@@ -74,6 +78,19 @@ pub struct RootTxn{
 #[derive(Debug,Clone)]
 pub struct PrivateApp {
     pub blocks: Vec<private_block::PrivateBlock>,
+}
+
+
+
+#[allow(clippy::large_enum_variant)]
+enum MyBehaviourEvent {
+    Kademlia(KademliaEvent),
+}
+
+impl From<KademliaEvent> for MyBehaviourEvent {
+    fn from(event: KademliaEvent) -> Self {
+        MyBehaviourEvent::Kademlia(event)
+    }
 }
 
 
@@ -192,7 +209,7 @@ impl PrivateApp {
         }
     }
 }
-#![allow(warnings)]
+
 #[tokio::main]
 async fn main() {
 
@@ -226,33 +243,72 @@ async fn main() {
     const SMTX_TESTNET_PROTOCOL: &str = "smtxtestnet/1.0.0";
     const SMTX_TESTNET_PROTOCOL_BYTES: &[u8] = b"/smtxtestnet/1.0.0";
     info!("Private Network Peer Id: {}", private_p2p::PEER_ID.clone());
+
+    let auth_keys = Keypair::<X25519Spec>::new()
+        .into_authentic(&private_p2p::KEYS)
+        .expect("can create auth keys");
+    // Convert to AuthenticKeypair
     let transp = TokioTcpConfig::new()
         .upgrade(upgrade::Version::V1)
         .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
         .boxed();
+    // Create a swarm to manage peers and events.
+
+    
+    // Create a Kademlia behaviour.
+    let store = MemoryStore::new(private_p2p::PEER_ID.clone());
+    let kademlia = Kademlia::new(private_p2p::PEER_ID.clone(), store);
     let private_behaviour = private_p2p::PrivateAppBehaviour::new(
         PrivateApp::new(),
         Txn::new(),
         pbft::PBFTNode::new(private_p2p::PEER_ID.clone().to_string()),
-        AccountRoot::new(),
-        SMTXProtocol,
+        account_root::AccountRoot::new(),
+        kademlia,
         response_private_sender, 
         init_private_sender.clone()).await;
-    let mut swarm_private_net = private_swarm::create_swarm().await;
+
+    let mut swarm_private_net = SwarmBuilder::new(transp, private_behaviour, private_p2p::PEER_ID.clone())
+    .executor(Box::new(|fut| {
+        spawn(fut);
+    }))
+    .build(); 
+    //swarm_private_net.behaviour_mut().kademlia.set_mode(Some(Mode::Server));
+
+
+    // Using libp2p's Kademlia as an example
+
+    //let mut swarm_private_net = private_swarm::create_swarm().await;
     let mut stdin = BufReader::new(stdin()).lines();
     //TODO: Make the publicnet validators dynamics connection randomised
     let public_chain_peer_id = "12D3KooWSHD7vtVa4zCiTNEjUt3o1zL4FMVZkPzjFUEVipkDQoPi".to_string();
     let public_net_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/8088/p2p/{}",public_chain_peer_id).parse().unwrap();
-    swarm_private_net.dial_addr(public_net_addr).expect("Failed to dial Public SMTX");
-    let remote_peer_id = PeerId::from_str(&public_chain_peer_id).expect("Failed to pass PeerId");
-    // Obtain the negotiated socket
-    let smtx_protocol = SMTXProtocol::new();
-        if let Err(err) = smtx_protocol.send_message(&mut connected_socket, "Hello, remote peer!").await {
-            eprintln!("Failed to send message: {:?}", err);
-        }
-    
-    
+    // swarm_private_net.dial_addr(public_net_addr).expect("Failed to dial Public SMTX");
+    // let remote_peer_id = PeerId::from_str(&public_chain_peer_id).expect("Failed to pass PeerId");
+    let target_peer_id:PeerId = "QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z".parse().unwrap();
+    let target_peer_addr: Multiaddr = format!("/ip4/104.131.131.82/tcp/4001/p2p/{}", target_peer_id).parse().unwrap();
+
+    // Connect to the target
+    Swarm::dial_addr(&mut swarm_private_net, target_peer_addr).expect("Failed to dial");
+    let peer_id = "QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z";
+    // The key we want to put/get in the DHT
+    let key = Key::new(b"some_key");
+
+    // Put a record to DHT
+    let record = Record {
+        key: key.clone(),
+        value: b"some_value".to_vec(),
+        publisher: Some(private_p2p::PEER_ID.clone()),
+        expires: None,
+    };
+
+    swarm_private_net.behaviour_mut().kademlia.put_record(record, Quorum::One);
+
+    // Get a record from DHT
+    let the_record = swarm_private_net.behaviour_mut().kademlia.get_record(&key, Quorum::One);
+    println!("The records {:?}",the_record);
+
+
     // Inform the swarm to send a message to the dialed peer.
 
     loop {
@@ -323,6 +379,10 @@ async fn main() {
                                 .floodsub
                                 .publish(private_p2p::CHAIN_TOPIC.clone(), json.as_bytes());
                         }
+                    }
+                    private_p2p::EventType::Kademlia(resp)=>{
+                        //let json = KademliaEvent::from_slice(resp).expect("can jsonify response");
+                        println!("{:?}",resp);
                     }
                     private_p2p::EventType::LocalChainResponse(resp) => {
                         let json = serde_json::to_string(&resp).expect("can jsonify response");

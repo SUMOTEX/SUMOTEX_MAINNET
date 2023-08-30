@@ -1699,7 +1699,7 @@ dependencies = [
  "libp2p-core",
  "log",
  "socket2 0.4.9",
- "tokio 1.32.0",
+ "tokio",
 ]
 
 [[package]]
@@ -2277,7 +2277,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tiny-keccak",
- "tokio 1.32.0",
+ "tokio",
  "tokio-util",
  "unsigned-varint 0.2.3",
 ]
@@ -2970,16 +2970,6 @@ checksum = "1f3ccbac311fea05f86f61904b462b55fb3df8837a366dfc601a0161d0532f20"
 
 [[package]]
 name = "tokio"
-version = "0.2.25"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6703a273949a90131b290be1fe7b039d0fc884aa1935860dfcbe056f28cd8092"
-dependencies = [
- "bytes 0.5.6",
- "pin-project-lite 0.1.12",
-]
-
-[[package]]
-name = "tokio"
 version = "1.32.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "17ed6077ed6cd6c74735e21f37eb16dc3935f96878b1fe961074089cc80893f9"
@@ -3032,16 +3022,16 @@ dependencies = [
 
 [[package]]
 name = "tokio-util"
-version = "0.3.1"
+version = "0.6.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "be8242891f2b6cbef26a2d7e8605133c2c554cd35b3e4948ea892d6d68436499"
+checksum = "36943ee01a6d67977dd3f84a5a1d2efeb4ada3a1ae771cadfaa535d9d9fc6507"
 dependencies = [
- "bytes 0.5.6",
+ "bytes 1.4.0",
  "futures-core",
  "futures-sink",
  "log",
- "pin-project-lite 0.1.12",
- "tokio 0.2.25",
+ "pin-project-lite 0.2.13",
+ "tokio",
 ]
 
 [[package]]

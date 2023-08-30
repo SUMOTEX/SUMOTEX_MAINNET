@@ -1,10 +1,16 @@
 use super::{PrivateApp,Txn, pbft::PBFTNode,private_block::PrivateBlock};
 use libp2p::{
+    mdns,
     floodsub::{Floodsub,FloodsubEvent,Topic},
     core::{identity},
     mdns::{Mdns,MdnsEvent},
      PeerId,
     swarm::{Swarm,NetworkBehaviourEventProcess},
+};
+use libp2p::kad::record::store::MemoryStore;
+use libp2p::kad::{
+    record::Key, AddProviderOk, GetProvidersOk, GetRecordOk, Kademlia, KademliaEvent, PeerRecord,
+    PutRecordOk, QueryResult, Quorum, Record,
 };
 use tokio::{
     sync::mpsc,
@@ -20,7 +26,6 @@ use crate::private_block;
 use crate::private_pbft::PRIVATE_PBFT_PREPREPARED_TOPIC;
 use crate::private_block::handle_create_block_pbft;
 use crate::account_root::AccountRoot;
-use crate::smtx_protocol::SMTXProtocol;
 // main.rs
 use crate::Publisher;
 pub static KEYS: Lazy<identity::Keypair> = Lazy::new(identity::Keypair::generate_ed25519);
@@ -49,9 +54,11 @@ pub enum EventType {
     Init,
     Publish(String, String), // Publish a message to a topic
     PublishBlock(String,Vec<u8>),
+    Kademlia(KademliaEvent),
 }
 
 #[derive(NetworkBehaviour)]
+#[behaviour(to_swarm = "MyBehaviourEvent")]
 pub struct PrivateAppBehaviour {
     pub floodsub: Floodsub,
     pub mdns: Mdns,
@@ -68,8 +75,8 @@ pub struct PrivateAppBehaviour {
     #[behaviour(ignore)]
     pub account_r: AccountRoot,
     #[behaviour(ignore)]
-    pub smtx_protocol: SMTXProtocol,
-    
+    pub kademlia: Kademlia<MemoryStore>,
+
 }
 
 impl PrivateAppBehaviour {
@@ -79,16 +86,17 @@ impl PrivateAppBehaviour {
         txn:Txn,
         pbft:PBFTNode,
         account_r:AccountRoot,
-        smtx_protocol:SMTXProtocol,
+        kademlia: Kademlia<MemoryStore>,
         response_sender: mpsc::UnboundedSender<PrivateChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
+        
     ) -> Self {
         let mut behaviour = Self {
             app,
             txn,
             pbft,
             account_r,
-            smtx_protocol,
+            kademlia,
             floodsub: Floodsub::new(*PEER_ID),
             mdns: Mdns::new(Default::default())
                 .await
