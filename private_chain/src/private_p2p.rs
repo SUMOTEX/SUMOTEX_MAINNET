@@ -10,8 +10,9 @@ use libp2p::{
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
     record::Key, AddProviderOk, GetProvidersOk, GetRecordOk, Kademlia, KademliaEvent, PeerRecord,
-    PutRecordOk, QueryResult, Quorum, Record,
+    PutRecordOk, QueryResult, Quorum, Record
 };
+use libp2p::Multiaddr;
 use tokio::{
     sync::mpsc,
 };
@@ -58,7 +59,6 @@ pub enum EventType {
 }
 
 #[derive(NetworkBehaviour)]
-#[behaviour(to_swarm = "MyBehaviourEvent")]
 pub struct PrivateAppBehaviour {
     pub floodsub: Floodsub,
     pub mdns: Mdns,
@@ -74,9 +74,7 @@ pub struct PrivateAppBehaviour {
     pub pbft: PBFTNode,
     #[behaviour(ignore)]
     pub account_r: AccountRoot,
-    #[behaviour(ignore)]
     pub kademlia: Kademlia<MemoryStore>,
-
 }
 
 impl PrivateAppBehaviour {
@@ -118,8 +116,93 @@ impl PrivateAppBehaviour {
         // Depending on how you implemented your protocol, this might involve
         // sending the message directly, or queuing it to be sent when polled.
     }
+
 }
 
+impl NetworkBehaviourEventProcess<KademliaEvent> for PrivateAppBehaviour {
+    fn inject_event(&mut self, event: KademliaEvent) {
+        match event {
+            KademliaEvent::RoutingUpdated { peer, is_new_peer, addresses, bucket_range, old_peer } => {
+                // Handle the event here
+                println!("Routing table updated: Added/Updated peer {}", peer);
+                if is_new_peer {
+                    println!("This is a new peer");
+                }
+                println!("Peer Addresses: {:?}", addresses);
+                println!("Bucket Range: {:?}", bucket_range);
+                if let Some(old_peer) = old_peer {
+                    println!("Old Peer: {}", old_peer);
+                }
+            }
+            KademliaEvent::OutboundQueryCompleted { id, result, .. } => {
+                match result {
+                    QueryResult::GetRecord(result) => {
+                        match result {
+                            Ok(ok_result) => {
+                                // Successfully got records from the DHT.
+                                for record in ok_result.records {
+                                    println!("Successfully retrieved a record: {:?}", record);
+                                    // You can process the record further here.
+                                }
+                            },
+                            Err(err) => {
+                                println!("Failed to retrieve record: {:?}", err);
+                                // You can take steps to handle or recover from the error here.
+                            }
+                        }
+                    },
+                    QueryResult::PutRecord(result) => {
+                        if let Err(err) = result {
+                            println!("Failed to put record: {:?}", err);
+                            // Handle or recover from the error.
+                        } else {
+                            println!("Successfully put the record.");
+                        }
+                    },
+                    QueryResult::GetClosestPeers(result) => {
+                        match result {
+                            Ok(ok_result) => {
+                                println!("Any Peers {:?}",ok_result);
+                                for peer_id in ok_result.peers {
+                                    println!("Closest Peers {:?}",peer_id);
+                                    // Initiate a connection to each of the closest peers
+                                    connect_to_peer(peer_id);
+                                }
+                            },
+                            Err(err) => {
+                                eprintln!("Error when trying to get closest peers: {:?}", err);
+                            }
+                        }
+                    },
+                    QueryResult::Bootstrap(result) => {
+                        if let Err(err) = result {
+                            println!("Failed to bootstrap: {:?}", err);
+                        } else {
+                            println!("Successfully bootstrapped.");
+                        }
+                    },
+                    // Handle other query results here
+                    _ => {}
+                }
+            },
+            // You can handle other types of KademliaEvents here.
+            _ => {
+                println!("Received an unhandled Kademlia event: {:?}", event);
+            }
+        }
+    }
+}
+pub fn connect_to_peer(peer_id: PeerId) {
+    // Create a Multiaddr from the Peer ID
+    let multiaddr: Multiaddr = format!("/p2p/{}", peer_id.to_base58()).parse().expect("Invalid multiaddr");
+    
+    // Dial the peer
+    // if Swarm::dial(&mut swarm, &peer_id).is_err() {
+    //     println!("Failed to connect to {:?}", peer_id);
+    // } else {
+    //     println!("Successfully initiated connection to {:?}", peer_id);
+    // }
+}
 
 // incoming event handler
 impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {

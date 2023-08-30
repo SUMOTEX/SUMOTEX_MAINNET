@@ -292,23 +292,29 @@ async fn main() {
     Swarm::dial_addr(&mut swarm_private_net, target_peer_addr).expect("Failed to dial");
     let peer_id = "QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z";
     // The key we want to put/get in the DHT
-    let key = Key::new(b"QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z");
+    let key_bytes = private_p2p::PEER_ID.clone().to_bytes();
+    let kad_key = Key::new(&key_bytes);
 
     // Put a record to DHT
     let record = Record {
-        key: key.clone(),
+        key: kad_key.clone(),
         value: b"some_value".to_vec(),
         publisher: Some(private_p2p::PEER_ID.clone()),
         expires: None,
     };
+    // Create a Multiaddress for the bootstrap node. Replace with the actual address.
+    let bootstrap_addr: Multiaddr = "/ip4/104.131.131.82/tcp/4001/p2p/QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z".parse().unwrap();
+    let bootstrap_peer_id = "QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z".parse().unwrap();
+    // Bootstrap by connecting to the known peer.
+    Swarm::dial_addr(&mut swarm_private_net, bootstrap_addr.clone()).expect("Failed to dial bootstrap node");
+    swarm_private_net.behaviour_mut().kademlia.add_address(&bootstrap_peer_id, bootstrap_addr.clone());
 
     swarm_private_net.behaviour_mut().kademlia.put_record(record, Quorum::One);
 
     // Get a record from DHT
-    let the_record = swarm_private_net.behaviour_mut().kademlia.get_record(&key, Quorum::One);
-    println!("The records {:?}",the_record);
-
-
+    let the_record = swarm_private_net.behaviour_mut().kademlia.get_record(&kad_key, Quorum::One);
+    let vec_u8_key=kad_key.to_vec(); // Assuming to_vec_u8() is a method that returns Option<Vec<u8>>
+    swarm_private_net.behaviour_mut().kademlia.get_closest_peers(vec_u8_key);
     // Inform the swarm to send a message to the dialed peer.
 
     loop {
@@ -382,7 +388,7 @@ async fn main() {
                     }
                     private_p2p::EventType::Kademlia(resp)=>{
                         //let json = KademliaEvent::from_slice(resp).expect("can jsonify response");
-                        println!("{:?}",resp);
+                        println!("KADEMLIA {:?}",resp);
                     }
                     private_p2p::EventType::LocalChainResponse(resp) => {
                         let json = serde_json::to_string(&resp).expect("can jsonify response");
