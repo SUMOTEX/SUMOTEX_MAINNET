@@ -1,5 +1,4 @@
 use chrono::prelude::*;
-use super::{PrivateApp as App};
 use libp2p::{
     floodsub::{Topic},
     swarm::{Swarm},
@@ -9,7 +8,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use once_cell::sync::Lazy;
 use crate::private_p2p::PrivateAppBehaviour;
-
+use crate::private_app::PrivateApp as App;
 pub static PRIVATE_BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("private_blocks"));
 
 
@@ -17,7 +16,7 @@ pub static PRIVATE_BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("private_b
 pub struct PrivateBlock {
     pub id: u64,
     pub public_hash:String,
-    pub private_hash: Option<String>,
+    pub private_hash: String,
     pub previous_hash: String,
     pub transactions:Vec<String>, // determine txn
     pub timestamp: i64,
@@ -77,7 +76,7 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<PrivateAppBehaviour>) {
             .last()
             .expect("there is at least one block");
             
-        let hash = latest_block.private_hash.as_ref().map_or("default_hash",String::as_str);
+        let hash = latest_block.private_hash.clone();
         let block = PrivateBlock::new(
             latest_block.id + 1,
             hash.to_string(),
@@ -97,10 +96,10 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<PrivateAppBehaviour>) {
 pub fn handle_create_block_pbft(app:App,root_hash:String,txn:Vec<String>)-> PrivateBlock{
     let app = app.blocks.last().expect("There should be at least one block");
     let latest_block = app;
-    let hash = &latest_block.previous_hash;
+    let hash = latest_block.private_hash.clone();
     let block = PrivateBlock::new(
         latest_block.id +1,
-        hash.to_string(),
+        hash,
         txn
     );
     block
@@ -115,7 +114,7 @@ impl PrivateBlock {
         Self {
             id,
             public_hash:"123".to_string(),
-            private_hash:Some(private_hash),
+            private_hash:(private_hash),
             timestamp: now.timestamp(),
             previous_hash,
             transactions:txn_item,

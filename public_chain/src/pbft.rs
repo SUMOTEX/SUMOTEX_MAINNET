@@ -1,6 +1,5 @@
 use sha2::{Sha256,Digest};
 use serde::{Deserialize, Serialize};
-use super::{PublicTxn};
 use libp2p::{
     floodsub::{Topic},
     swarm::{Swarm},
@@ -8,12 +7,13 @@ use libp2p::{
 use std::collections::HashMap;
 use log::{info};
 use rand::Rng;
-use crate::VerkleTree;
+use crate::verkle_tree::VerkleTree;
 use once_cell::sync::Lazy;
 use rand::thread_rng;
 use rand::distributions::Alphanumeric;
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::p2p::AppBehaviour;
+use crate::public_txn::PublicTxn;
 
 pub static PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_pre_prepared"));
 

@@ -1,5 +1,5 @@
 use chrono::prelude::*;
-use super::{App};
+
 use libp2p::{
     floodsub::{Topic},
     swarm::{Swarm},
@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use once_cell::sync::Lazy;
 use crate::p2p::AppBehaviour;
-
+use crate::public_app::App;
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
 
 

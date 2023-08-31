@@ -1,4 +1,3 @@
-use super::{App,Txn, pbft::PBFTNode,public_block::Block};
 use libp2p::{
     floodsub::{Floodsub,FloodsubEvent,Topic},
     core::{identity},
@@ -14,12 +13,16 @@ use log::{error, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use crate::public_app::App;
+use crate::pbft::PBFTNode;
+use crate::public_block::Block;
+use crate::public_txn::Txn;
 use crate::public_block;
 use crate::pbft;
 use crate::public_block::handle_create_block_pbft;
 
 // main.rs
-use crate::Publisher;
+use crate::publisher::Publisher;
 pub static KEYS: Lazy<identity::Keypair> = Lazy::new(identity::Keypair::generate_ed25519);
 pub static PEER_ID: Lazy<PeerId> = Lazy::new(|| PeerId::from(KEYS.public()));
 pub static CHAIN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("chains"));
@@ -74,6 +77,7 @@ impl AppBehaviour {
         response_sender: mpsc::UnboundedSender<ChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
     ) -> Self {
+        info!("About to send init event from [BEHAVIOUR]");
         let mut behaviour = Self {
             app,
             txn,

@@ -1,8 +1,7 @@
-use super::{PrivateApp,Txn,pbft::PBFTNode};
 use libp2p::{
     core::upgrade,
     noise::{Keypair, NoiseConfig, X25519Spec},
-    mplex,mdns,noise,
+    mplex,
     tcp::TokioTcpConfig,
     swarm::{Swarm,SwarmBuilder},
 };
@@ -12,8 +11,7 @@ use tokio::{
 };
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
-    record::Key, AddProviderOk, GetProvidersOk, GetRecordOk, Kademlia, KademliaEvent, PeerRecord,
-    PutRecordOk, QueryResult, Quorum, Record,
+    Kademlia
 };
 use libp2p::Transport;
 use log::{ info};
@@ -21,10 +19,12 @@ use crate::private_p2p::PEER_ID;
 use crate::private_p2p::PrivateAppBehaviour;
 use crate::private_p2p::KEYS;
 use crate::account_root::AccountRoot;
-use crate::private_p2p;
+use crate::private_transactions::Txn;
+use crate::pbft::PBFTNode;
+use crate::private_app::PrivateApp;
 type MySwarm = Swarm<PrivateAppBehaviour>;
 
-pub async fn  create_swarm() -> MySwarm {
+pub async fn create_private_swarm() ->  MySwarm {
     // Create and initialize your swarm here
     info!("Private Peer Id: {}", PEER_ID.clone());
     let (response_sender, _response_rcv) = mpsc::unbounded_channel();
@@ -48,7 +48,6 @@ pub async fn  create_swarm() -> MySwarm {
             kademlia,
             response_sender, 
             init_sender.clone()).await;
-
     let swarm = SwarmBuilder::new(transp, private_behaviour, *PEER_ID)
         .executor(Box::new(|fut| {
             spawn(fut);

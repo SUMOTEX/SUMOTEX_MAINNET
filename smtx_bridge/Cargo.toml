@@ -6,6 +6,29 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-async-std = "1.9"
-libp2p = { version = "0.39", features = ["mdns", "yamux", "tcp-tokio", "dns-tokio"] }
-tokio = { version = "1", features = ["full"] }
+common = { path = "../common" }
+public_chain = { path = "../public_chain" }
+private_chain = { path = "../private_chain" }
+chrono = "0.4"
+sha2 = "0.9.8"
+serde = {version = "1.0", features = ["derive"] }
+serde_json = "1.0"
+libp2p = { version = "0.39", features = ["tcp-tokio","yamux", "mdns","noise"] }
+tokio = { version = "1.0", features = ["full"] }
+tokio-util = { version = "0.6", features = ["codec"] }
+hex = "0.4"
+once_cell = "1.5"
+log = "0.4"
+pretty_env_logger = "0.4"
+tiny-keccak = { version = "2.0", features = ["keccak"] }
+rand = "0.8.5"
+borsh = "0.9"
+ring = "0.16"
+futures = "0.3"
+blake2 = "0.8"
+bytes = "0.4"
+bincode = "1.3"
+unsigned-varint = { version = "0.2.1", features = ["codec"] }
+async-std = "1.8" 
+anyhow = "1.0"
+lazy_static = "1.4.0"

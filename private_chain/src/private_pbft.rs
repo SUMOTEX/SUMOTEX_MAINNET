@@ -1,6 +1,5 @@
 use sha2::{Sha256,Digest};
 use serde::{Deserialize, Serialize};
-use super::{PublicTxn};
 use libp2p::{
     floodsub::{Topic},
     swarm::{Swarm},
@@ -8,12 +7,13 @@ use libp2p::{
 use std::collections::HashMap;
 use log::{info};
 use rand::Rng;
-use crate::VerkleTree;
 use once_cell::sync::Lazy;
 use rand::thread_rng;
 use rand::distributions::Alphanumeric;
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::private_p2p::PrivateAppBehaviour;
+use crate::private_transactions::PublicTxn;
+use crate::verkle_tree;
 
 pub static PRIVATE_PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("private_pbft_pre_prepared"));
 pub static PRIVATE_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_commit"));
@@ -41,7 +41,7 @@ pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<PrivateAppBehaviour>
     if let Some(data) = cmd.strip_prefix("create txn") {
         let behaviour =swarm.behaviour_mut();
         let mut i: i64 =0;
-        let mut verkle_tree = VerkleTree::new();
+        let mut verkle_tree = verkle_tree::VerkleTree::new();
         let mut transactions: HashMap<String, String>= HashMap::new();
         while i<5 {
             let r = thread_rng()

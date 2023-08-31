@@ -1,6 +1,4 @@
-use super::{PrivateApp,Txn, pbft::PBFTNode,private_block::PrivateBlock};
 use libp2p::{
-    mdns,
     floodsub::{Floodsub,FloodsubEvent,Topic},
     core::{identity},
     mdns::{Mdns,MdnsEvent},
@@ -9,8 +7,8 @@ use libp2p::{
 };
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
-    record::Key, AddProviderOk, GetProvidersOk, GetRecordOk, Kademlia, KademliaEvent, PeerRecord,
-    PutRecordOk, QueryResult, Quorum, Record
+   Kademlia, KademliaEvent,
+     QueryResult
 };
 use libp2p::Multiaddr;
 use tokio::{
@@ -23,12 +21,16 @@ use log::{error, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use crate::private_transactions::Txn;
 use crate::private_block;
 use crate::private_pbft::PRIVATE_PBFT_PREPREPARED_TOPIC;
 use crate::private_block::handle_create_block_pbft;
+use crate::private_app::PrivateApp;
+use crate::pbft::PBFTNode;
+use crate::private_block::PrivateBlock;
 use crate::account_root::AccountRoot;
 // main.rs
-use crate::Publisher;
+use crate::publisher::Publisher;
 pub static KEYS: Lazy<identity::Keypair> = Lazy::new(identity::Keypair::generate_ed25519);
 pub static PEER_ID: Lazy<PeerId> = Lazy::new(|| PeerId::from(KEYS.public()));
 pub static CHAIN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("chains"));
@@ -243,8 +245,10 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                 }
             }
             else if msg.topics[0]==Topic::new("private_blocks"){
+                println!("add_private_block");
                 match serde_json::from_slice::<PrivateBlock>(&msg.data) {
                     Ok(block) => {
+                       
                         info!("Received new block from {}", msg.source.to_string());
                         self.app.try_add_block(block);
                     },
@@ -260,8 +264,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                 let received_serialized_data =msg.data;
                 let deserialized_data: HashMap<String, HashMap<String, String>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
-                println!("The NODE: {:?}",the_pbft_hash);
-                info!("The new txn from {:?}", deserialized_data);
+                println!("Private Node: {:?}",the_pbft_hash);
+                info!("New private transaction from {:?}", deserialized_data);
                 for (key, inner_map) in deserialized_data.iter() {
                     //TODO ADD the hash to database.
                     let (valid_txn,txn_hashes) = self.txn.is_txn_valid(key.to_string(),inner_map.clone());
@@ -291,8 +295,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                     let created_block=handle_create_block_pbft(self.app.clone(),root,txn);
                     println!("The Created Block After Validity: {:?}",created_block);
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
-                    //self.app.blocks.push(created_block);
-                    println!("BLOCKS {:?}",self.app.blocks);
+                    self.app.blocks.push(created_block);
+                    println!("Private Blocks {:?}",self.app.blocks);
                     publisher.publish_block("private_blocks".to_string(),json.as_bytes().to_vec())
                 }
             }
