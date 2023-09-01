@@ -18,6 +18,7 @@ pub struct PrivateBlock {
     pub public_hash:String,
     pub private_hash: String,
     pub previous_hash: String,
+    pub root_account:Option<String>,
     pub transactions:Vec<String>, // determine txn
     pub timestamp: i64,
     pub nonce: u64,
@@ -113,8 +114,9 @@ impl PrivateBlock {
         let (nonce, private_hash) = mine_block(id, now.timestamp(),&private_hash, &previous_hash);
         Self {
             id,
-            public_hash:"123".to_string(),
+            public_hash:"".to_string(),
             private_hash:(private_hash),
+            root_account:Some(("").to_string()),
             timestamp: now.timestamp(),
             previous_hash,
             transactions:txn_item,

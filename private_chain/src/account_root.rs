@@ -43,7 +43,9 @@ impl AccountRoot {
     }
     pub fn add_network_name(&mut self,name:String){
         self.network_name=Some(name.to_string());
-        
+    }
+    pub fn get_pub_address(&self)->String{
+        return self.public_address.clone()
     }
 
 }

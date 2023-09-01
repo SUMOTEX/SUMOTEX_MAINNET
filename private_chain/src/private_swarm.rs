@@ -20,7 +20,7 @@ use crate::private_p2p::PrivateAppBehaviour;
 use crate::private_p2p::KEYS;
 use crate::account_root::AccountRoot;
 use crate::private_transactions::Txn;
-use crate::pbft::PBFTNode;
+use crate::private_pbft::PrivatePBFTNode as PBFTNode;
 use crate::private_app::PrivateApp;
 type MySwarm = Swarm<PrivateAppBehaviour>;
 

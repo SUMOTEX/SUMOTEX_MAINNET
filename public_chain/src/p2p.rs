@@ -27,7 +27,8 @@ pub static KEYS: Lazy<identity::Keypair> = Lazy::new(identity::Keypair::generate
 pub static PEER_ID: Lazy<PeerId> = Lazy::new(|| PeerId::from(KEYS.public()));
 pub static CHAIN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("chains"));
 pub static TXN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("transactions"));
-
+pub static PRIVATE_BLOCK_GENESIS_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("private_blocks_genesis_creation"));
+pub static HYBRID_BLOCK_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("hybrid_block_creation"));
 pub static PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_prepared"));
 pub static PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_commit"));
 
@@ -95,6 +96,8 @@ impl AppBehaviour {
         behaviour.floodsub.subscribe(pbft::PBFT_PREPREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(PBFT_PREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(PBFT_COMMIT_TOPIC.clone());
+        behaviour.floodsub.subscribe(PRIVATE_BLOCK_GENESIS_CREATION.clone());
+        behaviour.floodsub.subscribe(HYBRID_BLOCK_CREATION.clone());
         behaviour
     }
     fn send_message(&mut self, target: PeerId, message: String) {
@@ -192,6 +195,30 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     println!("BLOCKS {:?}",self.app.blocks);
                     publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
                 }
+            }
+            else if msg.topics[0]==Topic::new("private_blocks_genesis_creation"){
+                let received_serialized_data =msg.data;
+                let json_string = String::from_utf8(received_serialized_data).unwrap();
+                println!("Private Genesis Block: {:?}",json_string);
+                if let Some(publisher) = Publisher::get(){
+                let created_block = public_block::handle_create_block_private_chain(self.app.clone(),Some(json_string),None,None);
+                let json = serde_json::to_string(&created_block).expect("can jsonify request");
+                self.app.blocks.push(created_block);
+                println!("Genesis Private Block {:?}",self.app.blocks);
+                publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
+                }
+
+            } else if msg.topics[0]==Topic::new("hybrid_block_creation")  {
+                let received_serialized_data =msg.data;
+                let json_string = String::from_utf8(received_serialized_data).unwrap();
+                println!("Private Block Transactions: {:?}",json_string);
+                if let Some(publisher) = Publisher::get(){
+                    let created_block = public_block::handle_create_block_private_chain(self.app.clone(),Some(json_string),None,None);
+                    let json = serde_json::to_string(&created_block).expect("can jsonify request");
+                    self.app.blocks.push(created_block);
+                    println!("Private Block Transactions {:?}",self.app.blocks);
+                    publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
+                    }
             }
             else if msg.topics[0]==Topic::new("transactions")  {
                 // let received_serialized_data:HashMap<String, Vec<String>> =serde_json::from_slice(&msg.data).expect("Deserialization failed");

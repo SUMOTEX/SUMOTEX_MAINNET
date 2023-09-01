@@ -13,28 +13,30 @@ impl PrivateApp {
         Self { blocks: vec![]}
     }
     
-    pub fn genesis(&mut self)->private_block::PrivateBlock {
+    pub fn genesis(&mut self,acc:String)->private_block::PrivateBlock {
         let genesis_block = private_block::PrivateBlock {
             id: 0,
             timestamp: Utc::now().timestamp(),
             previous_hash: String::from("00Genesis"),
-            private_hash:(String::from("00")),
+            private_hash:(String::from("00002816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c99")),
+            root_account: Some(acc),
             transactions:(vec!["".to_string()].into()),
             nonce: 1,
-            public_hash: "0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c43".to_string(),
+            public_hash: "0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c99".to_string(),
         };
         self.blocks.push(genesis_block.clone());
         return genesis_block.clone();
     }
-    pub fn try_add_genesis(&mut self) {
+    pub fn try_add_genesis(&mut self,acc:String) {
         let genesis_block = private_block::PrivateBlock {
             id: 0,
             timestamp: Utc::now().timestamp(),
             previous_hash: String::from("00Genesis"),
-            private_hash:(String::from("00")),
+            private_hash:(String::from("00002816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c99")),
+            root_account:Some(acc),
             transactions:(vec!["".to_string()].into()),
             nonce: 1,
-            public_hash: "0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c43".to_string(),
+            public_hash: "0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c99".to_string(),
         };
         self.blocks.push(genesis_block.clone());
     }

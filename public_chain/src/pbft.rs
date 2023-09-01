@@ -5,7 +5,6 @@ use libp2p::{
     swarm::{Swarm},
 };
 use std::collections::HashMap;
-use log::{info};
 use rand::Rng;
 use crate::verkle_tree::VerkleTree;
 use once_cell::sync::Lazy;

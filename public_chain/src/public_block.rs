@@ -81,6 +81,7 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
             latest_block.public_hash.clone(),
             //TODO txn
             ["TEST BLOCK CREATION WITH TXN".to_string()].to_vec(),
+            None,
             None
         );
         let json = serde_json::to_string(&block).expect("can jsonify request");
@@ -107,37 +108,44 @@ pub fn handle_create_block_pbft(app:App,root_hash:String,txn:Vec<String>)-> Bloc
         latest_block.id +1,
         latest_block.public_hash.clone(),
         txn,
+        None,
         None
     );
+    
     block
 }
-pub fn handle_create_block_private_chain(app:App,private_hash:String,txn:Option<Vec<String>>)-> Block{
+pub fn handle_create_block_private_chain(app:App,private_hash:Option<String>,txn:Option<Vec<String>>,root:Option<String>)-> Block{
     let app = app.blocks.last().expect("There should be at least one block");
-    let transaction = txn.unwrap_or_else(|| vec!["txn".to_string()]);
     let latest_block = app;
+    let transaction = txn.unwrap_or_else(|| vec!["".to_string()]);
+    let root_acc = root.unwrap_or_else(|| "".to_string()); // Use default if None
+    let p_hash = private_hash.unwrap_or_else(||"".to_string());
     let block = Block::new(
         latest_block.id +1,
         latest_block.public_hash.clone(),
         transaction,
-        None
+        Some(p_hash.clone()),
+        Some(root_acc)
     );
+    let json = serde_json::to_string(&block).expect("can jsonify request");
     block
-
 }
 
 impl Block {
-    pub fn new(id: u64, previous_hash: String, txn:Vec<String>, private_hash: Option<String>) -> Self {
+    pub fn new(id: u64, previous_hash: String, txn:Vec<String>, private_hash: Option<String>,root:Option<String>) -> Self {
         let now = Utc::now();
         let txn_item = txn;
-        let private_hash = private_hash.unwrap_or_else(|| "PrivateHash".to_string()); // Use default if None
+        let root_acc = root.unwrap_or_else(|| "".to_string()); // Use default if None
+        let private_hash = private_hash.unwrap_or_else(|| "".to_string()); // Use default if None
         let (nonce, public_hash) = mine_block(id, now.timestamp(), &previous_hash);
         Self {
             id,
             public_hash,
-            private_hash: Some(private_hash),
-            timestamp: now.timestamp(),
             previous_hash,
+            private_hash: Some(private_hash),
+            //root_account:Some(root_acc),
             transactions:Some(txn_item),
+            timestamp: now.timestamp(),
             nonce,
         }
     }

@@ -26,9 +26,10 @@ use crate::private_block;
 use crate::private_pbft::PRIVATE_PBFT_PREPREPARED_TOPIC;
 use crate::private_block::handle_create_block_pbft;
 use crate::private_app::PrivateApp;
-use crate::pbft::PBFTNode;
+use crate::private_pbft::PrivatePBFTNode as PBFTNode;
 use crate::private_block::PrivateBlock;
 use crate::account_root::AccountRoot;
+use crate::bridge;
 // main.rs
 use crate::publisher::Publisher;
 pub static KEYS: Lazy<identity::Keypair> = Lazy::new(identity::Keypair::generate_ed25519);
@@ -237,7 +238,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                 match serde_json::from_slice::<PrivateBlock>(&msg.data) {
                     Ok(block) => {
                         info!("Received new GENESIS block from {}", msg.source.to_string());
-                        self.app.try_add_genesis()
+                        let the_acc = self.account_r.get_pub_address();
+                        self.app.try_add_genesis(the_acc)
                     },
                     Err(err) => {
                         error!(
@@ -253,7 +255,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                 match serde_json::from_slice::<PrivateBlock>(&msg.data) {
                     Ok(block) => {
                         info!("Received new block from {}", msg.source.to_string());
-                        self.app.try_add_block(block);
+                        self.app.try_add_block(block.clone());
      
                     },
                     Err(err) => {
@@ -294,24 +296,22 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
                 self.pbft.commit("COMMIT READY".to_string());
-                println!("COMMIT_PBFT");
                 if let Some(publisher) = Publisher::get(){
                     let (root,txn) = self.pbft.get_txn(json_string);
+                    println!("List of Transactions: {:?}",txn);
                     let created_block=handle_create_block_pbft(self.app.clone(),root,txn);
                     println!("The Created Block After Validity: {:?}",created_block);
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
-                    self.app.blocks.push(created_block);
+                    self.app.blocks.push(created_block.clone());
                     println!("Private Blocks {:?}",self.app.blocks);
-       
                     // In the private swarm event loop or somewhere in your `create_private_swarm` function
                     // assuming private_tx is passed as an argument or captured from the environment
-                    println!("Publish Block");
+                    println!("Publish Private Block");
                     self.private_tx.send("add_private_block".to_string()).unwrap();
-                    // match self.private_tx.send("add_private_block".to_string()) {
-                    //     Ok(_) => println!("Successfully sent message"),
-                    //     Err(e) => eprintln!("Failed to send message: {}", e),
-                    // }
-                    publisher.publish_block("private_blocks".to_string(),json.as_bytes().to_vec())
+                    publisher.publish_block("private_blocks".to_string(),json.as_bytes().to_vec());
+                    tokio::spawn(async move {
+                        publish_to_public_blockchain(created_block.clone()).await;
+                    });  
                 }
             }
             else if msg.topics[0]==Topic::new("private_transactions")  {
@@ -338,7 +338,20 @@ impl NetworkBehaviourEventProcess<MdnsEvent> for PrivateAppBehaviour {
     }
 }
 
-
+pub async fn publish_to_public_blockchain(created_block:PrivateBlock){
+    bridge::tcp_client(bridge::Message {
+        title:"TXN_BLOCK".to_string(),
+        hash:created_block.private_hash.clone(),
+        root_account:Some("".to_string())
+    }).await;
+}
+pub async fn publish_genesis_to_public_blockchain(created_block:PrivateBlock){
+    bridge::tcp_client(bridge::Message {
+        title:"GENESIS".to_string(),
+        hash:created_block.private_hash.clone(),
+        root_account:created_block.root_account
+    }).await;
+}
 pub fn trigger_publish(sender: mpsc::UnboundedSender<(String, String)>, title: String, message: String) {
     sender.send((title, message)).expect("Can send publish private event");
 }
@@ -397,7 +410,7 @@ pub fn handle_response(data: Vec<u8>) {
         eprintln!("Failed to decode the response data into a string.");
     }
 }
-pub fn handle_start_chain(swarm: &mut Swarm<PrivateAppBehaviour>){
+pub async fn handle_start_chain(swarm: &mut Swarm<PrivateAppBehaviour>){
     let mut steps = 0;
     let mut chain_name = String::new();
     let mut start_block = String::new();
@@ -413,9 +426,12 @@ pub fn handle_start_chain(swarm: &mut Swarm<PrivateAppBehaviour>){
                 println!("Starting...");
                 println!("Setting up Genesis Block for Chain: {}",chain_name);
                 println!("Setup completed...start using today!");
-                swarm.behaviour_mut().app.genesis();
-                let the_genesis_block =swarm.behaviour_mut().app.blocks.last().expect("there is at least one block");
-                match serde_json::to_vec::<PrivateBlock>(the_genesis_block) {
+                let account_add = swarm.behaviour_mut().account_r.get_pub_address();
+                swarm.behaviour_mut().app.genesis(account_add);
+                
+                let the_genesis_block =swarm.behaviour_mut().app.blocks.last().expect("there is at least one block").clone();
+
+                match serde_json::to_vec::<PrivateBlock>(&the_genesis_block) {
                     Ok(block) => {
                         info!("Block: {:?}", block);
                         info!("Generating Genesis block for chain: {}", chain_name);
@@ -423,6 +439,9 @@ pub fn handle_start_chain(swarm: &mut Swarm<PrivateAppBehaviour>){
                         .behaviour_mut()
                         .floodsub
                         .publish(GENESIS_BLOCK_TOPIC.clone(), block);
+                        tokio::spawn(async move {
+                            publish_genesis_to_public_blockchain(the_genesis_block.clone()).await;
+                        }); 
                     },
                     Err(err) => {
                         error!(

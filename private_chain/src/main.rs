@@ -38,7 +38,6 @@ mod verkle_tree;
 mod private_p2p;
 mod publisher;
 mod private_block;
-mod pbft;
 mod private_pbft;
 mod account_root;
 mod private_transactions;
@@ -307,7 +306,7 @@ async fn main() {
                     }
                     private_p2p::EventType::Input(line) => match line.as_str() {
                         "ls p" => private_p2p::handle_print_peers(&swarm_private_net),
-                        "start"=>private_p2p::handle_start_chain(&mut swarm_private_net),
+                        "start"=>private_p2p::handle_start_chain(&mut swarm_private_net).await,
                         cmd if cmd.starts_with("ls b") => private_p2p::handle_print_chain(&swarm_private_net),
                         cmd if cmd.starts_with("create txn")=> private_pbft::pbft_pre_message_handler(cmd, &mut swarm_private_net),
                         _ => error!("unknown command"),  

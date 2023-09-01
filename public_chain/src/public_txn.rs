@@ -1,33 +1,8 @@
-use libp2p::{
-    core::upgrade,
-    mplex,
-    noise::{Keypair, NoiseConfig, X25519Spec},
-    swarm::{Swarm,SwarmEvent},
-    tcp::TokioTcpConfig,
-    Transport,
-};
-use libp2p::core::UpgradeInfo;
-use libp2p::swarm::{
-    ProtocolsHandler, SubstreamProtocol,
-    protocols_handler::multi::MultiHandler,
-};
-use libp2p::identity::{Keypair as IdentityKeypair};
-use libp2p::PeerId;
 use crate::verkle_tree::VerkleTree;
-use log::{error, info};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
-use std::time::Duration;
-use tokio::{
-    io::{stdin, AsyncBufReadExt, BufReader},
-    select, spawn,
-    sync::mpsc,
-    time::sleep,
-};
-use futures::future::FutureExt;
 use std::collections::HashMap;
 use std::collections::BTreeMap;
-use libp2p::futures::StreamExt;
 
 
 pub struct Txn{

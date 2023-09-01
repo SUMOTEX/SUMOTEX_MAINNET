@@ -5,12 +5,13 @@ use tokio::io::{self,AsyncReadExt, AsyncWriteExt};
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Message {
-    title: String,
-    body: String,
+    pub title: String,
+    pub hash: String,
+    pub root_account:Option<String>
 }
 
-
 pub async fn tcp_client(message:Message) -> Result<(),io::Error> {
+    println!("Start stream");
     let mut stream = TcpStream::connect("127.0.0.1:8090").await?;
     let (mut reader, mut writer) = io::split(stream);
 
@@ -26,7 +27,6 @@ pub async fn tcp_client(message:Message) -> Result<(),io::Error> {
 
     // Optionally convert the received bytes back to a string
     let received_string = String::from_utf8_lossy(&buf[0..bytes_read]);
-    println!("Received string: {}", received_string);
     return Ok(());
 
 }

@@ -1,7 +1,7 @@
 use chrono::prelude::*;
 use log::{error};
-use std::time::Duration;
 use crate::public_block;
+
 #[derive(Debug,Clone)]
 pub struct App {
     pub blocks: Vec<public_block::Block>,
@@ -11,13 +11,16 @@ impl App {
     pub fn new() -> Self {
         Self { blocks: vec![]}
     }
-    
+    pub fn get_blocks(&self)->Vec<public_block::Block>{
+        self.blocks.clone()
+    }
     pub fn genesis(&mut self) {
         let genesis_block = public_block::Block {
             id: 0,
             timestamp: Utc::now().timestamp(),
             previous_hash: String::from("00Genesis"),
-            private_hash:Some(String::from("00")),
+            private_hash:Some(String::from("")),
+            //root_account:Some(String::from("")),
             transactions:Some(vec!["".to_string()].into()),
             nonce: 1,
             public_hash: "0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c43".to_string(),

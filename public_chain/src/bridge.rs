@@ -2,14 +2,13 @@
 use serde::{Deserialize, Serialize};
 use tokio::net::{TcpListener, TcpStream};
 use tokio::io::{self,AsyncReadExt, AsyncWriteExt};
-
+use crate::publisher::Publisher;
 #[derive(Serialize, Deserialize, Debug)]
 pub struct Message {
-    title: String,
-    body: String,
+    pub title: String,
+    pub hash: String,
+    pub root_account:Option<String>
 }
-
-
 pub async fn tcp_client(message:Message) -> Result<(),io::Error> {
     let mut stream = TcpStream::connect("127.0.0.1:8090").await?;
     let (mut reader, mut writer) = io::split(stream);
@@ -26,7 +25,13 @@ pub async fn tcp_client(message:Message) -> Result<(),io::Error> {
 
     // Optionally convert the received bytes back to a string
     let received_string = String::from_utf8_lossy(&buf[0..bytes_read]);
-    println!("Received string: {}", received_string);
+    // if message.title=="GENESIS"{
+    //     println!("Received: {:?}", message);
+    //     if let Some(publisher) = Publisher::get(){
+    //         publisher.publish("private_blocks_genesis_creation".to_string(), message.hash);
+            
+    //     }
+    // }
     return Ok(());
 
 }
@@ -43,7 +48,8 @@ pub async fn handle_client(mut socket: TcpStream) {
             Ok(n) => {
                 println!("Received {} bytes: {:?}", n, &buf[0..n]);
                 let received_string = String::from_utf8_lossy(&buf[0..n]);
-                println!("Received string: {}", received_string);
+                obtain_message(received_string.to_string());
+                println!("Received private chain request: {}", received_string);
                 if socket.write_all(&buf[0..n]).await.is_err() {
                     eprintln!("Failed to write data back to socket");
                     return;
@@ -66,4 +72,30 @@ pub async fn accept_loop(listener: TcpListener) {
             Err(e) => eprintln!("Failed to accept socket: {}", e),
         }
     }
+}
+
+pub fn obtain_message(r_message:String){
+    let deserialized_message = match serde_json::from_str::<Message>(&r_message) {
+        Ok(mut message) => {
+            println!("Message: {:?}", message);
+            if message.title=="GENESIS"{
+                println!("Received GENESIS: {:?}", message);
+                if let Some(publisher) = Publisher::get(){
+                    publisher.publish("private_blocks_genesis_creation".to_string(), message.hash.clone());
+                    
+                }
+            }else if message.title=="TXN_BLOCK" {
+                println!("Received Transactions Block: {:?}", message);
+                if let Some(publisher) = Publisher::get(){
+                    publisher.publish("hybrid_block_creation".to_string(), message.hash.clone());
+                    
+                }
+            }
+            message
+        },
+        Err(e) => {
+            eprintln!("Failed to parse JSON: {}", e);
+            return; // Or handle the error in another way
+        }
+    };
 }

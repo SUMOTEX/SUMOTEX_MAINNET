@@ -1,11 +1,8 @@
 use libp2p::{
     swarm::{Swarm},
-    Transport,
 };
 use libp2p::PeerId;
-use crate::verkle_tree::VerkleTree;
 use log::{error, info};
-use sha2::{Digest};
 use std::time::Duration;
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
@@ -27,9 +24,7 @@ mod public_txn;
 mod bridge;
 use bridge::accept_loop;
 use publisher::Publisher;
-use tokio::net::TcpStream;
 use tokio::net::TcpListener;
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
 use std::io::Result;
 enum CustomEvent {
     ReceivedRequest(PeerId, Vec<u8>),
@@ -81,6 +76,7 @@ async fn main() ->tokio::io::Result<()>{
                     let accept_loop_task = tokio::spawn(async {
                         accept_loop(listener).await;
                     });
+                    println!("TCP Port: {:?}",port);
                     break;
                 }
                 Err(e) => {
@@ -122,7 +118,7 @@ async fn main() ->tokio::io::Result<()>{
         let recv_result = init_rcv.recv().await;
         match recv_result {
             Some(_) => {
-                println!("Initialization event received.");
+                println!("Initialization event.");
                 let peers = p2p::get_list_peers(&swarm_public_net);
                 swarm_public_net.behaviour_mut().app.genesis();
                 info!("Connected nodes: {}", peers.len());
