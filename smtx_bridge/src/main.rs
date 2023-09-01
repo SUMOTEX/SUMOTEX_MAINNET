@@ -14,55 +14,68 @@ extern crate private_chain; // Assume the crate exposes a "private_swarm()" func
 use crate::public_chain::public_swarm::create_public_swarm;
 use crate::private_chain::private_swarm::create_private_swarm;
 use tokio::sync::mpsc;
+use tokio::net::TcpStream;
+use tokio::net::TcpListener;
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
+use std::io::Result;
 
-fn is_event_type_y(event: &str) -> bool {
-    // Here, I'm assuming that the event type can be determined by the event string.
-    // Replace this with your actual logic for determining the event type.
-    event == "Private Node"
-}
+
 
 #[tokio::main]
-async fn main()-> Result<(), Box<dyn std::error::Error>> {
-    let mut public_swarm = create_public_swarm().await;
-    let mut private_swarm = create_private_swarm().await;
-    
+async fn main() ->tokio::io::Result<()> {
     // Create channels for custom events
-    let (public_tx, mut public_rx): (mpsc::UnboundedSender<String>, mpsc::UnboundedReceiver<String>) = mpsc::unbounded_channel();
-    let (private_tx, mut private_rx): (mpsc::UnboundedSender<String>, mpsc::UnboundedReceiver<String>) = mpsc::unbounded_channel();
+    let (public_tx, mut _public_rx): (mpsc::UnboundedSender<String>, mpsc::UnboundedReceiver<String>) = mpsc::unbounded_channel();
+    let (private_tx, mut _private_rx): (mpsc::UnboundedSender<String>, mpsc::UnboundedReceiver<String>) = mpsc::unbounded_channel();
+    let mut public_swarm = create_public_swarm().await;
+    let mut private_swarm = create_private_swarm(private_tx.clone()).await;
+    let listener = TcpListener::bind("127.0.0.1:8090").await?;
+    println!("Listening on 127.0.0.1:8090...");
+    loop {
+        let (mut socket, _) = listener.accept().await?;
 
+        tokio::spawn(async move {
+            let mut buf = [0; 1024];
+            // In a loop, read data from the socket and write the data back.
+            loop {
+                match socket.read(&mut buf).await {
+                    Ok(n) if n == 0 => {
+                        println!("Connection closed.");
+                        return;
+                    },
+                    Ok(n) => {
+                        println!("Received {} bytes: {:?}", n, &buf[0..n]);
+                        let received_string = String::from_utf8_lossy(&buf[0..n]);
+                        println!("Received string: {}", received_string);
+                        if socket.write_all(&buf[0..n]).await.is_err() {
+                            eprintln!("Failed to write data back to socket");
+                            return;
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("Failed to read from socket: {}", e);
+                        return;
+                    }
+                }
+            }
+        });
+    }
     loop {
         select! {
             // Handle private_swarm events
-            _event = private_swarm.select_next_some() => {
-                //println!("HERE");
-                // if is_event_type_y("Private Node") {
-                //     println!("Event with another keyword received in private rx");
-                //     // do something...
-                // }
+            event = private_swarm.select_next_some() => {
+                println!("Received private next event: {:?}", event);  // Fixed here: changed _event to event
             },
             // Handle public_swarm events
-            _event = public_swarm.select_next_some() => {
-                // if is_event_type_y("Private Node") {
-                //     println!("Event with another keyword received in private rx");
-                //     // do something...
-                // }
-                //public_tx.send("Event for public rx".to_string()).unwrap();
-                // Handle the event here.
-                // For example, you can send a message to the private_swarm
-                // if some condition is met in the public_swarm
-                // private_tx.send(your_message);
+            event = public_swarm.select_next_some() => {
+                //println!("Received public next event: {:?}", event);
             },
             // Handle events from public_rx
-            Some(event_string) = public_rx.recv() => {
-                // Handle the event here.
+            Some(event) = _public_rx.recv() => {  // Fixed here: changed .rev() to .recv()
+                //println!("Received public event: {:?}", event);
             },
             // Handle events from private_rx
-            Some(event_string) = private_rx.recv() => {
-                if event_string.contains("add_private_block") {
-                    println!("Event with keyword received in private rx");
-                    // do something...
-                }
-                // Handle the event here.
+            Some(event) = _private_rx.recv() => {
+                println!("Received private event: {:?}", event);
             },
             else => {
                 // Do something if none of the above are ready.
@@ -70,3 +83,4 @@ async fn main()-> Result<(), Box<dyn std::error::Error>> {
         }
     }
 }
+

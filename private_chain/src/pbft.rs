@@ -81,7 +81,7 @@ pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<PrivateAppBehaviour>
         let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
         map.insert(root_hash.clone(),transactions);
         let serialised_dictionary = serde_json::to_vec(&map).unwrap();
-        info!("Broadcasting Transactions to nodes");
+        println!("Broadcast Transactions to nodes");
         //behaviour.txn.transactions.push(root_hash.clone());
         behaviour
             .floodsub

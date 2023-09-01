@@ -24,6 +24,7 @@ pub struct Block {
     pub nonce: u64,
 }
 
+
 const DIFFICULTY_PREFIX: &str = "00";
 
 pub fn hash_to_binary_representation(hash: &[u8]) -> String {
@@ -79,7 +80,8 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
             latest_block.id + 1,
             latest_block.public_hash.clone(),
             //TODO txn
-            ["TEST BLOCK CREATION WITH TXN".to_string()].to_vec()
+            ["TEST BLOCK CREATION WITH TXN".to_string()].to_vec(),
+            None
         );
         let json = serde_json::to_string(&block).expect("can jsonify request");
         behaviour.app.blocks.push(block);
@@ -104,21 +106,35 @@ pub fn handle_create_block_pbft(app:App,root_hash:String,txn:Vec<String>)-> Bloc
     let block = Block::new(
         latest_block.id +1,
         latest_block.public_hash.clone(),
-        txn
+        txn,
+        None
     );
     block
 }
+pub fn handle_create_block_private_chain(app:App,private_hash:String,txn:Option<Vec<String>>)-> Block{
+    let app = app.blocks.last().expect("There should be at least one block");
+    let transaction = txn.unwrap_or_else(|| vec!["txn".to_string()]);
+    let latest_block = app;
+    let block = Block::new(
+        latest_block.id +1,
+        latest_block.public_hash.clone(),
+        transaction,
+        None
+    );
+    block
+
+}
 
 impl Block {
-    pub fn new(id: u64, previous_hash: String, txn:Vec<String>) -> Self {
+    pub fn new(id: u64, previous_hash: String, txn:Vec<String>, private_hash: Option<String>) -> Self {
         let now = Utc::now();
         let txn_item = txn;
-        let private_hash=Some("PrivateHash".to_string());
+        let private_hash = private_hash.unwrap_or_else(|| "PrivateHash".to_string()); // Use default if None
         let (nonce, public_hash) = mine_block(id, now.timestamp(), &previous_hash);
         Self {
             id,
             public_hash,
-            private_hash,
+            private_hash: Some(private_hash),
             timestamp: now.timestamp(),
             previous_hash,
             transactions:Some(txn_item),

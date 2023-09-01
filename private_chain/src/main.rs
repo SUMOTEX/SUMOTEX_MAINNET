@@ -11,6 +11,9 @@ use libp2p::{
     Transport,
     PeerId,
 };
+use tokio::net::TcpStream;
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
+use std::io::Result;
 use libp2p::kad::record::store::MemoryStore;
 use libp2p::kad::{
     record::Key, AddProviderOk, GetProvidersOk, GetRecordOk, Kademlia, KademliaEvent, PeerRecord,
@@ -41,9 +44,14 @@ mod account_root;
 mod private_transactions;
 mod private_app;
 mod private_swarm;
-
+mod bridge;
+use bridge::accept_loop;
+use tokio::net::TcpListener;
 use publisher::Publisher;
 use crate::account_root::AccountRoot;
+
+
+
 
 use common::common::SMTXBridge;
 enum CustomEvent {
@@ -68,6 +76,7 @@ impl From<KademliaEvent> for MyBehaviourEvent {
 
 
 
+
 #[tokio::main]
 async fn main() {
 
@@ -82,16 +91,29 @@ async fn main() {
         "/ip4/0.0.0.0/tcp/8086",
         "/ip4/0.0.0.0/tcp/8087",
         "/ip4/0.0.0.0/tcp/8089",
-        "/ip4/0.0.0.0/tcp/8090",
         // ... other addresses
         ];
     
-
+    let mut whitelisted_listener = vec![
+        "127.0.0.1:8088",
+        "127.0.0.1:8089",
+        "127.0.0.1:8090",
+        "127.0.0.1:8090",
+        "127.0.0.1:8091",
+        "127.0.0.1:8090",
+        "127.0.0.1:8092",
+        "127.0.0.1:8093",
+        "127.0.0.1:8094",
+        "127.0.0.1:8095",
+        // ... other addresses
+        ];
     //PRIVATE
     let (response_private_sender, mut response_private_rcv) = mpsc::unbounded_channel();
     let (init_private_sender, mut init_private_rcv) = mpsc::unbounded_channel();
-
+    let (private_tx, mut _private_rx): (mpsc::UnboundedSender<String>, mpsc::UnboundedReceiver<String>) = mpsc::unbounded_channel();    //bridge sender
     let (publisher, mut publish_receiver, mut publish_bytes_receiver): (Publisher, mpsc::UnboundedReceiver<(String, String)>, mpsc::UnboundedReceiver<(String, Vec<u8>)>) = Publisher::new();
+
+
     Publisher::set(publisher);
     let auth_keys = Keypair::<X25519Spec>::new()
         .into_authentic(&private_p2p::KEYS)
@@ -119,7 +141,7 @@ async fn main() {
     let kademlia = Kademlia::new(private_p2p::PEER_ID.clone(), store);
 
 
-    let mut swarm_private_net = private_swarm::create_private_swarm().await;
+    let mut swarm_private_net = private_swarm::create_private_swarm(private_tx.clone()).await;
     let mut stdin = BufReader::new(stdin()).lines();
     //TODO: Make the publicnet validators dynamics connection randomised
     let public_chain_peer_id = "12D3KooWSHD7vtVa4zCiTNEjUt3o1zL4FMVZkPzjFUEVipkDQoPi".to_string();
@@ -157,7 +179,24 @@ async fn main() {
     let vec_u8_key=kad_key.to_vec(); // Assuming to_vec_u8() is a method that returns Option<Vec<u8>>
     swarm_private_net.behaviour_mut().kademlia.get_closest_peers(vec_u8_key);
     // Inform the swarm to send a message to the dialed peer.
-
+    loop {
+        if let Some(port) = whitelisted_listener.pop() {
+            match TcpListener::bind(&port).await {
+                Ok(listener) => {
+                    // Loop to listen
+                    let accept_loop_task = tokio::spawn(async {
+                        accept_loop(listener).await;
+                    });
+                    break;
+                }
+                Err(e) => {
+                    info!("Failed to bind to {}: {}", port, e);
+                }
+            }
+        } else {
+            info!("No more ports to pop!");
+        }
+    }
     loop {
         if let Some(port) = whitelisted_peers.pop() {
             let address_str = format!("{}",port);

@@ -24,8 +24,13 @@ mod public_block;
 mod pbft;
 mod public_app;
 mod public_txn;
+mod bridge;
+use bridge::accept_loop;
 use publisher::Publisher;
-
+use tokio::net::TcpStream;
+use tokio::net::TcpListener;
+use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
+use std::io::Result;
 enum CustomEvent {
     ReceivedRequest(PeerId, Vec<u8>),
     ReceivedResponse(PeerId, Vec<u8>),
@@ -34,7 +39,7 @@ enum CustomEvent {
 
 
 #[tokio::main]
-async fn main() {
+async fn main() ->tokio::io::Result<()>{
     pretty_env_logger::init();
     let mut whitelisted_peers = vec![
         "/ip4/0.0.0.0/tcp/8081",
@@ -45,10 +50,17 @@ async fn main() {
         "/ip4/0.0.0.0/tcp/8086",
         "/ip4/0.0.0.0/tcp/8087",
         "/ip4/0.0.0.0/tcp/8089",
-        "/ip4/0.0.0.0/tcp/8090",
-        "/ip4/0.0.0.0/tcp/8091",
-        "/ip4/0.0.0.0/tcp/8092",
+        // ... other addresses
+        ];
+    
 
+    let mut whitelisted_listener = vec![
+        "127.0.0.1:8088",
+        "127.0.0.1:8089",
+        "127.0.0.1:8090",
+        "127.0.0.1:8090",
+        "127.0.0.1:8091",
+        "127.0.0.1:8090",
         // ... other addresses
         ];
     //info!("Peer Id: {}", p2p::PEER_ID.clone());
@@ -59,30 +71,32 @@ async fn main() {
     let (publisher, mut publish_receiver, mut publish_bytes_receiver): (Publisher, mpsc::UnboundedReceiver<(String, String)>, mpsc::UnboundedReceiver<(String, Vec<u8>)>) = Publisher::new();
     Publisher::set(publisher);
     // Create and initialize your swarm here
-    info!("Peer Id: {}", "12D3KooWSHD7vtVa4zCiTNEjUt3o1zL4FMVZkPzjFUEVipkDQoPi");
-
-
     let mut swarm_public_net = public_swarm::create_public_swarm().await;
     let mut stdin = BufReader::new(stdin()).lines();
+    loop {
+        if let Some(port) = whitelisted_listener.pop() {
+            match TcpListener::bind(&port).await {
+                Ok(listener) => {
+                    // Loop to listen
+                    let accept_loop_task = tokio::spawn(async {
+                        accept_loop(listener).await;
+                    });
+                    break;
+                }
+                Err(e) => {
+                    info!("Failed to bind to {}: {}", port, e);
+                }
+            }
+        } else {
+            info!("No more ports to pop!");
+        }
+    }
     let the_address = Multiaddr::from_str("/ip4/0.0.0.0/tcp/8083").expect("Failed to parse multiaddr");
-    // match Swarm::listen_on(&mut swarm_public_net, the_address.clone()) {
-    //     Ok(_) => {
-    //         info!("Listening on {:?}", "/ip4/0.0.0.0/tcp/8082");
-    //         spawn(async move {
-    //             sleep(Duration::from_secs(1)).await;
-    //             info!("sending init event");
-    //             init_sender.send(true).expect("can send init event");
-    //         });
-    //     },
-    //     Err(e) => {
-    //         info!("Failed to listen on {:?}. Reason: {:?}", the_address, e);
-    //     }
-    // }
     loop {
         if let Some(port) = whitelisted_peers.pop() {
             let address_str = format!("{}",port);
             let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");        
-            info!("{:?}", the_address.clone());
+            //Loop  to listen
             match Swarm::listen_on(&mut swarm_public_net, the_address.clone()) {
                 Ok(_) => {
                     info!("Listening on {:?}", the_address.clone());
@@ -109,8 +123,25 @@ async fn main() {
         match recv_result {
             Some(_) => {
                 println!("Initialization event received.");
+                let peers = p2p::get_list_peers(&swarm_public_net);
+                swarm_public_net.behaviour_mut().app.genesis();
+                info!("Connected nodes: {}", peers.len());
+                if !peers.is_empty() {
+                    let req = p2p::LocalChainRequest {
+                        from_peer_id: peers
+                            .iter()
+                            .last()
+                            .expect("at least one peer")
+                            .to_string(),
+                    };
+
+                    let json = serde_json::to_string(&req).expect("can jsonify request");
+                    swarm_public_net
+                        .behaviour_mut()
+                        .floodsub
+                        .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
+                }
                 init_received = true;  // Set flag to true, so this block won't execute again
-                p2p::EventType::Init;
                 // Now you can return Some(p2p::EventType::Init) or do something else
             },
             None => {

@@ -69,6 +69,8 @@ pub struct PrivateAppBehaviour {
     #[behaviour(ignore)]
     pub init_sender: mpsc::UnboundedSender<bool>,
     #[behaviour(ignore)]
+    pub private_tx: mpsc::UnboundedSender<String>,
+    #[behaviour(ignore)]
     pub app: PrivateApp,
     #[behaviour(ignore)]
     pub txn: Txn,
@@ -89,6 +91,7 @@ impl PrivateAppBehaviour {
         kademlia: Kademlia<MemoryStore>,
         response_sender: mpsc::UnboundedSender<PrivateChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
+        private_tx: mpsc::UnboundedSender<String>,
         
     ) -> Self {
         let mut behaviour = Self {
@@ -103,6 +106,7 @@ impl PrivateAppBehaviour {
                 .expect("can create mdns"),
             response_sender,
             init_sender,
+            private_tx
         };
         behaviour.floodsub.subscribe(CHAIN_TOPIC.clone());
         behaviour.floodsub.subscribe(private_block::PRIVATE_BLOCK_TOPIC.clone());
@@ -248,9 +252,9 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                 println!("add_private_block");
                 match serde_json::from_slice::<PrivateBlock>(&msg.data) {
                     Ok(block) => {
-                       
                         info!("Received new block from {}", msg.source.to_string());
                         self.app.try_add_block(block);
+     
                     },
                     Err(err) => {
                         error!(
@@ -264,7 +268,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                 let received_serialized_data =msg.data;
                 let deserialized_data: HashMap<String, HashMap<String, String>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
-                println!("Private Node: {:?}",the_pbft_hash);
+                println!("Preparing PBFT");
                 info!("New private transaction from {:?}", deserialized_data);
                 for (key, inner_map) in deserialized_data.iter() {
                     //TODO ADD the hash to database.
@@ -275,7 +279,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                             publisher.publish("private_pbft_prepared".to_string(), the_pbft_hash.to_string());
                             self.pbft.prepare("PBFT Valid and prepare".to_string());
                         }
-                    }
+                    }                                                                                                               
                 }
             }
             else if msg.topics[0]==Topic::new("private_pbft_prepared"){
@@ -290,6 +294,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
                 self.pbft.commit("COMMIT READY".to_string());
+                println!("COMMIT_PBFT");
                 if let Some(publisher) = Publisher::get(){
                     let (root,txn) = self.pbft.get_txn(json_string);
                     let created_block=handle_create_block_pbft(self.app.clone(),root,txn);
@@ -297,6 +302,15 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
                     self.app.blocks.push(created_block);
                     println!("Private Blocks {:?}",self.app.blocks);
+       
+                    // In the private swarm event loop or somewhere in your `create_private_swarm` function
+                    // assuming private_tx is passed as an argument or captured from the environment
+                    println!("Publish Block");
+                    self.private_tx.send("add_private_block".to_string()).unwrap();
+                    // match self.private_tx.send("add_private_block".to_string()) {
+                    //     Ok(_) => println!("Successfully sent message"),
+                    //     Err(e) => eprintln!("Failed to send message: {}", e),
+                    // }
                     publisher.publish_block("private_blocks".to_string(),json.as_bytes().to_vec())
                 }
             }
