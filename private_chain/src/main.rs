@@ -261,7 +261,6 @@ async fn main() {
                 match event {
                     private_p2p::EventType::Init => {
                         let peers = private_p2p::get_list_peers(&swarm_private_net);
-                        //swarm_private_net.behaviour_mut().app.genesis();
                         info!("Connected nodes: {}", peers.len());
                         //private_p2p::handle_start_chain(&mut swarm_private_net);
                         if !peers.is_empty() {

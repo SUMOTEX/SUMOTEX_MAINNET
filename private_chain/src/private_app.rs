@@ -4,36 +4,25 @@ use crate::private_block;
 
 #[derive(Debug,Clone)]
 pub struct PrivateApp {
+    pub root_account:String,
     pub blocks: Vec<private_block::PrivateBlock>,
 }
 
 
 impl PrivateApp {
-    pub fn new() -> Self {
-        Self { blocks: vec![]}
+    pub fn new(root_account:String) -> Self {
+        Self {
+            root_account,
+            blocks: vec![],
+        }
     }
-    
-    pub fn genesis(&mut self,acc:String)->private_block::PrivateBlock {
+    pub fn try_add_genesis(&mut self,root_account:String) {
         let genesis_block = private_block::PrivateBlock {
             id: 0,
             timestamp: Utc::now().timestamp(),
             previous_hash: String::from("00Genesis"),
             private_hash:(String::from("00002816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c99")),
-            root_account: Some(acc),
-            transactions:(vec!["".to_string()].into()),
-            nonce: 1,
-            public_hash: "0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c99".to_string(),
-        };
-        self.blocks.push(genesis_block.clone());
-        return genesis_block.clone();
-    }
-    pub fn try_add_genesis(&mut self,acc:String) {
-        let genesis_block = private_block::PrivateBlock {
-            id: 0,
-            timestamp: Utc::now().timestamp(),
-            previous_hash: String::from("00Genesis"),
-            private_hash:(String::from("00002816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c99")),
-            root_account:Some(acc),
+            root_account:Some(root_account),
             transactions:(vec!["".to_string()].into()),
             nonce: 1,
             public_hash: "0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c99".to_string(),

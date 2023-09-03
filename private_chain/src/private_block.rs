@@ -82,7 +82,7 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<PrivateAppBehaviour>) {
             latest_block.id + 1,
             hash.to_string(),
             //TODO txn
-            ["TEST BLOCK CREATION WITH TXN".to_string()].to_vec()
+            ["".to_string()].to_vec()
         );
         let json = serde_json::to_string(&block).expect("can jsonify request");
         //TODO: PRIVATE NET
@@ -116,7 +116,7 @@ impl PrivateBlock {
             id,
             public_hash:"".to_string(),
             private_hash:(private_hash),
-            root_account:Some(("").to_string()),
+            root_account:Some("".to_string()),
             timestamp: now.timestamp(),
             previous_hash,
             transactions:txn_item,

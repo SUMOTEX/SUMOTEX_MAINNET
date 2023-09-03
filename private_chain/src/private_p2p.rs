@@ -238,7 +238,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                 match serde_json::from_slice::<PrivateBlock>(&msg.data) {
                     Ok(block) => {
                         info!("Received new GENESIS block from {}", msg.source.to_string());
-                        let the_acc = self.account_r.get_pub_address();
+                        let the_acc = block.root_account.unwrap();
                         self.app.try_add_genesis(the_acc)
                     },
                     Err(err) => {
@@ -256,7 +256,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for PrivateAppBehaviour {
                     Ok(block) => {
                         info!("Received new block from {}", msg.source.to_string());
                         self.app.try_add_block(block.clone());
-     
                     },
                     Err(err) => {
                         error!(
@@ -427,8 +426,7 @@ pub async fn handle_start_chain(swarm: &mut Swarm<PrivateAppBehaviour>){
                 println!("Setting up Genesis Block for Chain: {}",chain_name);
                 println!("Setup completed...start using today!");
                 let account_add = swarm.behaviour_mut().account_r.get_pub_address();
-                swarm.behaviour_mut().app.genesis(account_add);
-                
+                swarm.behaviour_mut().app.try_add_genesis(account_add);
                 let the_genesis_block =swarm.behaviour_mut().app.blocks.last().expect("there is at least one block").clone();
 
                 match serde_json::to_vec::<PrivateBlock>(&the_genesis_block) {

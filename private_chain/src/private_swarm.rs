@@ -41,11 +41,12 @@ pub async fn create_private_swarm(private_tx: mpsc::UnboundedSender<String>) -> 
         .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
         .boxed();
+    let the_account = AccountRoot::new();
     let private_behaviour = PrivateAppBehaviour::new(
-            PrivateApp::new(),
+            PrivateApp::new(the_account.get_pub_address()),
             Txn::new(),
             PBFTNode::new(PEER_ID.clone().to_string()),
-            AccountRoot::new(),
+            the_account,
             kademlia,
             response_sender, 
             init_sender.clone(),

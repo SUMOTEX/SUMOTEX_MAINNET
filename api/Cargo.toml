@@ -6,5 +6,10 @@ edition = "2021"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
-actix-web = "4.0.0-beta.8"  # Check for the latest version
-actix-rt = "2.2"  # Required for running the Actix system
+public_chain = { path = "../public_chain" }
+private_chain = { path = "../private_chain" }
+actix-web = "3"
+actix-rt = "1"
+serde = { version = "1", features = ["derive"] }
+actix-files = "0.6" 
+paperclip = { version = "0.5", features = ["actix"] }

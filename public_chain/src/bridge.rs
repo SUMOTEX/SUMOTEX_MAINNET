@@ -10,7 +10,7 @@ pub struct Message {
     pub root_account:Option<String>
 }
 pub async fn tcp_client(message:Message) -> Result<(),io::Error> {
-    let mut stream = TcpStream::connect("127.0.0.1:8090").await?;
+    let stream = TcpStream::connect("127.0.0.1:8090").await?;
     let (mut reader, mut writer) = io::split(stream);
 
     // Serialize the Message struct to a JSON string

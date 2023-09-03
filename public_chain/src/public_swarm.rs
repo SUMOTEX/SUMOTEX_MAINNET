@@ -10,6 +10,7 @@ use tokio::{
      spawn,
 };
 use libp2p::Transport;
+
 use log::{ info};
 use crate::p2p::PEER_ID;
 use crate::p2p::AppBehaviour;
@@ -20,6 +21,7 @@ use crate::pbft::PBFTNode;
 use libp2p::PeerId;
 use libp2p::identity::{Keypair as IdentityKeypair};
 type MySwarm = Swarm<AppBehaviour>;
+
 
 
 pub async fn  create_public_swarm() -> MySwarm {
@@ -45,6 +47,8 @@ pub async fn  create_public_swarm() -> MySwarm {
             spawn(fut);
         }))
         .build();
+
     swarm
+
 }
 

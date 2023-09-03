@@ -1,19 +1,25 @@
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{web,App, HttpServer,Result, Error};
+use serde::{Serialize, Deserialize};
+use public_chain::public_app::App as PubApp;
 
-async fn hello() -> impl Responder {
-    HttpResponse::Ok().body("Hello, world!")
+#[derive(Deserialize, Serialize)]
+struct ResponseMessage {
+    message: String,
 }
 
-async fn greet(name: web::Path<String>) -> impl Responder {
-    HttpResponse::Ok().body(format!("Hello, {}!", name))
+async fn hello() -> Result<web::Json<ResponseMessage>, Error> {
+    println!("{:?}",PubApp::get_blocks());
+    Ok(web::Json(ResponseMessage {
+        message: "Hello".to_string(),
+    }))
 }
+
 
 #[actix_web::main]
 async fn main() -> std::io::Result<()> {
     HttpServer::new(|| {
         App::new()
             .route("/", web::get().to(hello))
-            .route("/{name}", web::get().to(greet))
     })
     .bind("127.0.0.1:8000")?
     .run()
