@@ -1,0 +1,1 @@
+/Users/leowyennhan/Desktop/sumotex_mainnet/chain/common/target/debug/libcommon.rlib: /Users/leowyennhan/Desktop/sumotex_mainnet/chain/common/src/common.rs /Users/leowyennhan/Desktop/sumotex_mainnet/chain/common/src/lib.rs
