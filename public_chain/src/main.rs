@@ -3,7 +3,6 @@ use libp2p::{
 };
 use libp2p::PeerId;
 use log::{error, info};
-use std::time::Duration;
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
     select, spawn,
@@ -13,6 +12,7 @@ use tokio::{
 };
 use libp2p::Multiaddr;
 use std::str::FromStr;
+use tokio::time::{interval, Duration};
 use libp2p::futures::StreamExt;
 use lazy_static::lazy_static;
 use std::sync::Mutex;
@@ -27,11 +27,15 @@ mod public_txn;
 mod bridge;
 mod api;
 use bridge::accept_loop;
+use crate::p2p::PEER_ID;
+use crate::p2p::KEYS;
+use crate::public_app::App;
+use crate::public_txn::Txn;
+use crate::pbft::PBFTNode;
 use publisher::Publisher;
 use tokio::net::TcpListener;
 use std::io::Result;
-use actix_rt::main;
-use std::sync::Arc;  // Import the Arc type for reference counting
+use std::sync::{Arc};
 use crate::p2p::AppBehaviour;
 type MySwarm = Swarm<AppBehaviour>;
 
@@ -41,12 +45,9 @@ enum CustomEvent {
     // ... potentially other custom events specific to your application
 }
 
-lazy_static! {
-    pub static ref mutex_public_swarm_net: Mutex<Option<MySwarm>> = Mutex::new(None);
-}
-
 #[tokio::main]
-async fn tokio_main(){
+async fn main() {
+
     pretty_env_logger::init();
     let mut whitelisted_peers = vec![
         "/ip4/0.0.0.0/tcp/8081",
@@ -65,27 +66,21 @@ async fn tokio_main(){
         "127.0.0.1:8088",
         "127.0.0.1:8089",
         "127.0.0.1:8090",
-        "127.0.0.1:8090",
         "127.0.0.1:8091",
-        "127.0.0.1:8090",
-        // ... other addresses
+        "127.0.0.1:8092",
+        "127.0.0.1:8093",
+        "127.0.0.1:8094",
+         "127.0.0.1:8090",
         ];
     //info!("Peer Id: {}", p2p::PEER_ID.clone());
     let (response_sender, mut response_rcv) = mpsc::unbounded_channel();
     let (init_sender, mut init_rcv) = mpsc::unbounded_channel();
     let (publisher, mut publish_receiver, mut publish_bytes_receiver): (Publisher, mpsc::UnboundedReceiver<(String, String)>, mpsc::UnboundedReceiver<(String, Vec<u8>)>) = Publisher::new();
     Publisher::set(publisher);
+    let app = App::new();
+    let mut swarm_public_net = public_swarm::create_public_swarm(app.clone()).await;
 
-    {
-        let my_swarm = public_swarm::create_public_swarm().await; // Replace with actual implementation.
-        let mut lock = mutex_public_swarm_net.lock().unwrap();
-        *lock = Some(my_swarm);
-    } // lock goes out of scope here, unlocking the mutex
-    
 
-    // Create and initialize your swarm here
-    let mut swarm_lock = mutex_public_swarm_net.lock().unwrap();
-    let mut swarm_public_net = swarm_lock.as_mut().unwrap();
 
     let mut stdin = BufReader::new(stdin()).lines();
     loop {
@@ -104,7 +99,7 @@ async fn tokio_main(){
                 }
             }
         } else {
-            info!("No more ports to pop!");
+            info!("No more TCP Ports!");
         }
     }
     let the_address = Multiaddr::from_str("/ip4/0.0.0.0/tcp/8083").expect("Failed to parse multiaddr");
@@ -129,7 +124,7 @@ async fn tokio_main(){
                 }
             
         } else {
-            info!("No more ports to pop!");
+            info!("No more Whitelisted Peers!");
         }
     }
     let mut init_received = false;  // flag to track if Init event is processed
@@ -174,6 +169,12 @@ async fn tokio_main(){
                     Some(p2p::EventType::LocalChainResponse(response.expect("response exists")))
                 },
                 event = swarm_public_net.select_next_some() => {
+                    println!("Event called");
+                    let api_app =swarm_public_net.behaviour_mut().app.clone();
+                    api::add_api_blocks(api_app.clone());
+                    let api_task = tokio::task::spawn_blocking(move || {
+                        api::pub_api(); // Assuming this is a blocking function
+                    });
                     None
                 }
                 publish = publish_receiver.recv() => {
@@ -244,21 +245,7 @@ async fn tokio_main(){
                     },
                 }
             }
+
         }
 
-}
-
-fn main(){
-    let api_task = tokio::spawn(api::pub_api());
-    let tokio_task = tokio::spawn(async {
-        tokio_main().await;
-    });
-   // Create a new runtime and run the tasks in parallel
-   tokio::runtime::Builder::new_multi_thread()
-   .worker_threads(2)
-   .build()
-   .unwrap()
-   .block_on(async {
-       let _ = tokio::join!(api_task, tokio_task);
-   });
 }

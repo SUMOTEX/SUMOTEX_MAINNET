@@ -4,7 +4,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 
-
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Txn{
     pub transactions: Vec<String>,
     pub hashed_txn:Vec<String>,

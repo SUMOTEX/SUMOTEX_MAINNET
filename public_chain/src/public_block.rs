@@ -111,7 +111,6 @@ pub fn handle_create_block_pbft(app:App,root_hash:String,txn:Vec<String>)-> Bloc
         None,
         None
     );
-    
     block
 }
 pub fn handle_create_block_private_chain(app:App,private_hash:Option<String>,txn:Option<Vec<String>>,root:Option<String>)-> Block{

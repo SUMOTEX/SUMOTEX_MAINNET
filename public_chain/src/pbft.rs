@@ -22,6 +22,8 @@ enum Message {
     Prepare(u64),       // View number, Sequence number
     Commit(u64),        // View number, Sequence number
 }
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PBFTNode {
     id: String,
     verification_hash:String,
