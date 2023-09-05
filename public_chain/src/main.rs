@@ -169,7 +169,6 @@ async fn main() {
                     Some(p2p::EventType::LocalChainResponse(response.expect("response exists")))
                 },
                 event = swarm_public_net.select_next_some() => {
-                    println!("Event called");
                     let api_app =swarm_public_net.behaviour_mut().app.clone();
                     api::add_api_blocks(api_app.clone());
                     let api_task = tokio::task::spawn_blocking(move || {
