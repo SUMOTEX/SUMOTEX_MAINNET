@@ -44,7 +44,12 @@ enum CustomEvent {
     ReceivedResponse(PeerId, Vec<u8>),
     // ... potentially other custom events specific to your application
 }
-
+pub async fn run_epoch(swarm: &Swarm<AppBehaviour>){
+    loop {
+        pbft::create_transactions_epoch(swarm);
+        sleep(Duration::from_secs(60)).await; // Replace 5 with the number of seconds you want to wait
+    }
+}
 #[tokio::main]
 async fn main() {
 
@@ -79,9 +84,6 @@ async fn main() {
     Publisher::set(publisher);
     let app = App::new();
     let mut swarm_public_net = public_swarm::create_public_swarm(app.clone()).await;
-
-
-
     let mut stdin = BufReader::new(stdin()).lines();
     loop {
         if let Some(port) = whitelisted_listener.pop() {
@@ -91,6 +93,9 @@ async fn main() {
                     let accept_loop_task = tokio::spawn(async {
                         accept_loop(listener).await;
                     });
+                    // let epoch_runner = tokio::task::spawn_local(async move {
+                    //     run_epoch(&swarm_public_net).await;
+                    // });
                     println!("TCP Port: {:?}",port);
                     break;
                 }
@@ -174,6 +179,7 @@ async fn main() {
                     let api_task = tokio::task::spawn_blocking(move || {
                         api::pub_api(); // Assuming this is a blocking function
                     });
+  
                     None
                 }
                 publish = publish_receiver.recv() => {
