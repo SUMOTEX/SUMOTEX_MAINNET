@@ -44,7 +44,7 @@ enum CustomEvent {
     ReceivedResponse(PeerId, Vec<u8>),
     // ... potentially other custom events specific to your application
 }
-pub async fn run_epoch(swarm: &Swarm<AppBehaviour>){
+pub async fn run_epoch(swarm: &mut Swarm<AppBehaviour>){
     loop {
         pbft::create_transactions_epoch(swarm);
         sleep(Duration::from_secs(60)).await; // Replace 5 with the number of seconds you want to wait
