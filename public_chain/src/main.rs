@@ -44,9 +44,10 @@ enum CustomEvent {
     ReceivedResponse(PeerId, Vec<u8>),
     // ... potentially other custom events specific to your application
 }
-pub async fn run_epoch(swarm: &mut Swarm<AppBehaviour>){
+pub async fn run_epoch(){
     loop {
-        pbft::create_transactions_epoch(swarm);
+        println!{"Start Epoch"};
+        pbft::create_transactions_epoch();
         sleep(Duration::from_secs(60)).await; // Replace 5 with the number of seconds you want to wait
     }
 }
@@ -65,7 +66,6 @@ async fn main() {
         "/ip4/0.0.0.0/tcp/8089",
         // ... other addresses
         ];
-    
 
     let mut whitelisted_listener = vec![
         "127.0.0.1:8088",
@@ -93,9 +93,9 @@ async fn main() {
                     let accept_loop_task = tokio::spawn(async {
                         accept_loop(listener).await;
                     });
-                    // let epoch_runner = tokio::task::spawn_local(async move {
-                    //     run_epoch(&swarm_public_net).await;
-                    // });
+                    let epoch_runner = tokio::spawn(async{
+                        run_epoch().await;
+                    });
                     println!("TCP Port: {:?}",port);
                     break;
                 }
@@ -179,7 +179,6 @@ async fn main() {
                     let api_task = tokio::task::spawn_blocking(move || {
                         api::pub_api(); // Assuming this is a blocking function
                     });
-  
                     None
                 }
                 publish = publish_receiver.recv() => {
@@ -195,6 +194,7 @@ async fn main() {
             if let Some(event) = public_evt {
                 match event {
                     p2p::EventType::Init => {
+
                         let peers = p2p::get_list_peers(&swarm_public_net);
                         swarm_public_net.behaviour_mut().app.genesis();
                         info!("Connected nodes: {}", peers.len());
@@ -206,7 +206,6 @@ async fn main() {
                                     .expect("at least one peer")
                                     .to_string(),
                             };
-    
                             let json = serde_json::to_string(&req).expect("can jsonify request");
                             swarm_public_net
                                 .behaviour_mut()

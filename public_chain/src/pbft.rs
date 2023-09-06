@@ -4,9 +4,11 @@ use libp2p::{
     floodsub::{Topic},
     swarm::{Swarm},
 };
+use tokio::time::{interval, Duration,sleep};
 use std::collections::HashMap;
 use rand::Rng;
 use crate::verkle_tree::VerkleTree;
+use crate::publisher::Publisher;
 use once_cell::sync::Lazy;
 use rand::thread_rng;
 use rand::distributions::Alphanumeric;
@@ -33,13 +35,17 @@ pub struct PBFTNode {
     root_hash:String,
     txn: Vec<String>,
 }
-
+pub async fn run_epoch(){
+    loop {
+        create_transactions_epoch();
+        sleep(Duration::from_secs(60)).await; // Replace 5 with the number of seconds you want to wait
+    }
+}
 pub fn get_total_pbft_view(swarm: &Swarm<AppBehaviour>)->u64 {
     let view_value = swarm.behaviour().pbft.view;
     view_value
 }
-pub fn create_transactions_epoch(swarm:  &mut Swarm<AppBehaviour>) {
-    let behaviour =swarm.behaviour_mut();
+pub fn create_transactions_epoch() {
     let mut i: i64 =0;
     let mut verkle_tree = VerkleTree::new();
     let mut transactions: HashMap<String, String>= HashMap::new();
@@ -83,9 +89,12 @@ pub fn create_transactions_epoch(swarm:  &mut Swarm<AppBehaviour>) {
     let serialised_dictionary = serde_json::to_vec(&map).unwrap();
     println!("Broadcasting Transactions to nodes");
     //behaviour.txn.transactions.push(root_hash.clone());
-    behaviour
-        .floodsub
-        .publish(PBFT_PREPREPARED_TOPIC.clone(), serialised_dictionary);
+    if let Some(publisher) = Publisher::get(){
+        publisher.publish_block("pbft_pre_prepared".to_string(),serialised_dictionary)
+    }
+    // behaviour
+    //     .floodsub
+    //     .publish(PBFT_PREPREPARED_TOPIC.clone(), serialised_dictionary);
 }
 pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
     if let Some(data) = cmd.strip_prefix("create txn") {

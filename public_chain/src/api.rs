@@ -1,11 +1,11 @@
-use actix_web::{web, App, HttpResponse, HttpServer, Responder};
+use actix_web::{http, HttpRequest, HttpResponse,Responder, Result, Error, web, App, HttpServer};
+use std::task::{Context, Poll};
 use serde::Serialize;
 use crate::p2p::AppBehaviour;
 use std::sync::{Arc, Mutex};
 use libp2p::swarm::Swarm;
 use crate::public_app::App as PubApp;
 use crate::public_block::Block;
-use actix_cors::Cors;
 type MySwarm = Swarm<AppBehaviour>;
 
 #[derive(Debug,Clone)]
@@ -21,7 +21,6 @@ pub fn add_api_blocks(app: PubApp) -> impl Responder {
     let new_blocks = app.get_blocks();
     let mut app_blocks = APP_BLOCKS.lock().unwrap();
     app_blocks.blocks = new_blocks.clone();
-
     HttpResponse::Ok().json(new_blocks)
 }
 
@@ -35,15 +34,7 @@ async fn obtain_blocks() -> impl Responder {
 pub async fn pub_api() -> std::io::Result<()> {
     // println!("{:?}",PubApp.blocks);
     HttpServer::new(|| {
-        let cors = Cors::default()
-        .allowed_origin("http://localhost:3000/")
-        .allowed_methods(vec!["GET", "POST"])
-        .allowed_headers(vec![actix_web::http::header::AUTHORIZATION, actix_web::http::header::ACCEPT])
-        .allowed_header(actix_web::http::header::CONTENT_TYPE)
-        .max_age(3600);
-        
         App::new()
-            .wrap(cors)
             .route("/blocks", web::get().to(obtain_blocks))
     })
     .bind("0.0.0.0:8000")?
