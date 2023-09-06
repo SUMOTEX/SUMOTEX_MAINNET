@@ -5,6 +5,7 @@ use std::sync::{Arc, Mutex};
 use libp2p::swarm::Swarm;
 use crate::public_app::App as PubApp;
 use crate::public_block::Block;
+use actix_cors::Cors;
 type MySwarm = Swarm<AppBehaviour>;
 
 #[derive(Debug,Clone)]
@@ -33,8 +34,16 @@ async fn obtain_blocks() -> impl Responder {
 #[actix_web::main]
 pub async fn pub_api() -> std::io::Result<()> {
     // println!("{:?}",PubApp.blocks);
-    HttpServer::new(move || {
+    HttpServer::new(|| {
+        let cors = Cors::default()
+        .allowed_origin("*")
+        .allowed_methods(vec!["GET", "POST"])
+        .allowed_headers(vec![actix_web::http::header::AUTHORIZATION, actix_web::http::header::ACCEPT])
+        .allowed_header(actix_web::http::header::CONTENT_TYPE)
+        .max_age(3600);
+        
         App::new()
+            .wrap(cors)
             .route("/blocks", web::get().to(obtain_blocks))
     })
     .bind("0.0.0.0:8000")?
