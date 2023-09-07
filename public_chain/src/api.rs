@@ -1,8 +1,8 @@
-use actix_web::{http, HttpRequest, HttpResponse,Responder, Result, Error, web, App, HttpServer};
-use std::task::{Context, Poll};
+use actix_web::{web, App, HttpResponse, HttpServer, Responder};
 use serde::Serialize;
 use crate::p2p::AppBehaviour;
 use std::sync::{Arc, Mutex};
+use serde_json::json;
 use libp2p::swarm::Swarm;
 use crate::public_app::App as PubApp;
 use crate::public_block::Block;
@@ -21,7 +21,10 @@ pub fn add_api_blocks(app: PubApp) -> impl Responder {
     let new_blocks = app.get_blocks();
     let mut app_blocks = APP_BLOCKS.lock().unwrap();
     app_blocks.blocks = new_blocks.clone();
-    HttpResponse::Ok().json(new_blocks)
+    let json_response = json!(new_blocks);
+    HttpResponse::Ok()
+    .header("Access-Control-Allow-Origin", "*")
+    .body(json_response)
 }
 
 async fn obtain_blocks() -> impl Responder {
@@ -34,6 +37,7 @@ async fn obtain_blocks() -> impl Responder {
 pub async fn pub_api() -> std::io::Result<()> {
     // println!("{:?}",PubApp.blocks);
     HttpServer::new(|| {
+        
         App::new()
             .route("/blocks", web::get().to(obtain_blocks))
     })
