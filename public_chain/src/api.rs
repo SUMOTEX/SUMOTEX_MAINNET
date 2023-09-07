@@ -24,6 +24,8 @@ pub fn add_api_blocks(app: PubApp) -> impl Responder {
     let json_response = json!(new_blocks);
     HttpResponse::Ok()
     .header("Access-Control-Allow-Origin", "*")
+    .header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+    .header("Access-Control-Allow-Headers", "Authorization, Content-Type")
     .body(json_response)
 }
 
