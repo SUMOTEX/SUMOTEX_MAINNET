@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "cargo run",
-    "up": "sudo pm2 start RUST_LOG=info cargo run --watch",
+    "up": "sudo pm2 start target/debug/public_chain --watch",
     "down": "sudo pm2 stop 0 --watch && pm2 delete 0"
     },
   "author": "",
