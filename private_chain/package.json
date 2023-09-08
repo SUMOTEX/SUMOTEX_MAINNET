@@ -1,0 +1,13 @@
+{
+  "name": "private_chain",
+  "version": "1.0.0",
+  "description": "",
+  "main": "index.js",
+  "scripts": {
+    "start": "cargo run",
+    "up": "pm2 start target/debug/<your-app> --watch",
+    "down": "pm2 stop 0 --watch && pm2 delete 0"
+    },
+  "author": "",
+  "license": "ISC"
+}
