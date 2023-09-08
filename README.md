@@ -17,3 +17,17 @@ Update to this if you are getting error for libp2p-noise on v0.39
 
 
  > sudo apt install librocksdb-dev libsnappy-dev
+
+ To run this application as a systemd service:
+
+1. Copy `my_rust_app.service` to `/etc/systemd/system/`:
+   `sudo cp systemd/public_app.service /etc/systemd/system/`
+
+2. Reload systemd to recognize the new service:
+   `sudo systemctl daemon-reload`
+
+3. Enable the service to start on boot:
+   `sudo systemctl enable my_rust_app`
+
+4. Start the service:
+   `sudo systemctl start my_rust_app`
