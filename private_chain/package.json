@@ -5,8 +5,8 @@
   "main": "index.js",
   "scripts": {
     "start": "cargo run",
-    "up": "pm2 start RUST_LOG=info cargo run --watch",
-    "down": "pm2 stop 0 --watch && pm2 delete 0"
+    "up": "sudo pm2 start RUST_LOG=info cargo run --watch",
+    "down": "sudo pm2 stop 0 --watch && pm2 delete 0"
     },
   "author": "",
   "license": "ISC"
