@@ -5,7 +5,7 @@
   "main": "index.js",
   "scripts": {
     "start": "cargo run",
-    "up": "pm2 start target/debug/<your-app> --watch",
+    "up": "pm2 start RUST_LOG=info cargo run --watch",
     "down": "pm2 stop 0 --watch && pm2 delete 0"
     },
   "author": "",
