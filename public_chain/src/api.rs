@@ -14,7 +14,9 @@ pub struct AppBlocks {
 }
 // Global shared state
 lazy_static::lazy_static! {
-    static ref APP_BLOCKS: Arc<Mutex<AppBlocks>> = Arc::new(Mutex::new(AppBlocks { blocks: vec![] }));
+    static ref APP_BLOCKS: Arc<Mutex<AppBlocks>> = Arc::new(Mutex::new(
+        AppBlocks { 
+            blocks: vec![] }));
 }
 
 pub fn add_api_blocks(app: PubApp) -> impl Responder {

@@ -16,6 +16,9 @@ impl PrivateApp {
             blocks: vec![],
         }
     }
+    pub fn get_blocks(&self)->Vec<private_block::PrivateBlock>{
+        self.blocks.clone()
+    }
     pub fn try_add_genesis(&mut self,root_account:String) {
         let genesis_block = private_block::PrivateBlock {
             id: 0,

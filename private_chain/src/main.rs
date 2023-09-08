@@ -22,7 +22,7 @@ use libp2p::kad::{
 use crate::verkle_tree::VerkleTree;
 use log::{error, info};
 use serde::{Deserialize, Serialize};
-use sha2::{Digest, Sha256};
+use sha2::{Sha256};
 use std::time::Duration;
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
@@ -44,6 +44,7 @@ mod private_transactions;
 mod private_app;
 mod private_swarm;
 mod bridge;
+mod api;
 use bridge::accept_loop;
 use tokio::net::TcpListener;
 use publisher::Publisher;
@@ -165,18 +166,18 @@ async fn main() {
         expires: None,
     };
     // Create a Multiaddress for the bootstrap node. Replace with the actual address.
-    let bootstrap_addr: Multiaddr = "/ip4/104.131.131.82/tcp/4001/p2p/QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z".parse().unwrap();
-    let bootstrap_peer_id = "QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z".parse().unwrap();
+    //let bootstrap_addr: Multiaddr = "/ip4/104.131.131.82/tcp/4001/p2p/QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z".parse().unwrap();
+    //let bootstrap_peer_id = "QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z".parse().unwrap();
     // Bootstrap by connecting to the known peer.
-    Swarm::dial_addr(&mut swarm_private_net, bootstrap_addr.clone()).expect("Failed to dial bootstrap node");
-    swarm_private_net.behaviour_mut().kademlia.add_address(&bootstrap_peer_id, bootstrap_addr.clone());
+    //Swarm::dial_addr(&mut swarm_private_net, bootstrap_addr.clone()).expect("Failed to dial bootstrap node");
+    //swarm_private_net.behaviour_mut().kademlia.add_address(&bootstrap_peer_id, bootstrap_addr.clone());
 
-    swarm_private_net.behaviour_mut().kademlia.put_record(record, Quorum::One);
+    //swarm_private_net.behaviour_mut().kademlia.put_record(record, Quorum::One);
 
     // Get a record from DHT
-    let the_record = swarm_private_net.behaviour_mut().kademlia.get_record(&kad_key, Quorum::One);
-    let vec_u8_key=kad_key.to_vec(); // Assuming to_vec_u8() is a method that returns Option<Vec<u8>>
-    swarm_private_net.behaviour_mut().kademlia.get_closest_peers(vec_u8_key);
+    //let the_record = swarm_private_net.behaviour_mut().kademlia.get_record(&kad_key, Quorum::One);
+    //let vec_u8_key=kad_key.to_vec(); // Assuming to_vec_u8() is a method that returns Option<Vec<u8>>
+    //swarm_private_net.behaviour_mut().kademlia.get_closest_peers(vec_u8_key);
     // Inform the swarm to send a message to the dialed peer.
     loop {
         if let Some(port) = whitelisted_listener.pop() {
@@ -249,6 +250,11 @@ async fn main() {
                 //     Some(private_p2p::EventType::Init)  
                 // }
                 event = swarm_private_net.select_next_some() => {
+                    let api_app =swarm_private_net.behaviour_mut().app.clone();
+                    api::add_api_blocks(api_app.clone());
+                    let api_task = tokio::task::spawn_blocking(move || {
+                        api::private_api(); // Assuming this is a blocking function
+                    });
                     None
                 },
                 publish = publish_receiver.recv() => {

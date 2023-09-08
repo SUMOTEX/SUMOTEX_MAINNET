@@ -88,7 +88,7 @@ pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<PrivateAppBehaviour>
     }
 }
 
-pub fn create_private_transactions_epoch(,swarm:  &mut Swarm<PrivateAppBehaviour>) {
+pub fn create_private_transactions_epoch(swarm:  &mut Swarm<PrivateAppBehaviour>) {
         let behaviour =swarm.behaviour_mut();
         let mut i: i64 =0;
         let mut verkle_tree = verkle_tree::VerkleTree::new();
@@ -106,7 +106,7 @@ pub fn create_private_transactions_epoch(,swarm:  &mut Swarm<PrivateAppBehaviour
             let mut latest_txn = PublicTxn{
                 txn_hash:s.to_string(),
                 nonce:i,
-                value:data.to_owned(),
+                value:"value".to_owned(),
                 status:1,
                 timestamp: current_timestamp
             };
