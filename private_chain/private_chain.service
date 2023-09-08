@@ -1,0 +1,12 @@
+[Unit]
+Description=SUMOTEX Private Chain
+After=network.target
+
+[Service]
+ExecStart=/sumotex_mainnet/chain/private_chain
+WorkingDirectory=/sumotex_mainnet/chain/private_chain
+User=mike
+Restart=always
+
+[Install]
+WantedBy=multi-user.target
