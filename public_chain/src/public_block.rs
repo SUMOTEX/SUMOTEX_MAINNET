@@ -10,6 +10,7 @@ use sha2::{Digest, Sha256};
 use once_cell::sync::Lazy;
 use crate::p2p::AppBehaviour;
 use crate::public_app::App;
+use crate::rock_storage;
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
 
 
@@ -80,27 +81,38 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
             latest_block.id + 1,
             latest_block.public_hash.clone(),
             //TODO txn
-            ["TEST BLOCK CREATION WITH TXN".to_string()].to_vec(),
+            [" ".to_string()].to_vec(),
             None,
             None
         );
         let json = serde_json::to_string(&block).expect("can jsonify request");
+        let block_db = behaviour.storage_path.get_blocks();
+        rock_storage::put_to_db(block_db,latest_block.public_hash.clone(),&json);
+        let the_item: Option<String> = rock_storage::get_from_db(block_db,latest_block.public_hash.clone());
+        //println!("Stored block {:?}",the_item);
         behaviour.app.blocks.push(block);
         info!("broadcasting new block");
+        
+        //rock_storage::put_to_db(latest_block.id+1,);
         behaviour
             .floodsub
             .publish(BLOCK_TOPIC.clone(), json.as_bytes());
     }
 }
+
 pub fn handle_finalised_block(swarm: &mut Swarm<AppBehaviour>, block:Block){
     let behaviour = swarm.behaviour_mut();
     let json = serde_json::to_string(&block).expect("can jsonify request");
+    let block_db = behaviour.storage_path.get_blocks();
+    rock_storage::put_to_db(block_db,block.public_hash.clone(),&json);
+    let the_item: Option<String> = rock_storage::get_from_db(block_db,block.public_hash.clone());
     behaviour.app.blocks.push(block);
     info!("broadcasting new block");
     behaviour
         .floodsub
         .publish(BLOCK_TOPIC.clone(), json.as_bytes());
 }
+
 pub fn handle_create_block_pbft(app:App,root_hash:String,txn:Vec<String>)-> Block{
     let app = app.blocks.last().expect("There should be at least one block");
     let latest_block = app;
@@ -113,6 +125,7 @@ pub fn handle_create_block_pbft(app:App,root_hash:String,txn:Vec<String>)-> Bloc
     );
     block
 }
+
 pub fn handle_create_block_private_chain(app:App,private_hash:Option<String>,txn:Option<Vec<String>>,root:Option<String>)-> Block{
     let app = app.blocks.last().expect("There should be at least one block");
     let latest_block = app;
@@ -127,6 +140,7 @@ pub fn handle_create_block_private_chain(app:App,private_hash:Option<String>,txn
         Some(root_acc)
     );
     let json = serde_json::to_string(&block).expect("can jsonify request");
+
     block
 }
 

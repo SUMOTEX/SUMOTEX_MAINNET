@@ -25,6 +25,7 @@ mod pbft;
 mod public_app;
 mod public_txn;
 mod bridge;
+mod rock_storage;
 mod api;
 use bridge::accept_loop;
 use crate::p2p::PEER_ID;
@@ -51,9 +52,19 @@ pub async fn run_epoch(){
         sleep(Duration::from_secs(60)).await; // Replace 5 with the number of seconds you want to wait
     }
 }
+
+pub fn create_pub_storage()-> rock_storage::StoragePath{
+    println!("Creating storage for blocks, accounts and transactions");
+    let db_public_block= rock_storage::create_storage("./public_blockchain");
+    let db_account = rock_storage::create_storage("./account");
+    let db_transactions = rock_storage::create_storage("./transactions");
+    let the_storage = rock_storage::StoragePath::new(db_public_block,db_transactions,db_account);
+    println!("Storage created for blocks, accounts and transactions");
+    return the_storage;
+
+}
 #[tokio::main]
 async fn main() {
-
     pretty_env_logger::init();
     let mut whitelisted_peers = vec![
         "/ip4/0.0.0.0/tcp/8081",
@@ -64,6 +75,7 @@ async fn main() {
         "/ip4/0.0.0.0/tcp/8086",
         "/ip4/0.0.0.0/tcp/8087",
         "/ip4/0.0.0.0/tcp/8089",
+        "/ip4/0.0.0.0/tcp/8090",
         // ... other addresses
         ];
 
@@ -75,15 +87,20 @@ async fn main() {
         "127.0.0.1:8092",
         "127.0.0.1:8093",
         "127.0.0.1:8094",
-         "127.0.0.1:8090",
+        "127.0.0.1:8095",
+        "127.0.0.1:8096",
+        "127.0.0.1:8097",
         ];
+
+    //create storage
+    let the_storage = create_pub_storage();
     //info!("Peer Id: {}", p2p::PEER_ID.clone());
     let (response_sender, mut response_rcv) = mpsc::unbounded_channel();
     let (init_sender, mut init_rcv) = mpsc::unbounded_channel();
     let (publisher, mut publish_receiver, mut publish_bytes_receiver): (Publisher, mpsc::UnboundedReceiver<(String, String)>, mpsc::UnboundedReceiver<(String, Vec<u8>)>) = Publisher::new();
     Publisher::set(publisher);
     let app = App::new();
-    let mut swarm_public_net = public_swarm::create_public_swarm(app.clone()).await;
+    let mut swarm_public_net = public_swarm::create_public_swarm(app.clone(),the_storage).await;
     let mut stdin = BufReader::new(stdin()).lines();
     loop {
         if let Some(port) = whitelisted_listener.pop() {
@@ -141,6 +158,10 @@ async fn main() {
                 println!("Initialization event.");
                 let peers = p2p::get_list_peers(&swarm_public_net);
                 swarm_public_net.behaviour_mut().app.genesis();
+                let json = serde_json::to_string("TEST").expect("can jsonify request");
+                let block_account = swarm_public_net.behaviour_mut().storage_path.get_blocks();
+                rock_storage::put_to_db(block_account,"0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c43",&json);
+                println!("Storage Path: {:?}",swarm_public_net.behaviour_mut().storage_path.get_blocks());
                 info!("Connected nodes: {}", peers.len());
                 if !peers.is_empty() {
                     let req = p2p::LocalChainRequest {
@@ -188,7 +209,8 @@ async fn main() {
                 },
                 publish_block = publish_bytes_receiver.recv()=>{
                     let (title, message) = publish_block.clone().expect("Publish Block exists");
-                    Some(p2p::EventType::PublishBlock(title, message.into()))
+                    Some(p2p::EventType::PublishBlock(title, message.into()));
+                    None
                 }
             };
             if let Some(event) = public_evt {
@@ -197,6 +219,7 @@ async fn main() {
 
                         let peers = p2p::get_list_peers(&swarm_public_net);
                         swarm_public_net.behaviour_mut().app.genesis();
+
                         info!("Connected nodes: {}", peers.len());
                         if !peers.is_empty() {
                             let req = p2p::LocalChainRequest {

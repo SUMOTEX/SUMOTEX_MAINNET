@@ -45,6 +45,7 @@ pub fn get_total_pbft_view(swarm: &Swarm<AppBehaviour>)->u64 {
     let view_value = swarm.behaviour().pbft.view;
     view_value
 }
+
 pub fn create_transactions_epoch() {
     let mut i: i64 =0;
     let mut verkle_tree = VerkleTree::new();

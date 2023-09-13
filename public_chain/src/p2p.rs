@@ -17,9 +17,10 @@ use crate::public_app::App;
 use crate::pbft::PBFTNode;
 use crate::public_block::Block;
 use crate::public_txn::Txn;
-
+use crate::rock_storage::StoragePath;
 use crate::public_block;
 use crate::pbft;
+use crate::rock_storage;
 use crate::public_block::handle_create_block_pbft;
 
 // main.rs
@@ -68,6 +69,8 @@ pub struct AppBehaviour {
     pub txn: Txn,
     #[behaviour(ignore)]
     pub pbft: PBFTNode,
+    #[behaviour(ignore)]
+    pub storage_path: StoragePath,
 }
 
 impl AppBehaviour {
@@ -76,6 +79,7 @@ impl AppBehaviour {
         app: App,
         txn:Txn,
         pbft:PBFTNode,
+        storage_path:StoragePath,
         response_sender: mpsc::UnboundedSender<ChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
     ) -> Self {
@@ -84,6 +88,7 @@ impl AppBehaviour {
             app,
             txn,
             pbft,
+            storage_path,
             floodsub: Floodsub::new(*PEER_ID),
             mdns: Mdns::new(Default::default())
                 .await
@@ -192,6 +197,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     let created_block=handle_create_block_pbft(self.app.clone(),root,txn);
                     println!("The Created Block After Validity: {:?}",created_block);
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
+                    let block_db = self.storage_path.get_blocks();
+                    let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
                     self.app.blocks.push(created_block);
                     println!("BLOCKS {:?}",self.app.blocks);
                     publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
@@ -204,6 +211,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 if let Some(publisher) = Publisher::get(){
                 let created_block = public_block::handle_create_block_private_chain(self.app.clone(),Some(json_string),None,None);
                 let json = serde_json::to_string(&created_block).expect("can jsonify request");
+                let block_db = self.storage_path.get_blocks();
+                let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
                 self.app.blocks.push(created_block);
                 println!("Genesis Private Block {:?}",self.app.blocks);
                 publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
@@ -216,6 +225,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 if let Some(publisher) = Publisher::get(){
                     let created_block = public_block::handle_create_block_private_chain(self.app.clone(),Some(json_string),None,None);
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
+                    let block_db = self.storage_path.get_blocks();
+                    let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
                     self.app.blocks.push(created_block);
                     println!("Private Block Transactions {:?}",self.app.blocks);
                     publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())

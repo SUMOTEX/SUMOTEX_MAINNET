@@ -1,6 +1,7 @@
 use chrono::prelude::*;
 use log::{error};
 use crate::public_block;
+use crate::rock_storage;
 
 #[derive(Debug,Clone)]
 pub struct App {
@@ -25,7 +26,9 @@ impl App {
             nonce: 1,
             public_hash: "0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c43".to_string(),
         };
+
         self.blocks.push(genesis_block);
+
     }
     pub fn try_add_block(&mut self, block: public_block::Block) {
         let latest_block = self.blocks.last().expect("there is at least one block");

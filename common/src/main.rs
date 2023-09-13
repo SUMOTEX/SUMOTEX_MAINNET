@@ -1,13 +1,18 @@
 // main.rs
 use rocksdb::{DB, Options};
 mod common;  // Declare the module
+mod db_connector;
 use common::SMTXBridge;  // Use the enum
 
 fn main() {
-    let value = SMTXBridge::Ping;
-    println!("{:?}", value);
-    let path = "_path_for_rocksdb_storage";
-    let mut opts = Options::default();
-    opts.create_if_missing(true);
-    let db = DB::open(&opts, path).unwrap();
+    let path = "public_block";
+    let mut options = Options::default();
+    options.create_if_missing(true);
+    let db = DB::open(&options, path)?;
+
+    // Use the generic function
+    put_to_db(&db, "my_key", "my_value")?;
+    put_to_db(&db, "another_key", vec![1, 2, 3])?;
+
+    Ok(())
 }
