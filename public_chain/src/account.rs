@@ -1,22 +1,16 @@
 use std::collections::HashMap;
 use secp256k1::{Secp256k1, PublicKey, SecretKey};
 
-// Use an external crate like 'rust-crypto' or 'ring' for real cryptographic operations
-// Here we'll use dummy placeholders for simplicity.
-fn generate_public_address() -> String {
-    "DummyPublicAddress".to_string()
-}
-
-pub fn generate_keypair() {
+pub fn generate_keypair()->PublicKey {
     let secp = Secp256k1::new();
     let mut rng = secp256k1::rand::thread_rng();
     let (secret_key, public_key) = secp.generate_keypair(&mut rng);
-    println!("{:?}", public_key);
+    public_key
 }
 
 // Account structure
 struct Account {
-    public_address: String,
+    public_address: PublicKey,
     balance: f64,
     nonce: u64,
 }
@@ -25,7 +19,7 @@ impl Account {
     // Creates a new account
     fn new() -> Self {
         Account {
-            public_address: generate_public_address(),
+            public_address: generate_keypair(),
             balance: 0.0,
             nonce: 0,
         }
@@ -54,7 +48,7 @@ impl Account {
 
 // Sample Blockchain representation with accounts
 struct Blockchain {
-    accounts: HashMap<String, Account>,
+    accounts: HashMap<PublicKey, Account>,
 }
 
 impl Blockchain {
@@ -70,31 +64,16 @@ impl Blockchain {
         let account = Account::new();
         let address = account.public_address.clone();
         self.accounts.insert(address.clone(), account);
-        address
+        address.to_string()
     }
 
     // Gets a reference to an account given an address
-    fn get_account(&self, address: &str) -> Option<&Account> {
-        self.accounts.get(address)
-    }
-}
+    fn get_account(&self, address: &String) -> Option<&Account> {
+        // Step 1: Decode hex string to bytes
+        let bytes = hex::decode(address).ok()?;
 
-fn main() {
-    let mut blockchain = Blockchain::new();
-    let address = blockchain.add_account();
-    
-    {
-        let account = blockchain.get_account(&address).unwrap();
-        println!("Account Balance: {}", account.balance);
-    }
-
-    {
-        let account = blockchain.accounts.get_mut(&address).unwrap();
-        account.deposit(100.0);
-    }
-
-    {
-        let account = blockchain.get_account(&address).unwrap();
-        println!("Account Balance after deposit: {}", account.balance);
+        // Step 2: Convert bytes to PublicKey
+        let public_key = PublicKey::from_slice(&bytes).ok()?;
+        self.accounts.get(&public_key)
     }
 }
