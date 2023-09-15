@@ -45,7 +45,9 @@ pub fn get_total_pbft_view(swarm: &Swarm<AppBehaviour>)->u64 {
     let view_value = swarm.behaviour().pbft.view;
     view_value
 }
-
+fn generate_fake_signature() -> Vec<u8> {
+    vec![0u8; 64] // Assuming a 64-byte signature for illustrative purposes.
+}
 pub fn create_transactions_epoch() {
     let mut i: i64 =0;
     let mut verkle_tree = VerkleTree::new();
@@ -61,6 +63,9 @@ pub fn create_transactions_epoch() {
         .unwrap()
         .as_secs() as i64;
         let mut latest_txn = PublicTxn{
+            caller_address:0,
+            signature:Some(generate_fake_signature()),
+            to_address:1,
             txn_hash:s.to_string(),
             nonce:i,
             value:"".to_string(),
@@ -115,6 +120,9 @@ pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
             .as_secs() as i64;
             let mut latest_txn = PublicTxn{
                 txn_hash:s.to_string(),
+                caller_address:0,
+                to_address:1,
+                signature:Some(generate_fake_signature()),
                 nonce:i,
                 value:data.to_owned(),
                 status:1,

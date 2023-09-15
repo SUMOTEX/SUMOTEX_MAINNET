@@ -18,11 +18,11 @@ pub struct PublicTxn{
     // pub version:String,
     pub value: String,
     // pub gas_limit: u64,
-    // pub caller_address:u64,
-    // pub to_address:u64,
-    // pub sig:u64,
+    pub caller_address:u64,
+    pub to_address:u64,
     pub status:i64,
-    pub timestamp:i64
+    pub timestamp:i64,
+    pub signature: Option<Vec<u8>>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -35,10 +35,15 @@ pub struct RootTxn{
 }
 
 
+impl PublicTxn {
+
+}
+
 impl Txn {
     pub fn new() -> Self {
         Self { transactions: vec![],hashed_txn: vec![] }
     }
+
     pub fn try_add_root_txn(&mut self, txn: String) {
         self.transactions.push(txn);
     }

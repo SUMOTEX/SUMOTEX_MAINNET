@@ -1,9 +1,17 @@
 use std::collections::HashMap;
+use secp256k1::{Secp256k1, PublicKey, SecretKey};
 
 // Use an external crate like 'rust-crypto' or 'ring' for real cryptographic operations
 // Here we'll use dummy placeholders for simplicity.
 fn generate_public_address() -> String {
     "DummyPublicAddress".to_string()
+}
+
+pub fn generate_keypair() {
+    let secp = Secp256k1::new();
+    let mut rng = secp256k1::rand::thread_rng();
+    let (secret_key, public_key) = secp.generate_keypair(&mut rng);
+    println!("{:?}", public_key);
 }
 
 // Account structure

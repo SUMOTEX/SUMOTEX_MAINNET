@@ -27,6 +27,7 @@ mod public_txn;
 mod bridge;
 mod rock_storage;
 mod api;
+mod account;
 use bridge::accept_loop;
 use crate::p2p::PEER_ID;
 use crate::p2p::KEYS;
@@ -91,7 +92,9 @@ async fn main() {
         "127.0.0.1:8096",
         "127.0.0.1:8097",
         ];
-
+//sample generate public key
+    let public_key = account::generate_keypair();
+    println!("Generated public key: {:?}", public_key);
     //create storage
     let the_storage = create_pub_storage();
     //info!("Peer Id: {}", p2p::PEER_ID.clone());
