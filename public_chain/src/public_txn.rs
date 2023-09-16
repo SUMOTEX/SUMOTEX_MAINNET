@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::collections::BTreeMap;
+use secp256k1::{Secp256k1, PublicKey, SecretKey, Message, Signature};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Txn{
@@ -36,7 +37,36 @@ pub struct RootTxn{
 
 
 impl PublicTxn {
-
+    pub fn sign_transaction(transaction_data: &[u8], secret_key: &SecretKey) -> Signature {
+        let secp = Secp256k1::new();
+    
+        // Hash the transaction data to create a digest
+        let mut hasher = Sha256::new();
+        hasher.update(transaction_data);
+        let digest = hasher.finalize();
+    
+        // Create a message object from the digest
+        let msg = Message::from_slice(&digest).expect("32 bytes, within curve order");
+    
+        // Sign the message with the secret key
+        let sig = secp.sign(&msg, secret_key);
+        sig
+    }
+    
+    pub fn verify_transaction(transaction_data: &[u8], signature: &Signature, public_key: &PublicKey) -> bool {
+        let secp = Secp256k1::new();
+    
+        // Hash the transaction data to create a digest
+        let mut hasher = Sha256::new();
+        hasher.update(transaction_data);
+        let digest = hasher.finalize();
+    
+        // Create a message object from the digest
+        let msg = Message::from_slice(&digest).expect("32 bytes, within curve order");
+    
+        // Verify the message with the public key
+        secp.verify(&msg, signature, public_key).is_ok()
+    }
 }
 
 impl Txn {
@@ -47,9 +77,11 @@ impl Txn {
     pub fn try_add_root_txn(&mut self, txn: String) {
         self.transactions.push(txn);
     }
+    
     pub fn try_add_hash_txn(&mut self, txn: String) {
         //self.hashed_txn.push(txn);
     }
+
     pub fn is_txn_valid(&mut self,root_hash:String, txn_hash: HashMap<String, String>) -> (bool,Vec<String>) {
             //println!("{:?}",theTxn.timestamp);
             //TODO: To do verification on the transactions and store in another place.

@@ -93,8 +93,10 @@ async fn main() {
         "127.0.0.1:8097",
         ];
 //sample generate public key
-    let public_key = account::generate_keypair();
+    let (public_key,private_key) = account::generate_keypair();
     println!("Generated public key: {:?}", public_key);
+    println!("Generated private key: {:?}", private_key);
+
     //create storage
     let the_storage = create_pub_storage();
     //info!("Peer Id: {}", p2p::PEER_ID.clone());
@@ -271,6 +273,8 @@ async fn main() {
                         cmd if cmd.starts_with("ls rt") => p2p::handle_print_raw_txn(&swarm_public_net),
                         cmd if cmd.starts_with("create b") => public_block::handle_create_block(cmd, &mut swarm_public_net),
                         cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, &mut swarm_public_net),
+                        cmd if cmd.starts_with("create acc")=> account::create_account(cmd, &mut swarm_public_net),
+                        cmd if cmd.starts_with("acc d")=> account::get_account(cmd, &mut swarm_public_net),
                         _ => error!("unknown command"),  
                     },
                 }
