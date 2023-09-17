@@ -1,16 +1,26 @@
 use std::collections::HashMap;
+use libp2p::{
+    floodsub::{Topic},
+    swarm::{Swarm},
+};
 use secp256k1::{Secp256k1, PublicKey, SecretKey};
+use serde::{Deserialize, Serialize};
+use crate::rock_storage;
+use crate::p2p::AppBehaviour;
+use std::time::UNIX_EPOCH;
+use std::time::SystemTime;
 
-pub fn generate_keypair()->PublicKey {
+pub fn generate_keypair()->(PublicKey,SecretKey) {
     let secp = Secp256k1::new();
     let mut rng = secp256k1::rand::thread_rng();
     let (secret_key, public_key) = secp.generate_keypair(&mut rng);
-    public_key
+    (public_key,secret_key)
 }
 
 // Smart contract that is public structure
+#[derive(Serialize, Deserialize, Debug, Clone)]
 struct PublicSmartContract {
-    contract_address: PublicKey,
+    contract_address: String,
     balance: f64,
     nonce: u64,
     timestamp:u64,
@@ -18,9 +28,10 @@ struct PublicSmartContract {
 
 impl PublicSmartContract {
     // Creates a new PublicSmartContract
-    pub fn new(contract_address: PublicKey) -> Self {
+    pub fn new() -> Self {
+        let (public_key,private_key)=generate_keypair();
         PublicSmartContract {
-            contract_address,
+            contract_address:public_key.to_string(),
             balance: 0.0,
             nonce: 0,
             timestamp: Self::current_timestamp(),
@@ -57,7 +68,7 @@ impl PublicSmartContract {
 
 // Sample Blockchain representation with accounts
 struct SmartContracts {
-    contracts: HashMap<PublicKey, Account>,
+    contracts: HashMap<String, PublicSmartContract>,
 }
 
 impl SmartContracts {
@@ -72,20 +83,19 @@ impl SmartContracts {
     fn add_contract(&mut self) -> String {
         let account = PublicSmartContract::new();
         let address = account.contract_address.clone();
-        self.accounts.insert(address.clone(), account);
+        self.contracts.insert(address.clone(), account);
         address.to_string()
     }
 
-    // Gets a reference to an account given an address
-    fn get_account(&self, address: &String) -> Option<&Account> {
-        // Step 1: Decode hex string to bytes
-        let bytes = hex::decode(address).ok()?;
-
-        // Step 2: Convert bytes to PublicKey
-        let public_key = PublicKey::from_slice(&bytes).ok()?;
-        self.accounts.get(&public_key)
-    }
 }
-pub fn generate_smart_contract() {
 
+pub fn generate_smart_contract(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
+    let contract_path = swarm.behaviour().storage_path.get_contract();
+    let (public_key,private_key) = generate_keypair();
+    let contract = PublicSmartContract::new();
+    let address = contract.contract_address.clone();
+    let serialized_data = serde_json::to_string(&contract).expect("can jsonify request");
+    let _ = rock_storage::store_wasm_in_db(contract_path,&address.clone().to_string(),"./public_chain/sample.wasm");
+    let put_item = rock_storage::get_from_db(contract_path,address.to_string());
+    println!("Smart Contract {:?} created",put_item);
 }

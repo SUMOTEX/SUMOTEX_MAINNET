@@ -18,7 +18,7 @@ pub fn generate_keypair()->(PublicKey,SecretKey) {
 
 // Account structure
 #[derive(Serialize, Deserialize, Debug, Clone)]
-struct Account {
+pub struct Account {
     public_address: String,
     balance: f64,   
     nonce: u64,
@@ -80,6 +80,5 @@ pub fn get_account(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
         let the_account = rock_storage::get_from_db(acc_path,data.to_string());
         println!("{:?}",the_account);
     }
-
 }
 

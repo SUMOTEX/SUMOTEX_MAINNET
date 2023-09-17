@@ -28,6 +28,7 @@ mod bridge;
 mod rock_storage;
 mod api;
 mod account;
+mod smart_contract;
 use bridge::accept_loop;
 use crate::p2p::PEER_ID;
 use crate::p2p::KEYS;
@@ -276,6 +277,7 @@ async fn main() {
                         cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, &mut swarm_public_net),
                         cmd if cmd.starts_with("create acc")=> account::create_account(cmd, &mut swarm_public_net),
                         cmd if cmd.starts_with("acc d")=> account::get_account(cmd, &mut swarm_public_net),
+                        cmd if cmd.starts_with("contract c")=> smart_contract::generate_smart_contract(cmd, &mut swarm_public_net),
                         _ => error!("unknown command"),  
                     },
                 }
