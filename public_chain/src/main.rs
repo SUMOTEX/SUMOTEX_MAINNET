@@ -59,8 +59,9 @@ pub fn create_pub_storage()-> rock_storage::StoragePath{
     let db_public_block= rock_storage::create_storage("./public_blockchain");
     let db_account = rock_storage::create_storage("./account");
     let db_transactions = rock_storage::create_storage("./transactions");
-    let the_storage = rock_storage::StoragePath::new(db_public_block,db_transactions,db_account);
-    println!("Storage created for blocks, accounts and transactions");
+    let db_contract = rock_storage::create_storage("./contract");
+    let the_storage = rock_storage::StoragePath::new(db_public_block,db_transactions,db_account,db_contract);
+    println!("Storage created for blocks, accounts, contract and transactions");
     return the_storage;
 
 }

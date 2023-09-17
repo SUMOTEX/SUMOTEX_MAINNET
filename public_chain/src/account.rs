@@ -22,6 +22,7 @@ struct Account {
     public_address: String,
     balance: f64,   
     nonce: u64,
+    contract_address: Option<Vec<String>>,
 }
 
 impl Account {
@@ -30,8 +31,9 @@ impl Account {
         let (public_key,private_key)=generate_keypair();
         Account {
             public_address:public_key.to_string(),
-            balance: 0.0,
-            nonce: 0,
+            balance: 1000000.0,
+            nonce: 1,
+            contract_address: Some(Vec::new())
         }
     }
 
@@ -49,7 +51,6 @@ impl Account {
             false
         }
     }
-
     // Increment the nonce, typically called when a transaction is made
     fn increment_nonce(&mut self) {
         self.nonce += 1;
@@ -62,18 +63,23 @@ pub fn create_account(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
     let account = Account::new();
     let address = account.public_address.clone();
     let serialized_data = serde_json::to_string(&account).expect("can jsonify request");
-    rock_storage::put_to_db(acc_path,address.clone().to_string(),&serialized_data);
+    let _ = rock_storage::put_to_db(acc_path,address.clone().to_string(),&serialized_data);
     let put_item = rock_storage::get_from_db(acc_path,address.to_string());
     println!("Public Acc: {:?} created",put_item);
     println!("Private Key: {:?} created",private_key);
-    let test_sign_signature = PublicTxn::sign_transaction(b"TEST TXN",&private_key);
-    println!("Test Sign Txn {:?}",test_sign_signature);
-    let verified_txn = PublicTxn::verify_transaction(b"TEST TXN",&test_sign_signature,&public_key);
-    println!("Verified Txn Outcome {:?}",verified_txn);
+    println!("Keep your private key safe, its only displayed once. ");
+    // let test_sign_signature = PublicTxn::sign_transaction(b"Txn",&private_key);
+    // println!("Test Sign Txn {:?}",test_sign_signature);
+    // let verified_txn = PublicTxn::verify_transaction(b"Txn",&test_sign_signature,&public_key);
+    // println!("Verified Txn Outcome {:?}",verified_txn);
 }
 pub fn get_account(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
-    if let Some(data) = cmd.strip_prefix("acc d") {
+    if let Some(data) = cmd.strip_prefix("acc d ") {
+        println!("Account Public Key{:?}",data.to_string());
         let acc_path = swarm.behaviour().storage_path.get_account();
-        let put_item = rock_storage::get_from_db(acc_path,data.to_string());
+        let the_account = rock_storage::get_from_db(acc_path,data.to_string());
+        println!("{:?}",the_account);
     }
+
 }
+

@@ -13,26 +13,26 @@ struct PublicSmartContract {
     contract_address: PublicKey,
     balance: f64,
     nonce: u64,
-    timestamp:u64
+    timestamp:u64,
 }
 
 impl PublicSmartContract {
     // Creates a new PublicSmartContract
-    fn new() -> Self {
-        Account {
-            public_address: generate_keypair(),
+    pub fn new(contract_address: PublicKey) -> Self {
+        PublicSmartContract {
+            contract_address,
             balance: 0.0,
             nonce: 0,
+            timestamp: Self::current_timestamp(),
         }
     }
-
-    // Deposit an amount into the account
-    fn deposit(&mut self, amount: f64) {
+    // Deposit an amount into the contract
+    pub fn deposit(&mut self, amount: f64) {
         self.balance += amount;
     }
 
-    // Withdraw an amount from the account, returns true if successful
-    fn withdraw(&mut self, amount: f64) -> bool {
+    // Withdraw an amount from the contract, returns true if successful
+    pub fn withdraw(&mut self, amount: f64) -> bool {
         if self.balance >= amount {
             self.balance -= amount;
             true
@@ -42,28 +42,36 @@ impl PublicSmartContract {
     }
 
     // Increment the nonce, typically called when a transaction is made
-    fn increment_nonce(&mut self) {
+    pub fn increment_nonce(&mut self) {
         self.nonce += 1;
+    }
+
+    // Get current timestamp in seconds
+    fn current_timestamp() -> u64 {
+        let start = SystemTime::now();
+        let since_the_epoch = start.duration_since(UNIX_EPOCH)
+            .expect("Time went backwards");
+        since_the_epoch.as_secs()
     }
 }
 
 // Sample Blockchain representation with accounts
 struct SmartContracts {
-    accounts: HashMap<PublicKey, Account>,
+    contracts: HashMap<PublicKey, Account>,
 }
 
 impl SmartContracts {
     // Creates a new blockchain instance
     fn new() -> Self {
-        Blockchain {
-            accounts: HashMap::new(),
+        SmartContracts {
+            contracts: HashMap::new(),
         }
     }
 
     // Adds a new account to the blockchain
     fn add_contract(&mut self) -> String {
         let account = PublicSmartContract::new();
-        let address = account.public_address.clone();
+        let address = account.contract_address.clone();
         self.accounts.insert(address.clone(), account);
         address.to_string()
     }
@@ -77,4 +85,7 @@ impl SmartContracts {
         let public_key = PublicKey::from_slice(&bytes).ok()?;
         self.accounts.get(&public_key)
     }
+}
+pub fn generate_smart_contract() {
+
 }

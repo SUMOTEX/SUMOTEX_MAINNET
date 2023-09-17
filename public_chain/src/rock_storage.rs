@@ -1,20 +1,23 @@
-use rocksdb::{DB, Options,IteratorMode,Error,SingleThreaded,DBWithThreadMode};
+use rocksdb::{DB,Error, Options,IteratorMode,SingleThreaded,DBWithThreadMode};
 use std::io::{self, Write};
 use std::fmt::Debug;
+use std::str;
 
 #[derive(Debug)]
 pub struct StoragePath {
     pub blocks: DB,
     pub transactions: DB,
-    pub account:DB
+    pub account:DB,
+    pub contract:DB
 }
 
 impl StoragePath {
-    pub fn new(block_path:DB,txn_path:DB,account_path:DB) -> Self {
+    pub fn new(block_path:DB,txn_path:DB,account_path:DB,contract_path:DB) -> Self {
         Self {
             blocks:block_path,
             transactions:txn_path,
-            account:account_path
+            account:account_path,
+            contract:contract_path
         }
     }
     pub fn get_blocks(&self) -> &DB {
@@ -27,6 +30,10 @@ impl StoragePath {
 
     pub fn get_account(&self) -> &DB {
         &self.account
+    }
+
+    pub fn get_contract(&self) -> &DB {
+        &self.contract
     }
 }
 
@@ -58,6 +65,20 @@ pub fn get_from_db<K: AsRef<[u8]>>(db: &DB, key: K) -> Option<String> {
     }
 }
 
+// pub fn update_in_db<K: AsRef<[u8]>>(db: &DB, key: K, append_str: &str) {
+//     // Retrieve existing value
+//     let mut existing_value = match db.get(&key)? {
+//         Some(bytes) => str::from_utf8(&bytes).to_string()
+//         //None => return Err(Error::new("Key not found".to_string())),
+//     };
+
+//     // Modify the existing value
+//     existing_value.push_str(append_str);
+
+//     // Store the modified value back into the database
+//     db.put(key, existing_value.as_bytes());
+// }
+
 pub fn get_all_from_db(db: &DB) -> Vec<(String, String)> {
     // Create a new vector to hold our key-value pairs
     let mut results = Vec::new();
@@ -79,4 +100,16 @@ pub fn create_storage(path: &str)-> DB{
     opts.create_if_missing(true);
     let db = DB::open(&opts, path).unwrap();
     db
+}
+
+pub fn store_wasm_in_db(db: &DB, key: &str, wasm_filepath: &str) -> Result<(), Box<dyn std::error::Error>> {
+    // Load the WASM file as a byte array
+    let wasm_binary = fs::read(wasm_filepath)?;
+    // Store in RocksDB
+    db.put(key, &wasm_binary)?;
+    Ok(())
+}
+
+pub fn get_wasm_from_db(db: &DB, key: &str) -> Result<Option<Vec<u8>>, rocksdb::Error> {
+    db.get(key)
 }
