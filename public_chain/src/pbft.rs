@@ -4,7 +4,7 @@ use libp2p::{
     floodsub::{Topic},
     swarm::{Swarm},
 };
-use tokio::time::{interval, Duration,sleep};
+use tokio::time::{Duration,sleep};
 use std::collections::HashMap;
 use rand::Rng;
 use crate::verkle_tree::VerkleTree;

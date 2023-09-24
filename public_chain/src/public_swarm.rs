@@ -11,7 +11,6 @@ use tokio::{
 };
 
 use libp2p::Transport;
-use std::sync::{Arc, Mutex};
 use log::{ info};
 use once_cell::sync::Lazy;
 use std::sync::Once;

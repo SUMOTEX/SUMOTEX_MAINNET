@@ -3,6 +3,7 @@ use std::io::{self, Write};
 use std::fmt::Debug;
 use std::str;
 use std::fs;
+use std::path::Path;
 #[derive(Debug)]
 pub struct StoragePath {
     pub blocks: DB,
@@ -101,10 +102,18 @@ pub fn create_storage(path: &str)-> DB{
     let db = DB::open(&opts, path).unwrap();
     db
 }
-
+fn path_exists(filepath: &str) -> bool {
+    let path = Path::new(filepath);
+    path.exists() && path.is_file()
+}
 pub fn store_wasm_in_db(db: &DB, key: &str, wasm_filepath: &str) -> Result<(), Box<dyn std::error::Error>> {
     // Load the WASM file as a byte array
+    if !path_exists(wasm_filepath) {
+        println!("No path");
+        return Err(Box::new(std::io::Error::new(std::io::ErrorKind::NotFound, "Invalid file path")));
+    }
     let wasm_binary = fs::read(wasm_filepath)?;
+    println!("Binary: {:?}",wasm_binary);
     // Store in RocksDB
     db.put(key, &wasm_binary)?;
     Ok(())

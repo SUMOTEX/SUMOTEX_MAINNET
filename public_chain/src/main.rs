@@ -7,15 +7,12 @@ use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
     select, spawn,
     sync::mpsc,
-    time::sleep,
-    task
+    time::sleep
 };
 use libp2p::Multiaddr;
 use std::str::FromStr;
-use tokio::time::{interval, Duration};
+use tokio::time::{Duration};
 use libp2p::futures::StreamExt;
-use lazy_static::lazy_static;
-use std::sync::Mutex;
 mod verkle_tree;
 mod p2p;
 mod public_swarm;
@@ -34,11 +31,8 @@ use crate::p2p::PEER_ID;
 use crate::p2p::KEYS;
 use crate::public_app::App;
 use crate::public_txn::Txn;
-use crate::pbft::PBFTNode;
 use publisher::Publisher;
 use tokio::net::TcpListener;
-use std::io::Result;
-use std::sync::{Arc};
 use crate::p2p::AppBehaviour;
 type MySwarm = Swarm<AppBehaviour>;
 
@@ -94,7 +88,8 @@ async fn main() {
         "127.0.0.1:8096",
         "127.0.0.1:8097",
         ];
-//sample generate public key
+    smart_contract::read_wasm_file("./sample.wasm");
+    //sample generate public key
     let (public_key,private_key) = account::generate_keypair();
     println!("Generated public key: {:?}", public_key);
     println!("Generated private key: {:?}", private_key);
@@ -277,7 +272,7 @@ async fn main() {
                         cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, &mut swarm_public_net),
                         cmd if cmd.starts_with("create acc")=> account::create_account(cmd, &mut swarm_public_net),
                         cmd if cmd.starts_with("acc d")=> account::get_account(cmd, &mut swarm_public_net),
-                        cmd if cmd.starts_with("contract c")=> smart_contract::generate_smart_contract(cmd, &mut swarm_public_net),
+                        cmd if cmd.starts_with("contract c")=> smart_contract::store_smart_contract(cmd, &mut swarm_public_net),
                         _ => error!("unknown command"),  
                     },
                 }
