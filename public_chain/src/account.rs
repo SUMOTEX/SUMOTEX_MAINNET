@@ -1,13 +1,11 @@
 use std::collections::HashMap;
 use secp256k1::{Secp256k1, PublicKey, SecretKey};
 use libp2p::{
-    floodsub::{Topic},
     swarm::{Swarm},
 };
 use serde::{Deserialize, Serialize};
 use crate::p2p::AppBehaviour;
 use crate::rock_storage;
-use crate::public_txn::PublicTxn;
 
 pub fn generate_keypair()->(PublicKey,SecretKey) {
     let secp = Secp256k1::new();

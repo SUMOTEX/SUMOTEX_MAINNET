@@ -10,8 +10,11 @@ use crate::p2p::AppBehaviour;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use std::fs::File;
+use std::ffi::CString;
 use wasmtime::*;
+use wasmtime::Val;
 use wasmtime_wasi::WasiCtx;
+use wasmtime::MemoryType;
 use wasmtime::Linker;
 use wasmtime_wasi::sync::WasiCtxBuilder;
 
@@ -109,9 +112,9 @@ enum WasmType {
     I64,
     F32,
     F64,
-    u8,
-    u64,
-    str,
+    U8,
+    U64,
+    Str,
     bool
     // Add more types as needed
 }
@@ -126,6 +129,14 @@ pub struct WasmContract {
     instance: Instance,
     store: Store<WasiCtx>,
     module: Module,
+}
+
+enum ParamValue {
+    Int64(i64),
+    Int32(i32),
+    U64(u64),
+    U8(u8),
+    Str(String),
 }
 
 impl WasmContract {
@@ -159,39 +170,65 @@ impl WasmContract {
             module,
         })
     }
+    pub fn get_store(&mut self) -> &mut Store<WasiCtx> {
+        &mut self.store
+    }
+    // pub fn dynamic_call(&mut self, descriptor: &FunctionDescriptor, params: Vec<ParamValue>) -> Result<i64, Box<dyn std::error::Error>> {
 
-    pub fn call<T, R>(&mut self, func_name: &str, args: T) -> Result<R, Box<dyn std::error::Error>>
-    where
-        T: wasmtime::WasmTy,
-        R: wasmtime::WasmTy,
-    {
-        let func: TypedFunc<T, R> = self.instance.get_typed_func(&mut self.store, func_name)?;
-        Ok(func.call(&mut self.store, args)?)
-    }
-    pub fn dynamic_call(&mut self, descriptor: &FunctionDescriptor, params: Vec<i64>) -> Result<i64, Box<dyn std::error::Error>> {
-        match descriptor.param_types.len() {
-            0 => {
-                let func: TypedFunc<(), i64> = self.instance.get_typed_func(&mut self.store, &descriptor.name)?;
-                Ok(func.call(&mut self.store, ())?)
-            },
-            1 => {
-                let func: TypedFunc<i64, i64> = self.instance.get_typed_func(&mut self.store, &descriptor.name)?;
-                Ok(func.call(&mut self.store, params[0])?)
-            },
-            2 => {
-                let func: TypedFunc<(i64, i64), i64> = self.instance.get_typed_func(&mut self.store, &descriptor.name)?;
-                Ok(func.call(&mut self.store, (params[0], params[1]))?)
-            },
-            _ => Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Unsupported number of parameters"))),
-        }
-    }
+    //     let memory_export = self.instance.get_export(&mut self.store, "memory").ok_or("Failed to find 'memory' export")?;
+    //     let memory = if let wasmtime::Extern::Memory(memory) = memory_export {
+    //         memory
+    //     } else {
+    //         return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Memory export not found")));
+    //     };
+        
+    //     let wasm_params: Vec<Val> = params.into_iter().flat_map(|param| {
+    //         match param {
+    //             ParamValue::Int32(i) => vec![Val::I32(i)].into_iter(),
+    //             ParamValue::Int64(i) => vec![Val::I64(i)].into_iter(),
+    //             ParamValue::Str(s) => {
+    //                 let (ptr, len) = self.write_string_to_memory(&memory, &s);
+    //                 vec![Val::I32(ptr), Val::I32(len)].into_iter() // Produces an iterator over two items.
+    //             },
+    //         }
+    //     }).collect();
+    //     let typed_func = self.instance.get_func(&mut self.store, &descriptor.name)
+    //         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "Function not found"))?
+    //         .typed::<&[Val], &[Val]>(&self.store)
+    //         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
+        
+    //     let results = typed_func.call(&mut self.store, &wasm_params)?;
+        
+    //     match results.get(0) {
+    //         Some(Val::I64(i)) => Ok(i),
+    //         _ => Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Unexpected return type from the function")))
+    //     }
+    // }
     pub fn exported_functions(&self) -> Vec<String> {
         self.module.exports().map(|export| export.name().to_string()).collect()
     }
 }
+
+pub fn create_memory(store: &mut Store<WasiCtx>) -> Result<Memory, Box<dyn std::error::Error>> {
+    let memory_type = MemoryType::new(1, None); // 1 page
+    let memory = Memory::new(store, memory_type)?;
+    Ok(memory)
+}
+
+// Part 2: Write data to the memory
+pub fn write_data_to_memory(memory: &Memory, input: &str, store: &mut Store<WasiCtx>) -> Result<(i32, i32), Box<dyn std::error::Error>> {
+    let input_bytes = input.as_bytes();
+    let data = memory.data_mut(store); // Use the store here
+
+    for (i, byte) in input_bytes.iter().enumerate() {
+        data[i] = *byte;
+    }
+
+    Ok((0, input_bytes.len() as i32)) // Placeholder for data_ptr, replace 0 with the actual pointer if possible
+}
 pub fn read_wasm_file(module_path: &str) -> Result<(), Box<dyn std::error::Error>>{
     match WasmContract::new(module_path){
-        Ok(contract) => {
+        Ok(mut contract) => {
             println!("Contract successfully created.");
             println!("Successfully instantiated the wasm module.");
             // Print the exported functions
@@ -200,116 +237,37 @@ pub fn read_wasm_file(module_path: &str) -> Result<(), Box<dyn std::error::Error
             for func in functions.iter() {
                 println!("Exported Function: {}", func);
             }
+            let the_memory = create_memory(contract.get_store()).unwrap();
+            // Convert strings to Wasm memory pointers and lengths.
+            let (name_ptr, name_len) = match write_data_to_memory(&the_memory, "SUMOTEX-T",contract.get_store()) {
+                Ok((ptr, len)) => (ptr, len),
+                Err(e) => return Err(e.into()),
+            };
+            
+            let (symbol_ptr, symbol_len) = match write_data_to_memory(&the_memory, "SMTX",contract.get_store()) {
+                Ok((ptr, len)) => (ptr, len),
+                Err(e) => return Err(e.into()),
+            };
 
-            // let create_test_token = FunctionDescriptor {
-            //     name: "initialize".to_string(),
-            //     param_types: vec![WasmType::str, WasmType::str, WasmType::u8, WasmType::u64],
-            //     return_type: None,
-            // };
-            // println!("{:?}",create_test_token);
-            // let result = contract.dynamic_call(
-            //     &create_test_token,
-            //     vec![
-            //         "SUMO_TOKEN".to_string(),
-            //         "SMTX".to_string(),
-            //         18,
-            //         1000
-            //     ]
-            // );
+            let args = vec![
+                Val::I32(name_ptr),
+                Val::I32(name_len),
+                Val::I32(symbol_ptr),
+                Val::I32(symbol_len),
+                Val::I32(8),
+                Val::I64(1000000),
+            ];    
+            println!("{:?}",args);
+            // let result = contract.prepare_and_call(&mut contract, "initialize", args_data);
             // match result {
-            //     Ok(val) => println!("Function returned: {}", val),
-            //     Err(e) => eprintln!("Error calling function: {}", e),
+            //     Ok(val) => println!("Function returned: {:?}", val),
+            //     Err(err) => eprintln!("Error: {}", err),
             // }
         },
         Err(e) => {
             eprintln!("Error creating contract: {}", e);
         }
     };
-    // match result {
-    //     Ok(contract) => println!("Successfully created contract!"),
-    //     Err(e) => eprintln!("Error: {}", e),
-    // }
-
-  // Example: Let's say you want to allow users to interactively call these functions
-    // loop {
-    //     println!("Which function do you want to call? (Type 'exit' to quit)");
-
-    //     let mut input = String::new();
-    //     std::io::stdin().read_line(&mut input)?;
-    //     let input = input.trim();
-
-    //     if input == "exit" {
-    //         break;
-    //     }
-
-    //     if !functions.contains(&input.to_string()) {
-    //         println!("Function not found!");
-    //         continue;
-    //     }
-
-    //     // Here, you would introspect the type of the function 
-    //     // and prompt the user for the right number and type of arguments.
-    //     // This is a bit complex since Wasm function introspection is not straightforward.
-
-    //     // For demonstration purposes, we're just showing how you'd call 'balance_of'
-    //     if input == "balance_of" {
-    //         // This is a hardcoded example, in a real-world scenario, you'd dynamically
-    //         // determine the number and type of arguments based on the function signature.
-    //         println!("Enter the owner address:");
-    //         let mut owner = String::new();
-    //         std::io::stdin().read_line(&mut owner)?;
-    //         let owner = owner.trim();
-
-    //         // Calling the function
-    //         let balance: u64 = contract.call("balance_of", owner)?;
-    //         println!("Balance of {}: {}", owner, balance);
-    //     } else {
-    //         println!("Function calling for {} is not implemented in this demo.", input);
-    //     }
-    // }
-    // Here's how you can call the functions
-    // let balance: u64 = contract.call("balance_of", "creator")?;
-    // println!("Creator's balance: {}", balance);
-
-    // Similarly, you can call other functions
 
     Ok(())
-
-
 }
-
-    // let engine = Engine::default();
-    // let module = Module::from_file(&engine, "./sample.wasm").unwrap();
-    // let mut exports = module.exports();
-    // while let Some(foo) = exports.next() {
-    //     println!("Functions: {}", foo.name());
-    // }
-    // let mut linker = Linker::new(&engine);
-    // let wasi = WasiCtxBuilder::new()
-    //     .inherit_stdio()
-    //     .inherit_args().unwrap()
-    //     .build();
-    // let mut store = Store::new(&engine, wasi);
-    // //wasmtime_wasi::add_to_linker(&mut linker, |s| s).unwrap();
-    // let link = linker.instantiate(&mut store, &module).unwrap();
-    // let mut contract = module::new("./sample.wasm");
-    // contract.new_token(1000);
-    // let balance = contract.balance_of("creator");
-    // println!("Creator's balance: {}", balance);
-    //let add_fn = link.get_typed_func::<(u32, u32), u32>(&mut store, "add").unwrap();
-    //let add: wasmtime::TypedFunc<(u32, u32), u32> = link.get_typed_func(&mut store, "add").unwrap();
-    //let result = add.call(&mut store, (1, 2)).unwrap();
-    //println!("{:?}",result);
-
-    // let engine = wasmtime::Engine::default();
-    // let store = wasmtime::Store::new(&engine);
-    // let module = wasmtime::Module::from_file(&store, "Users/leowyennhan/Desktop/sumotex_mainnet/chain/public_chain/cool.wasm")?;
-    // let instance = wasmtime::Instance::new(&store, &module, &[host_function.into()]).expect("Failed to create wasmtime instance");
-    // let set_data = instance.get_func("set_data").expect("function not found");
-    // let args = [wasmtime::Val::from(data_to_store)]; // your data as appropriate type
-    // let results = set_data.call(&args)?;
-    // let host_function = wasmtime::Func::wrap(store, |caller: Caller<'_>, arg: i32| {
-    //     // Your host function logic here.
-    // });
-    // //let instance = wasmtime::Instance::new(&module, &[host_function.into()]);
-    // println!("{:?}",host_function);   

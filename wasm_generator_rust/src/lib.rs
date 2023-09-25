@@ -8,23 +8,50 @@ pub struct ERC20Token {
     balances: HashMap<String, u64>,
     allowed: HashMap<String, HashMap<String, u64>>,
 }
-
+    
+pub fn extract_string_from_wasm_memory(ptr: *mut u8, len: usize) -> String {
+    let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
+    String::from_utf8_lossy(slice).to_string()
+}
 impl ERC20Token {
     #[no_mangle]
-    pub extern "C" fn initialize(name: &str, symbol: &str, decimals: u8, initial_supply: u64) -> Self {
+    pub extern "C" fn initialize(
+        name_ptr: *mut u8, 
+        name_len: usize, 
+        symbol_ptr: *mut u8, 
+        symbol_len: usize,
+        decimals: u8, 
+        initial_supply: u64
+    ) -> *mut ERC20Token {
+        // Extract name and symbol from wasm memory
+        let name = extract_string_from_wasm_memory(name_ptr, name_len);
+        let symbol = extract_string_from_wasm_memory(symbol_ptr, symbol_len);
+    
         let mut balances = HashMap::new();
-        balances.insert("creator".to_string(), initial_supply);
-
-        ERC20Token {
-            name: name.to_string(),
-            symbol: symbol.to_string(),
+        balances.insert("Contract_Owner".to_string(), initial_supply);
+    
+        let token = ERC20Token {
+            name: name,
+            symbol: symbol,
             decimals,
             total_supply: initial_supply,
             balances,
             allowed: HashMap::new(),
-        }
+        };
+    
+        let token_ptr = Box::into_raw(Box::new(token));
+    
+        token_ptr
     }
 
+    
+    #[no_mangle]
+    pub extern "C" fn destroy(token_ptr: *mut ERC20Token) {
+        // Deallocate the memory when you're done with the ERC20Token instance
+        unsafe {
+            Box::from_raw(token_ptr);
+        }
+    }
     #[no_mangle]
     pub extern "C" fn balance_of(&self, owner: &str) -> u64 {
         *self.balances.get(owner).unwrap_or(&0)
