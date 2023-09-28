@@ -54,7 +54,15 @@ impl ValueHandler for String {
         self.as_bytes().to_vec()
     }
 }
+impl ValueHandler for Vec<u8> {
+    fn from_bytes(bytes: Vec<u8>) -> Self {
+        bytes
+    }
 
+    fn to_bytes(&self) -> Vec<u8> {
+        self.clone()
+    }
+}
 pub fn put_to_db<K: AsRef<[u8]>, V: ValueHandler>(db: &DB, key: K, value: &V) -> Result<(), Error> {
     db.put(key, value.to_bytes())
 }

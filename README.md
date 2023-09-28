@@ -31,3 +31,14 @@ Update to this if you are getting error for libp2p-noise on v0.39
 
 4. Start the service:
    `sudo systemctl start my_rust_app`
+
+
+
+cargo new --lib generate_abi_macro
+cargo build --target wasm32-wasi --release
+
+
+[lib]
+name = "sample"
+path = "src/erc20_functions.rs"
+proc-macro = true

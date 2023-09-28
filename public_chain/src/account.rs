@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use secp256k1::{Secp256k1, PublicKey, SecretKey};
 use libp2p::{
     swarm::{Swarm},

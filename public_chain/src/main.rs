@@ -88,7 +88,6 @@ async fn main() {
         "127.0.0.1:8096",
         "127.0.0.1:8097",
         ];
-    smart_contract::read_wasm_file("./sample.wasm");
     //sample generate public key
     let (public_key,private_key) = account::generate_keypair();
     println!("Generated public key: {:?}", public_key);
@@ -272,7 +271,7 @@ async fn main() {
                         cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, &mut swarm_public_net),
                         cmd if cmd.starts_with("create acc")=> account::create_account(cmd, &mut swarm_public_net),
                         cmd if cmd.starts_with("acc d")=> account::get_account(cmd, &mut swarm_public_net),
-                        cmd if cmd.starts_with("contract c")=> smart_contract::store_smart_contract(cmd, &mut swarm_public_net),
+                        cmd if cmd.starts_with("contract c")=> smart_contract::create_erc20_contract(cmd, &mut swarm_public_net),
                         _ => error!("unknown command"),  
                     },
                 }

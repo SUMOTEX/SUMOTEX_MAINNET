@@ -1,5 +1,4 @@
 use actix_web::{web, App, HttpResponse, HttpServer, Responder};
-use serde::Serialize;
 use crate::p2p::AppBehaviour;
 use std::sync::{Arc, Mutex};
 use serde_json::json;

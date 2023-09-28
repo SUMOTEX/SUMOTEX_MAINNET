@@ -1,12 +1,12 @@
 use std::collections::HashMap;
 use libp2p::{
-    floodsub::{Topic},
     swarm::{Swarm},
 };
-use secp256k1::{Secp256k1, PublicKey, SecretKey};
+use rocksdb::{DB,Error,DBWithThreadMode,SingleThreaded};
 use serde::{Deserialize, Serialize};
-use crate::rock_storage;
 use crate::p2p::AppBehaviour;
+use secp256k1::{Secp256k1, PublicKey, SecretKey};
+use crate::rock_storage;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use std::fs::File;
@@ -18,12 +18,6 @@ use wasmtime::MemoryType;
 use wasmtime::Linker;
 use wasmtime_wasi::sync::WasiCtxBuilder;
 
-pub fn generate_keypair()->(PublicKey,SecretKey) {
-    let secp = Secp256k1::new();
-    let mut rng = secp256k1::rand::thread_rng();
-    let (secret_key, public_key) = secp.generate_keypair(&mut rng);
-    (public_key,secret_key)
-}
 
 // Smart contract that is public structure
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -131,13 +125,31 @@ pub struct WasmContract {
     module: Module,
 }
 
-enum ParamValue {
+// Account structure
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Contract {
+    public_address: String,
+    contract_creator:String,
+    balance: f64,   
+    nonce: u64
+}
+
+
+pub enum ParamValue {
     Int64(i64),
     Int32(i32),
     U64(u64),
     U8(u8),
     Str(String),
 }
+
+pub fn generate_keypair()->(PublicKey,SecretKey) {
+    let secp = Secp256k1::new();
+    let mut rng = secp256k1::rand::thread_rng();
+    let (secret_key, public_key) = secp.generate_keypair(&mut rng);
+    (public_key,secret_key)
+}
+
 
 impl WasmContract {
     pub fn new(module_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
@@ -173,37 +185,45 @@ impl WasmContract {
     pub fn get_store(&mut self) -> &mut Store<WasiCtx> {
         &mut self.store
     }
-    // pub fn dynamic_call(&mut self, descriptor: &FunctionDescriptor, params: Vec<ParamValue>) -> Result<i64, Box<dyn std::error::Error>> {
+    pub fn call(&mut self,path:&DBWithThreadMode<SingleThreaded>,module_path: &str,pub_key:&str, name: &str, params: Vec<ParamValue>) -> Result<(), Box<dyn std::error::Error>> {
+        println!("Starting call function...");
 
-    //     let memory_export = self.instance.get_export(&mut self.store, "memory").ok_or("Failed to find 'memory' export")?;
-    //     let memory = if let wasmtime::Extern::Memory(memory) = memory_export {
-    //         memory
-    //     } else {
-    //         return Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Memory export not found")));
-    //     };
-        
-    //     let wasm_params: Vec<Val> = params.into_iter().flat_map(|param| {
-    //         match param {
-    //             ParamValue::Int32(i) => vec![Val::I32(i)].into_iter(),
-    //             ParamValue::Int64(i) => vec![Val::I64(i)].into_iter(),
-    //             ParamValue::Str(s) => {
-    //                 let (ptr, len) = self.write_string_to_memory(&memory, &s);
-    //                 vec![Val::I32(ptr), Val::I32(len)].into_iter() // Produces an iterator over two items.
-    //             },
-    //         }
-    //     }).collect();
-    //     let typed_func = self.instance.get_func(&mut self.store, &descriptor.name)
-    //         .ok_or_else(|| std::io::Error::new(std::io::ErrorKind::NotFound, "Function not found"))?
-    //         .typed::<&[Val], &[Val]>(&self.store)
-    //         .map_err(|e| std::io::Error::new(std::io::ErrorKind::Other, e.to_string()))?;
-        
-    //     let results = typed_func.call(&mut self.store, &wasm_params)?;
-        
-    //     match results.get(0) {
-    //         Some(Val::I64(i)) => Ok(i),
-    //         _ => Err(Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "Unexpected return type from the function")))
-    //     }
-    // }
+        println!("Creating Engine...");
+        let engine = Engine::default();
+    
+        println!("Creating Linker, WASI and store...");
+        let mut linker = Linker::new(&engine);
+        let wasi = WasiCtxBuilder::new()
+        .inherit_stdio()
+        .inherit_args().unwrap()
+        .build();
+        let mut store = Store::new(&engine, wasi);
+        println!("Adding WASI,module to Linker...");
+        let module = Module::from_file(&engine, module_path)?;
+        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+    
+        println!("Instantiating the Module...");
+        let link = linker.instantiate(&mut store, &module).map_err(|e| {
+            println!("Instantiation error: {:?}", e);
+            e
+        }).unwrap();
+        let wasm_memory = link
+        .get_memory(&mut store, "memory")
+        .ok_or_else(|| "Failed to find `memory` export")?;
+        let data = wasm_memory.data(&mut store);
+        let byte_vector: Vec<u8> = data.to_vec();
+        let _ = rock_storage::put_to_db(path,pub_key.clone().to_string(), &byte_vector)?;
+
+
+        println!("Getting Typed Function and Preparing to Call...");
+        let initialise_func = link.get_typed_func::<(i32, i32, i32, i32, i32, i64), i32>(&mut store, name).unwrap();
+
+        println!("Calling the WebAssembly Function...");
+        let results = initialise_func.call(&mut store, (1,2,3,4,5,6))?;
+    
+        println!("Function completed with Result: {:?}", results);
+        Ok(())
+    }     
     pub fn exported_functions(&self) -> Vec<String> {
         self.module.exports().map(|export| export.name().to_string()).collect()
     }
@@ -226,7 +246,16 @@ pub fn write_data_to_memory(memory: &Memory, input: &str, store: &mut Store<Wasi
 
     Ok((0, input_bytes.len() as i32)) // Placeholder for data_ptr, replace 0 with the actual pointer if possible
 }
-pub fn read_wasm_file(module_path: &str) -> Result<(), Box<dyn std::error::Error>>{
+fn val_to_param_value(val: Val) -> ParamValue {
+    match val {
+        Val::I32(i) => ParamValue::Int32(i),
+        Val::I64(i) => ParamValue::Int64(i),
+        // ... handle other cases as needed
+        _ => panic!("Unsupported conversion"),  // Or provide a better error handling mechanism.
+    }
+}
+
+pub fn read_wasm_file(module_path: &str,path: &DBWithThreadMode<SingleThreaded>,pub_key:String) -> Result<(), Box<dyn std::error::Error>>{
     match WasmContract::new(module_path){
         Ok(mut contract) => {
             println!("Contract successfully created.");
@@ -248,20 +277,18 @@ pub fn read_wasm_file(module_path: &str) -> Result<(), Box<dyn std::error::Error
                 Ok((ptr, len)) => (ptr, len),
                 Err(e) => return Err(e.into()),
             };
-
-            let args = vec![
-                Val::I32(name_ptr),
-                Val::I32(name_len),
-                Val::I32(symbol_ptr),
-                Val::I32(symbol_len),
+            let vals = vec![
+                Val::I32(name_ptr as i32), // Assuming you want to cast to i32
+                Val::I64(name_len as i64), // Assuming you want to cast to i64
+                Val::I32(symbol_ptr as i32), // Assuming you want to cast to i32
+                Val::I64(symbol_len as i64), // Assuming you want to cast to i64
                 Val::I32(8),
                 Val::I64(1000000),
-            ];    
-            println!("{:?}",args);
-            // let result = contract.prepare_and_call(&mut contract, "initialize", args_data);
+            ];
+            let args: Vec<ParamValue> = vals.into_iter().map(val_to_param_value).collect();
+            let result = contract.call(path,module_path,&pub_key,"initialize", args); 
             // match result {
             //     Ok(val) => println!("Function returned: {:?}", val),
-            //     Err(err) => eprintln!("Error: {}", err),
             // }
         },
         Err(e) => {
@@ -270,4 +297,11 @@ pub fn read_wasm_file(module_path: &str) -> Result<(), Box<dyn std::error::Error
     };
 
     Ok(())
+}
+
+pub fn create_erc20_contract(cmd:&str,swarm:  &mut Swarm<AppBehaviour>){
+    let contract_path = swarm.behaviour().storage_path.get_contract();
+    let (public_key,private_key) = generate_keypair();
+    read_wasm_file("./sample.wasm",contract_path,public_key.to_string());
+
 }
