@@ -4,7 +4,7 @@ use syn::Pat;
 use syn::FnArg;
 use quote::quote;
 // use syn::{Item,parse_macro_input};
-
+use quote::ToTokens;
 use syn::{parse_macro_input, ItemImpl, ImplItem};
 use std::fs::File;
 use std::io::prelude::*;
@@ -27,7 +27,7 @@ pub fn generate_abi(_attrs: TokenStream, input: TokenStream) -> TokenStream {
                             Pat::Ident(pat_ident) => &pat_ident.ident,
                             _ => continue,
                         };
-                        let type_name = quote! { #arg.ty }.to_string();
+                        let type_name = format!("{}", arg.ty.to_token_stream());
                         inputs.push(format!(r#"{{"name": "{}", "type": "{}"}}"#, arg_name, type_name));
                     },
                     _ => {},
@@ -49,5 +49,4 @@ pub fn generate_abi(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let mut file = File::create("./abi.json").unwrap();
     file.write_all(abi_string.as_bytes()).unwrap();
     TokenStream::from(expanded)
-
 }
