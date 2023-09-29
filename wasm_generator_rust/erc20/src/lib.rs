@@ -1,19 +1,19 @@
 use std::collections::HashMap;
 use bincode::{serialize_into, deserialize_from};
-use std::io::Cursor;
 use erc20_macro::generate_abi;
+use add_derive_macro::add_derive;
 use serde::{Serialize, Deserialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct ERC20Token {
-    name: String,
-    symbol: String,
-    decimals: u8,
-    total_supply: u64,
-    balances: HashMap<String, u64>,
-    allowed: HashMap<String, HashMap<String, u64>>,
+    pub name: String,
+    pub symbol: String,
+    pub decimals: u8,
+    pub total_supply: u64,
+    pub balances: HashMap<String, u64>,
+    pub allowed: HashMap<String, HashMap<String, u64>>,
 }
-    
+
 fn extract_string_from_wasm_memory(ptr: *mut u8, len: usize) -> String {
     let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
     String::from_utf8_lossy(slice).to_string()
