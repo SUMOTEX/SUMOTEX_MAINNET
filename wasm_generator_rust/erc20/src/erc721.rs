@@ -41,7 +41,7 @@ impl ERC721Token {
         name_len: usize, 
         symbol_ptr: *mut u8, 
         symbol_len: usize,
-    ) {
+    ) -> *mut u8 {
         // Extract name and symbol from wasm memory
         let name = extract_string_from_wasm_memory(name_ptr, name_len);
         let symbol = extract_string_from_wasm_memory(symbol_ptr, symbol_len);
@@ -64,7 +64,7 @@ impl ERC721Token {
         unsafe {
             std::ptr::copy_nonoverlapping(serialized_data.as_ptr(), buf, serialized_data.len());
         }
-        //buf
+        buf
         //Box::into_raw(Box::new(token))
     }
 

@@ -26,6 +26,7 @@ mod rock_storage;
 mod api;
 mod account;
 mod smart_contract;
+mod rpc_connector;
 use bridge::accept_loop;
 use crate::p2p::PEER_ID;
 use crate::p2p::KEYS;
@@ -77,7 +78,6 @@ async fn main() {
         ];
 
     let mut whitelisted_listener = vec![
-        "127.0.0.1:8088",
         "127.0.0.1:8089",
         "127.0.0.1:8090",
         "127.0.0.1:8091",
@@ -92,7 +92,11 @@ async fn main() {
     let (public_key,private_key) = account::generate_keypair();
     println!("Generated public key: {:?}", public_key);
     println!("Generated private key: {:?}", private_key);
-
+    println!("Before starting RPC server");
+    let rpc_runner = tokio::spawn(async{
+        rpc_connector::start_rpc().await
+    });
+    println!("After starting RPC server");
     //create storage
     let the_storage = create_pub_storage();
     //info!("Peer Id: {}", p2p::PEER_ID.clone());
@@ -271,7 +275,24 @@ async fn main() {
                         cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, &mut swarm_public_net),
                         cmd if cmd.starts_with("create acc")=> account::create_account(cmd, &mut swarm_public_net),
                         cmd if cmd.starts_with("acc d")=> account::get_account(cmd, &mut swarm_public_net),
-                        cmd if cmd.starts_with("contract c")=> smart_contract::create_erc20_contract(cmd, &mut swarm_public_net),
+                        cmd if cmd.starts_with("contract c")=> {
+                            match smart_contract::create_erc721_contract(cmd, &mut swarm_public_net) {
+                                Ok(_) => {} // Do nothing on success
+                                Err(e) => eprintln!("Error creating contract: {:?}", e), // Print the error
+                            }
+                        },
+                        cmd if cmd.starts_with("contract 20")=> {
+                            match smart_contract::create_erc20_contract(cmd, &mut swarm_public_net) {
+                                Ok(_) => {} // Do nothing on success
+                                Err(e) => eprintln!("Error creating contract: {:?}", e), // Print the error
+                            }
+                        },
+                        cmd if cmd.starts_with("contract key")=> {
+                            match smart_contract::get_erc20_supply(cmd, &mut swarm_public_net) {
+                                Ok(_) => {} // Do nothing on success
+                                Err(e) => eprintln!("Error creating ERC20 contract: {:?}", e), // Print the error
+                            }
+                        },
                         _ => error!("unknown command"),  
                     },
                 }

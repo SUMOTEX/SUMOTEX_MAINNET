@@ -1,0 +1,65 @@
+[{
+    "name": "deserialize_from_memory",
+    "type": "function",
+    "inputs": [{"name": "buffer", "type": "* const u8"},{"name": "len", "type": "usize"}]
+},{
+    "name": "serialize_to_memory",
+    "type": "function",
+    "inputs": [{"name": "token", "type": "& ERC20Token"},{"name": "buffer", "type": "* mut u8"}]
+},{
+    "name": "initialize",
+    "type": "function",
+    "inputs": [{"name": "name_ptr", "type": "* mut u8"},{"name": "name_len", "type": "usize"},{"name": "symbol_ptr", "type": "* mut u8"},{"name": "symbol_len", "type": "usize"},{"name": "decimals", "type": "u8"},{"name": "initial_supply", "type": "u64"}]
+},{
+    "name": "store_token_in_memory",
+    "type": "function",
+    "inputs": [{"name": "token_ptr", "type": "* mut ERC20Token"},{"name": "buffer", "type": "* mut u8"}]
+},{
+    "name": "load_token_from_memory",
+    "type": "function",
+    "inputs": [{"name": "buffer", "type": "* const u8"},{"name": "len", "type": "usize"}]
+},{
+    "name": "destroy",
+    "type": "function",
+    "inputs": [{"name": "token_ptr", "type": "* mut ERC20Token"}]
+},{
+    "name": "balance_of",
+    "type": "function",
+    "inputs": [{"name": "owner", "type": "String"}]
+},{
+    "name": "transfer",
+    "type": "function",
+    "inputs": [{"name": "to", "type": "String"},{"name": "value", "type": "u64"},{"name": "from", "type": "String"}]
+},{
+    "name": "approve",
+    "type": "function",
+    "inputs": [{"name": "spender", "type": "String"},{"name": "value", "type": "u64"},{"name": "owner", "type": "String"}]
+},{
+    "name": "allowance",
+    "type": "function",
+    "inputs": [{"name": "owner", "type": "String"},{"name": "spender", "type": "String"}]
+},{
+    "name": "transfer_from",
+    "type": "function",
+    "inputs": [{"name": "from", "type": "String"},{"name": "to", "type": "String"},{"name": "value", "type": "u64"},{"name": "spender", "type": "String"}]
+},{
+    "name": "read_name",
+    "type": "function",
+    "inputs": [{"name": "len", "type": "usize"}]
+},{
+    "name": "read_symbol",
+    "type": "function",
+    "inputs": [{"name": "len", "type": "usize"}]
+},{
+    "name": "total_supply",
+    "type": "function",
+    "inputs": []
+},{
+    "name": "read_decimals",
+    "type": "function",
+    "inputs": []
+},{
+    "name": "read_all_balances",
+    "type": "function",
+    "inputs": []
+}]

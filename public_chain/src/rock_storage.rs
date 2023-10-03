@@ -73,6 +73,13 @@ pub fn get_from_db<K: AsRef<[u8]>>(db: &DB, key: K) -> Option<String> {
         None => None,
     }
 }
+pub fn get_from_db_vector<K: AsRef<[u8]>>(db: &DB, key: K) -> Option<Vec<u8>> {
+    match db.get(key).unwrap() {
+        Some(bytes) => Some(bytes),
+        None => None,
+    }
+}
+
 
 // pub fn update_in_db<K: AsRef<[u8]>>(db: &DB, key: K, append_str: &str) {
 //     // Retrieve existing value

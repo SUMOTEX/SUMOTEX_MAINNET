@@ -58,6 +58,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "erc20_wasm"
+version = "0.1.0"
+dependencies = [
+ "bincode",
+ "quote",
+ "serde",
+ "serde_json",
+ "syn 1.0.109",
+ "wasm-bindgen",
+]
+
+[[package]]
 name = "itoa"
 version = "1.0.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"

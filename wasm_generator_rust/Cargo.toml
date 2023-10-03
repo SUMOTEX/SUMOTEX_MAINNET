@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [workspace]
-members = ["erc20", "erc20_macro","add_derive_macro"]
+members = ["erc20", "erc20_macro","add_derive_macro","erc20_wasm"]
 
 [lib]
 proc-macro = true
@@ -22,5 +22,4 @@ wasm-bindgen = "0.2"
 [[bin]]
 name = "wasm_generator_rust"
 path = "src/main.rs"
-
 
