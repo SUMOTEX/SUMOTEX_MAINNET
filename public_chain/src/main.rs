@@ -9,6 +9,7 @@ use tokio::{
     sync::mpsc,
     time::sleep
 };
+use std::fs;
 use libp2p::Multiaddr;
 use std::str::FromStr;
 use tokio::time::{Duration};
@@ -61,6 +62,13 @@ pub fn create_pub_storage()-> rock_storage::StoragePath{
     return the_storage;
 
 }
+pub fn remove_lock_file() {
+    let lock_path = "./public_blockchain/LOCK";
+    if let Err(e) = fs::remove_file(lock_path) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+}
+
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();

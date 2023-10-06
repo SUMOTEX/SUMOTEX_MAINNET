@@ -79,3 +79,44 @@ pub fn get_account(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
     }
 }
 
+
+// pub fn get_or_create_account(public_key_str: &str, db_path: &str) -> Account {
+//     // Attempt to retrieve the account from the database using the wrapper function.
+//     if let Some(stored_data) = get_from_db_wrapper(db_path, public_key_str.to_string()) {
+//         // If found, deserialize the account and return it
+//         if let Ok(account) = serde_json::from_str::<Account>(&stored_data) {
+//             return account;
+//         }
+//     }
+
+//     // If not found or there's a deserialization error, create a new account
+//     let account = Account::new();
+
+//     // Serialize and save the new account to the database using the put_to_db_wrapper.
+//     let serialized_data = serde_json::to_string(&account).expect("can jsonify request");
+//     put_to_db_wrapper(db_path, public_key_str.to_string(), &serialized_data);
+//     account
+// }
+
+// pub fn get_balance(public_key_str: &str, db_path: &str) -> Option<f64> {
+//     // Attempt to retrieve the account from the database
+//     if let Some(stored_data) = get_from_db_wrapper(db_path, public_key_str.to_string()) {
+//         // If found, deserialize the account
+//         if let Ok(account) = serde_json::from_str::<Account>(&stored_data) {
+//             return Some(account.balance);
+//         }
+//     }
+//     // Return None if account not found or there's a deserialization error
+//     None
+// }
+// fn get_from_db_wrapper(db_path: &str, key: String) -> Option<String> {
+//     rock_storage::get_from_db(&db_handle, key)
+// }
+
+// fn put_to_db_wrapper(db_path: &str, key: String, value: &str) {
+//     // Open or get the database handle.
+//     let db_handle = rock_storage::open_or_get_db(db_path);  // This function needs to exist.
+    
+//     // Now call the original put_to_db function with the correct handle.
+//     rock_storage::put_to_db(&db_handle, key, value);
+// }
