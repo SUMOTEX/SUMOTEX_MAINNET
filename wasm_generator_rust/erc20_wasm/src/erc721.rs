@@ -151,6 +151,7 @@ impl ERC721Token {
     #[no_mangle]
     pub extern "C" fn owner_of(&self, token_id: u64) -> Option<String> {
         self.owner_of.get(&token_id).cloned()
+        
     }
 
     #[no_mangle]

@@ -341,10 +341,10 @@ impl WasmContract {
     
         Ok(result)
     }
-    fn read_token_owner(&self, 
+    pub fn read_token_owner(&self, 
         contract_path: &DBWithThreadMode<SingleThreaded>, 
         contract_info: &ContractInfo, 
-        token_id: &i64) -> Result<String, Box<dyn std::error::Error>>
+        token_id: u64) -> Result<String, Box<dyn std::error::Error>>
     {   
         let function_name = "read_token";
         let engine = Engine::default();
@@ -364,8 +364,8 @@ impl WasmContract {
         // Convert token_id to expected format (assuming u64 for simplicity here)
     
         // Assuming the wasm function expects a single u64 parameter for token_id
-        let result: i64 = link.get_typed_func::<i64, i64>(&mut store, function_name)?
-            .call(&mut store, *token_id)?;
+        let result: i32 = link.get_typed_func::<i32, i32>(&mut store, function_name)?
+            .call(&mut store, token_id as i32)?;
     
         // Convert i64 result to String (for simplicity, directly converting; might require more meaningful conversion)
         Ok(result.to_string())
@@ -721,9 +721,9 @@ pub fn get_token_owner(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), 
             pub_key: data.to_string(),
         };
         let token_id = "1";
-        let token_id_u64: i64 = token_id.parse()?;
+        let token_id_u64: u64 = token_id.parse()?;
 
-        let owner = contract.read_token_owner(contract_path, &contract_info, &token_id_u64)?;
+        let owner = contract.read_token_owner(contract_path, &contract_info, token_id_u64)?;
         println!("Owner of token {}: {}", token_id_u64.clone(), owner);
     }
     Ok(())
