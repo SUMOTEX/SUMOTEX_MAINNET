@@ -26,8 +26,23 @@ use libp2p::PeerId;
 use libp2p::identity::{Keypair as IdentityKeypair};
 type MySwarm = Swarm<AppBehaviour>;
 
+use std::sync::{Arc, Mutex};
+use lazy_static::lazy_static;
 
-pub async fn create_public_swarm(app: App,storage:StoragePath) -> MySwarm {
+lazy_static! {
+    static ref GLOBAL_SWARM_PUBLIC_NET: Arc<Mutex<Option<Swarm<AppBehaviour>>>> = Arc::new(Mutex::new(None));
+}
+
+pub fn set_global_swarm_public_net(swarm: Swarm<AppBehaviour>) {
+    let mut global_swarm = GLOBAL_SWARM_PUBLIC_NET.lock().unwrap();
+    *global_swarm = Some(swarm);
+}
+
+pub fn get_global_swarm_public_net() -> Arc<Mutex<Option<Swarm<AppBehaviour>>>> {
+    Arc::clone(&GLOBAL_SWARM_PUBLIC_NET)
+}
+
+pub async fn create_public_swarm(app: App,storage:StoragePath) {
     // Create and initialize your swarm here
     info!("Peer Id: {}", PEER_ID.clone());
     let (response_sender, _response_rcv) = mpsc::unbounded_channel();
@@ -51,7 +66,8 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) -> MySwarm {
             spawn(fut);
         }))
         .build();
-    swarm
+    set_global_swarm_public_net(swarm);
+    //swarm
 
 }
 

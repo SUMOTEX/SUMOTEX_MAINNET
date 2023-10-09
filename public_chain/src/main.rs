@@ -101,9 +101,9 @@ async fn main() {
     println!("Generated public key: {:?}", public_key);
     println!("Generated private key: {:?}", private_key);
     println!("Before starting RPC server");
-    let rpc_runner = tokio::spawn(async{
-        rpc_connector::start_rpc().await
-    });
+    // let rpc_runner = tokio::spawn(async{
+    //     rpc_connector::start_rpc().await
+    // });
     println!("After starting RPC server");
     //create storage
     let the_storage = create_pub_storage();
@@ -113,7 +113,15 @@ async fn main() {
     let (publisher, mut publish_receiver, mut publish_bytes_receiver): (Publisher, mpsc::UnboundedReceiver<(String, String)>, mpsc::UnboundedReceiver<(String, Vec<u8>)>) = Publisher::new();
     Publisher::set(publisher);
     let app = App::new();
-    let mut swarm_public_net = public_swarm::create_public_swarm(app.clone(),the_storage).await;
+
+    public_swarm::create_public_swarm(app.clone(),the_storage).await;
+    let swarm_mutex = public_swarm::get_global_swarm_public_net();
+    // Lock the swarm and access it
+    let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    
+    if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
+        // Now, you can use swarm_public_net as you intended
+        // ...
+
     let mut stdin = BufReader::new(stdin()).lines();
     loop {
         if let Some(port) = whitelisted_listener.pop() {
@@ -143,7 +151,7 @@ async fn main() {
             let address_str = format!("{}",port);
             let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");        
             //Loop  to listen
-            match Swarm::listen_on(&mut swarm_public_net, the_address.clone()) {
+            match Swarm::listen_on( swarm_public_net, the_address.clone()) {
                 Ok(_) => {
                     info!("Listening on {:?}", the_address.clone());
                     spawn(async move {
@@ -279,24 +287,36 @@ async fn main() {
                         cmd if cmd.starts_with("ls b") => p2p::handle_print_chain(&swarm_public_net),
                         cmd if cmd.starts_with("ls t") => p2p::handle_print_txn(&swarm_public_net),
                         cmd if cmd.starts_with("ls rt") => p2p::handle_print_raw_txn(&swarm_public_net),
-                        cmd if cmd.starts_with("create b") => public_block::handle_create_block(cmd, &mut swarm_public_net),
-                        cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, &mut swarm_public_net),
-                        cmd if cmd.starts_with("create acc")=> account::create_account(cmd, &mut swarm_public_net),
-                        cmd if cmd.starts_with("acc d")=> account::get_account(cmd, &mut swarm_public_net),
+                        cmd if cmd.starts_with("create b") => public_block::handle_create_block(cmd,  swarm_public_net),
+                        cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd,  swarm_public_net),
+                        cmd if cmd.starts_with("create acc")=> account::create_account(cmd,  swarm_public_net),
+                        cmd if cmd.starts_with("acc d")=> account::get_account(cmd,  swarm_public_net),
                         cmd if cmd.starts_with("contract c")=> {
-                            match smart_contract::create_erc721_contract(cmd, &mut swarm_public_net) {
+                            match smart_contract::create_erc721_contract(cmd,  swarm_public_net) {
                                 Ok(_) => {} // Do nothing on success
                                 Err(e) => eprintln!("Error creating contract: {:?}", e), // Print the error
                             }
                         },
-                        cmd if cmd.starts_with("contract 20")=> {
-                            match smart_contract::create_erc20_contract(cmd, &mut swarm_public_net) {
+                        cmd if cmd.starts_with("mint token")=> {
+                            match smart_contract::mint_token(cmd,  swarm_public_net) {
                                 Ok(_) => {} // Do nothing on success
-                                Err(e) => eprintln!("Error creating contract: {:?}", e), // Print the error
+                                Err(e) => eprintln!("Error minting token: {:?}", e), // Print the error
+                            }
+                        },
+                        cmd if cmd.starts_with("mint token")=> {
+                            match smart_contract::mint_token(cmd,  swarm_public_net) {
+                                Ok(_) => {} // Do nothing on success
+                                Err(e) => eprintln!("Error minting token: {:?}", e), // Print the error
+                            }
+                        },
+                        cmd if cmd.starts_with("token id")=> {
+                            match smart_contract::get_token_owner(cmd,  swarm_public_net) {
+                                Ok(_) => {} // Do nothing on success
+                                Err(e) => eprintln!("Error getting token id: {:?}", e), // Print the error
                             }
                         },
                         cmd if cmd.starts_with("contract key")=> {
-                            match smart_contract::get_erc20_supply(cmd, &mut swarm_public_net) {
+                            match smart_contract::get_erc20_supply(cmd,  swarm_public_net) {
                                 Ok(_) => {} // Do nothing on success
                                 Err(e) => eprintln!("Error creating ERC20 contract: {:?}", e), // Print the error
                             }
@@ -307,5 +327,8 @@ async fn main() {
             }
 
         }
+    } else {
+        panic!("Swarm not initialized");
+    }
 
 }

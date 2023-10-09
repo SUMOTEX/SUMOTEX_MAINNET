@@ -37,15 +37,15 @@ impl ERC721Token {
     }
     #[no_mangle]
     pub extern "C" fn initialize(
-        name_ptr: *mut u8, 
+        name_ptr: *mut u8,  
         name_len: usize, 
         symbol_ptr: *mut u8, 
         symbol_len: usize,
-    ) -> *mut u8 {
+    ) -> *mut ERC721Token {
         // Extract name and symbol from wasm memory
         let name = extract_string_from_wasm_memory(name_ptr, name_len);
         let symbol = extract_string_from_wasm_memory(symbol_ptr, symbol_len);
-    
+        
         let token = ERC721Token {
             name: name,
             symbol: symbol,
@@ -53,38 +53,45 @@ impl ERC721Token {
             token_to_ipfs: HashMap::new(),
             next_token_id: 1,
         };
-
-        let serialized_data = token.to_memory().expect("Failed to serialize");
-
-        let buf = unsafe {
-            let layout = std::alloc::Layout::from_size_align(serialized_data.len(), 1).unwrap();
-            std::alloc::alloc(layout)
-        };
-        
-        unsafe {
-            std::ptr::copy_nonoverlapping(serialized_data.as_ptr(), buf, serialized_data.len());
-        }
-        buf
-        //Box::into_raw(Box::new(token))
+    
+        // Box and convert the token into a raw pointer
+        Box::into_raw(Box::new(token))
     }
-
     #[no_mangle]
-    pub extern "C" fn mint(&mut self, owner: String, ipfs_hash: String) -> u64 {
+    pub extern "C" fn mint(&mut self, owner_ptr: *const u8, owner_len: usize, ipfs_hash_ptr: *const u8, ipfs_hash_len: usize) -> u32 {
+        // Convert raw pointers to Rust strings
+        let owner_slice = unsafe { std::slice::from_raw_parts(owner_ptr, owner_len) };
+        let owner_str = std::str::from_utf8(owner_slice).expect("Failed to convert owner");
+    
+        let ipfs_hash_slice = unsafe { std::slice::from_raw_parts(ipfs_hash_ptr, ipfs_hash_len) };
+        let ipfs_hash_str = std::str::from_utf8(ipfs_hash_slice).expect("Failed to convert ipfs_hash");
+    
         let token_id = self.next_token_id;
-        self.owner_of.insert(token_id, owner.clone());
-        self.token_to_ipfs.insert(token_id, ipfs_hash);
+        self.owner_of.insert(token_id, owner_str.to_string());
+        self.token_to_ipfs.insert(token_id, ipfs_hash_str.to_string());
         self.next_token_id += 1;
-        token_id
+        token_id as u32
     }
-
     #[no_mangle]
-    pub extern "C" fn transfer(&mut self, from: String, to: String, token_id: u64) -> Result<(), &'static str> {
+    pub extern "C" fn transfer(&mut self, 
+        from_ptr: *const u8, 
+        from_len: usize, 
+        to_ptr: *const u8, 
+        to_len: usize, 
+        token_id: u64) -> Result<(), &'static str> {
+        // Convert raw pointers to Rust strings
+        let from_slice = unsafe { std::slice::from_raw_parts(from_ptr, from_len) };
+        let from_str = std::str::from_utf8(from_slice).expect("Failed to convert from");
+
+        let to_slice = unsafe { std::slice::from_raw_parts(to_ptr, to_len) };
+        let to_str = std::str::from_utf8(to_slice).expect("Failed to convert to");
+
         match self.owner_of.get(&token_id) {
-            Some(current_owner) if *current_owner == from => {
-                self.owner_of.insert(token_id, to);
-                Ok(())
-            },
-            _ => Err("Transfer not allowed"),
+        Some(current_owner) if *current_owner == from_str => {
+        self.owner_of.insert(token_id, to_str.to_string());
+        Ok(())
+        },
+        _ => Err("Transfer not allowed"),
         }
     }
 
@@ -109,9 +116,14 @@ impl ERC721Token {
     }
 
     #[no_mangle]
-    pub extern "C" fn total_tokens(&self) -> u64 {
-        self.next_token_id - 1
+    pub extern "C" fn total_tokens() -> i64 {
+        unsafe {
+            if let Some(token_ptr) = TOKEN_PTR {
+                ((*token_ptr).next_token_id - 1) as i64
+            } else {
+                // Return an error value or handle the case where the token is not initialized
+                -1
+            }
+        }
     }
 }
-
-// Rest of the utility functions and other methods...

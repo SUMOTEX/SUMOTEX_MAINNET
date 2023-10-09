@@ -18,7 +18,14 @@ use wasmtime::MemoryType;
 use wasmtime::Linker;
 use wasmtime_wasi::sync::WasiCtxBuilder;
 
-
+#[derive(Serialize, Deserialize)]
+pub struct ERC721Token {
+    pub name: String,
+    pub symbol: String,
+    pub owner_of: HashMap<u64, String>,  // tokenId -> owner address
+    pub token_to_ipfs: HashMap<u64, String>,  // tokenId -> IPFS hash
+    pub next_token_id: u64,
+}
 // Smart contract that is public structure
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct PublicSmartContract {
@@ -334,39 +341,166 @@ impl WasmContract {
     
         Ok(result)
     }
+    fn read_token_owner(&self, 
+        contract_path: &DBWithThreadMode<SingleThreaded>, 
+        contract_info: &ContractInfo, 
+        token_id: &i64) -> Result<String, Box<dyn std::error::Error>>
+    {   
+        let function_name = "read_token";
+        let engine = Engine::default();
+        let mut linker = Linker::new(&engine);
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+        let mut store = Store::new(&engine, wasi);
+    
+        let module = Module::from_file(&engine, &contract_info.module_path)?;
+        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+        let link = linker.instantiate(&mut store, &module)?;
+        let wasm_memory = link.get_memory(&mut store, "memory")
+        .ok_or_else(|| "Failed to find `memory` export")?;
+        let saved_data = rock_storage::get_from_db_vector(contract_path, &contract_info.pub_key).unwrap_or_default();
+
+        // 2.2. Set this memory state into the WebAssembly module's memory.
+        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
+        // Convert token_id to expected format (assuming u64 for simplicity here)
+    
+        // Assuming the wasm function expects a single u64 parameter for token_id
+        let result: i64 = link.get_typed_func::<i64, i64>(&mut store, function_name)?
+            .call(&mut store, *token_id)?;
+    
+        // Convert i64 result to String (for simplicity, directly converting; might require more meaningful conversion)
+        Ok(result.to_string())
+    }
+    
     pub fn mint_token(
         &self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
         contract_info: &ContractInfo,
         pub_key: &str,
-        function_name: &str,
-    ) -> Result<i64, Box<dyn std::error::Error>> {
+        ipfs_hash: &str, 
+        wasm_params: &WasmParams,
+    ) -> Result<u32, Box<dyn std::error::Error>> {
+        println!("Initializing engine and linker...");
+        println!("Contract name and pub key {:?}",pub_key);
         let engine = Engine::default();
         let mut linker = Linker::new(&engine);
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
         let mut store = Store::new(&engine, wasi);
-        
-        // 1. Instantiate the WebAssembly module.
+    
+        println!("Attempting to instantiate the WebAssembly module...");
         let module = Module::from_file(&engine, &contract_info.module_path)?;
         wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
         let link = linker.instantiate(&mut store, &module)?;
-        
-        // 2. Get the WebAssembly memory.
+        // ... (Your operations using token_instance)
+    
+        println!("Fetching WebAssembly memory...");
+    
         let wasm_memory = link.get_memory(&mut store, "memory")
             .ok_or_else(|| "Failed to find `memory` export")?;
         let saved_data = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
         // 2.2. Set this memory state into the WebAssembly module's memory.
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
+        for export in module.exports() {
+            println!("Exported item: {}", export.name());
+        }        
+        let test_amount_supply_func = link.get_typed_func::<(), u64>(&mut store, "total_tokens")?;
+        println!("Attempting to call total_tokens function in the WebAssembly module...");
+        match link.get_typed_func::<(), u64>(&mut store, "total_tokens") {
+            Ok(func) => {
+                let result = func.call(&mut store, ());
+                match result {
+                    Ok(value) => println!("Supply {:?}", value),
+                    Err(e) => println!("Error calling total_tokens: {}", e),
+                }
+            }
+            Err(e) => println!("Error getting total_tokens function: {}", e),
+        }
+        let result = test_amount_supply_func.call(&mut store, ())?;
+        println!("Supply {:?}", result);
+        println!("Writing data to WebAssembly memory...");
     
-        // 3. Call the desired function in the WebAssembly module by its name.
-        let result = link.get_typed_func::<_, i64>(&mut store, function_name)?
-        .call(&mut store, ())?;
+        let owner_bytes = pub_key.as_bytes();
+        let ipfs_bytes = ipfs_hash.as_bytes();
     
-        Ok(result)
+        // wasm_memory.data_mut(&mut store)[wasm_params.args[0].unwrap_i32() as usize..(wasm_params.args[0].unwrap_i32() as usize + owner_bytes.len())].copy_from_slice(owner_bytes);
+        // wasm_memory.data_mut(&mut store)[wasm_params.args[2].unwrap_i32() as usize..(wasm_params.args[2].unwrap_i32() as usize + ipfs_bytes.len())].copy_from_slice(ipfs_bytes);
+    
+        println!("Attempting to call mint function in the WebAssembly module...");
+    
+        let mint_func = match link.get_typed_func::<(i32,i32,i32,i32), u32>(&mut store, "mint") {
+            Ok(func) => func,
+            Err(err) => {
+                println!("Error retrieving the 'mint' function: {}", err);
+                return Err(err.into());
+            }
+        };
+        
+        let result = mint_func.call(&mut store, (
+            wasm_params.args[0].unwrap_i32(),
+            owner_bytes.len() as i32,
+            wasm_params.args[2].unwrap_i32(),
+            ipfs_bytes.len() as i32,
+        ));
+        match result {
+            Ok(value) => {
+                let updated_data = wasm_memory.data(&mut store);
+                let updated_byte_vector: Vec<u8> = updated_data.to_vec();
+                rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
+                println!("Function succeeded with value: {:?}", value);
+            }
+            Err(err) => {
+                println!("Function failed with error: {}", err);
+            }
+        }
+        Ok(1)
     }
+    
+    
+    
     pub fn exported_functions(&self) -> Vec<String> {
         self.module.exports().map(|export| export.name().to_string()).collect()
     }
+    pub fn get_ipfs_link(
+        &self,
+        contract_path: &DBWithThreadMode<SingleThreaded>,
+        contract_info: &ContractInfo,
+        token_id: u64,
+    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+        
+        let result_bytes = self.read(contract_path, contract_info, &contract_info.pub_key, "get_ipfs_link")?;
+        let result_string = String::from_utf8(result_bytes)?;
+
+        Ok(Some(result_string))
+    }
+    pub fn get_erc20_name(cmd: &str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
+        if let Some(data) = cmd.strip_prefix("contract name ") {
+            let contract = WasmContract::new("./sample.wasm")?;
+            let contract_path = swarm.behaviour().storage_path.get_contract();
+    
+            let contract_info = ContractInfo {
+                module_path: "./sample.wasm".to_string(),
+                pub_key: data.to_string(),
+            };
+    
+            let name = contract.read_name(contract_path, &contract_info, &data.to_string())?;
+    
+            println!("Contract Name: {}", name);
+        }
+        Ok(())
+    }
+    pub fn read_name(
+        &self,
+        contract_path: &DBWithThreadMode<SingleThreaded>,
+        contract_info: &ContractInfo,
+        pub_key: &str,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        // Call the 'read_symbol' function using the same mechanism
+        let result_bytes = self.read(contract_path, contract_info, pub_key, "read_name")?;
+
+        // Convert the result bytes into a string
+        let result_string = String::from_utf8(result_bytes)?;
+
+        Ok(result_string)
+    }    
 }
 
 pub fn create_memory(store: &mut Store<WasiCtx>) -> Result<Memory, Box<dyn std::error::Error>> {
@@ -552,15 +686,45 @@ pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn
             module_path: "./sample721.wasm".to_string(),
             pub_key:data.to_string(),
         };
-        let result = contract.mint_token(contract_path,&contract_info,&data.to_string(),"mint");
+        let the_memory = create_memory(contract.get_store())?;
+        let (name_ptr, name_len) = write_data_to_memory(&the_memory, "0x7B502C3A1F48C8609AE212CDFB639DEE39673F5E", contract.get_store())?;
+        let (ipfs_ptr, ipfs_len) = write_data_to_memory(&the_memory, "SMTX_IPFS_TEST", contract.get_store())?;    
+        let wasm_params = WasmParams {
+            name: "mint".to_string(),
+            args: vec![
+                Val::I32(name_ptr as i32),
+                Val::I32(name_len as i32),
+                Val::I32(ipfs_ptr as i32),
+                Val::I32(ipfs_len as i32)
+            ],
+        };
+        let ipfs_hash = "TEST_IPFS";
+        let result = contract.mint_token(contract_path, &contract_info,&data.to_string(),ipfs_hash,&wasm_params);
         match result {
             Ok(value) => {
-                println!("Total Supply: {}", value);
+                println!("Mint: {}", value);
             }
             Err(e) => {
                 println!("Error reading: {}", e);
             }
         }
+    }
+    Ok(())
+}
+
+pub fn get_token_owner(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(data) = cmd.strip_prefix("token id ") {
+        let mut contract = WasmContract::new("./sample721.wasm")?;
+        let contract_path = swarm.behaviour().storage_path.get_contract();
+        let contract_info = ContractInfo {
+            module_path: "./sample721.wasm".to_string(),
+            pub_key: data.to_string(),
+        };
+        let token_id = "1";
+        let token_id_u64: i64 = token_id.parse()?;
+
+        let owner = contract.read_token_owner(contract_path, &contract_info, &token_id_u64)?;
+        println!("Owner of token {}: {}", token_id_u64.clone(), owner);
     }
     Ok(())
 }

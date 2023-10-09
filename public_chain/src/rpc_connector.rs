@@ -21,7 +21,7 @@ struct RpcRequest {
 // Route to handle RPC requests.
 #[post("/", data = "<request>")]
 fn handle_rpc(request: Json<RpcRequest>) -> Json<serde_json::Value> {
-    println!("RPC called");
+   // println!("RPC called");
     match request.method.as_str() {
         "eth_chainId" => {
             Json(json!({"jsonrpc": "2.0", "id": request.id, "result": "0x184"}))  // 0x58 is 88 in hexadecimal
