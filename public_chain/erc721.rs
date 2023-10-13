@@ -2,8 +2,6 @@ use std::collections::HashMap;
 use bincode::{serialize_into, deserialize_from};
 use serde::{Serialize, Deserialize};
 use std::io::Cursor;
-use std::collections::hash_map::DefaultHasher;
-use std::hash::{Hash, Hasher};
 
 #[derive(Serialize, Deserialize)]
 pub struct ERC721Token {
@@ -22,7 +20,9 @@ fn extract_string_from_wasm_memory(ptr: *mut u8, len: usize) -> String {
     let slice = unsafe { std::slice::from_raw_parts(ptr, len) };
     String::from_utf8_lossy(slice).to_string()
 }
-
+fn token_details_to_bytes(details: &TokenDetails) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
+    Ok(bincode::serialize(details)?)
+}
 static mut TOKEN_PTR: Option<*mut ERC721Token> = None;
 static mut GLOBAL_INSTANCE: Option<ERC721Token> = None;
 
@@ -46,7 +46,6 @@ impl ERC721Token {
         serialize_into(&mut serialized_data, self)?;
         Ok(serialized_data)
     }
-
     #[no_mangle]
     pub extern "C" fn initialize(
         name_ptr: *mut u8,  
@@ -70,7 +69,6 @@ impl ERC721Token {
         let token_ptr =  Box::into_raw(Box::new(token));
         unsafe {
             TOKEN_PTR = Some(token_ptr);
-            //GLOBAL_INSTANCE = Some(*Box::from_raw(token_ptr));
         }
     }
 
@@ -92,91 +90,60 @@ impl ERC721Token {
         let token = Self::deserialize_from_memory(buffer, len).expect("Failed to deserialize");
         Box::into_raw(Box::new(token))
     }
+
     #[no_mangle]
     pub extern "C" fn mint(owner_ptr: *const u8, owner_len: usize, ipfs_hash_ptr: *const u8, ipfs_hash_len: usize) -> i32 {
-        let token = match unsafe { TOKEN_PTR } {
-            Some(ptr) => unsafe { &mut *ptr },
-            None => return i32::MAX, // Error value indicating uninitialized TOKEN_PTR.
+        let token = unsafe {
+            if let Some(ptr) = TOKEN_PTR {
+                &mut *ptr
+            } else {
+                return i32::MAX; // Error value indicating uninitialized TOKEN_PTR.
+            }
         };
         
         let owner_slice = unsafe { std::slice::from_raw_parts(owner_ptr, owner_len) };
-        let owner_str = match std::str::from_utf8(owner_slice) {
-            Ok(s) => s,
-            Err(_) => return -1, // Error value indicating invalid owner string.
-        };
+        let owner_str = std::str::from_utf8(owner_slice).expect("Failed to convert owner");
         
         let ipfs_hash_slice = unsafe { std::slice::from_raw_parts(ipfs_hash_ptr, ipfs_hash_len) };
-        let ipfs_hash_str = match std::str::from_utf8(ipfs_hash_slice) {
-            Ok(s) => s,
-            Err(_) => return -1, // Error value indicating invalid IPFS hash string.
-        };
+        let ipfs_hash_str = std::str::from_utf8(ipfs_hash_slice).expect("Failed to convert ipfs_hash");
     
         let token_id = token.next_token_id;
-    
-        // Check if the token ID already exists in the HashMap and handle accordingly.
-        if token.owner_of.contains_key(&token_id) || token.token_to_ipfs.contains_key(&token_id) {
-            return -1; // An error value indicating duplicate token ID.
-        }
-    
-        // Insert the owner and IPFS hash into the HashMap.
         token.owner_of.insert(token_id, owner_str.to_string());
         token.token_to_ipfs.insert(token_id, ipfs_hash_str.to_string());
-        
         token.next_token_id += 1;
     
         token_id as i32
     }
-    
-    
-    // #[no_mangle]
-    // pub extern "C" fn mint(owner_ptr: *const u8, owner_len: usize, ipfs_hash_ptr: *const u8, ipfs_hash_len: usize) -> i32 {
-    //     let token = unsafe {
-    //         if let Some(ptr) = TOKEN_PTR {
-    //             &mut *ptr
-    //         } else {
-    //             return i32::MAX; // Error value indicating uninitialized TOKEN_PTR.
-    //         }
-    //     };
+    pub fn convert_details_to_f64(details: &TokenDetails) -> f64 {
+        // Implement your logic to convert TokenDetails into an f64 here
+        // For example, you can calculate the length of the owner's name and use it as an f64.
+        let owner_name_length = details.owner.len() as f64;
         
-    //     let owner_slice = unsafe { std::slice::from_raw_parts(owner_ptr, owner_len) };
-    //     let owner_str = std::str::from_utf8(owner_slice).expect("Failed to convert owner");
+        // You can add more logic here based on your specific requirements.
         
-    //     let ipfs_hash_slice = unsafe { std::slice::from_raw_parts(ipfs_hash_ptr, ipfs_hash_len) };
-    //     let ipfs_hash_str = std::str::from_utf8(ipfs_hash_slice).expect("Failed to convert ipfs_hash");
-    
-    //     let token_id = token.next_token_id;
-    //     token.owner_of.insert(token_id, owner_str.to_string());
-    //     token.token_to_ipfs.insert(token_id, ipfs_hash_str.to_string());
-    //     token.next_token_id += 1;
-    
-    //     token_id as i32
-    // }
+        // Return the calculated value as an f64.
+        owner_name_length
+    }
     #[no_mangle]
-    pub extern "C" fn read_token(token_id: i32) -> i64 {
-        let token = match unsafe { TOKEN_PTR } {
-            Some(ptr) => unsafe { &*ptr },
-            None => return -1, // Error value indicating uninitialized TOKEN_PTR.
+    pub extern "C" fn read_token(token_id: i32) -> f64 {
+        let instance = unsafe {
+            GLOBAL_INSTANCE.as_ref().expect("Instance not initialized")
         };
-    
-        if let Some(details) = token.get_token_details(token_id) {
-            let result = Self::convert_details_to_i64(&details);
-            return result;
+        if let Some(details) = instance.get_token_details(token_id) {
+            // Assuming you have some logic to convert TokenDetails into an f64
+            let result_as_f64 = Self::convert_details_to_f64(&details);
+            return result_as_f64;
         }
-    
-        // If details are not found, return an appropriate error value or default i64 value
-        -1
+        0.0 // Return a default value if details are not found
     }
-    
-    fn convert_details_to_i64(details: &TokenDetails) -> i64 {
-        // Implement your logic to convert TokenDetails into an i64 value here
-        // For example, using the length of the owner string as the value
-        details.owner.len() as i64
-    }
+
     fn get_token_details(&self, token_id: i32) -> Option<TokenDetails> {
         let owner = self.owner_of.get(&token_id)?.clone();
         let ipfs_link = self.token_to_ipfs.get(&token_id)?.clone();
         Some(TokenDetails { owner, ipfs_link })
     }
+
+    
     #[no_mangle]
     pub extern "C" fn transfer(&mut self, 
         from_ptr: *const u8, 

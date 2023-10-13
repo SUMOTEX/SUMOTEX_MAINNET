@@ -26,6 +26,11 @@ pub struct ERC721Token {
     pub token_to_ipfs: HashMap<u64, String>,  // tokenId -> IPFS hash
     pub next_token_id: u64,
 }
+#[derive(Serialize, Deserialize, Clone)]
+pub struct TokenDetails {
+    pub owner: String,
+    pub ipfs_link: String,
+}
 // Smart contract that is public structure
 #[derive(Serialize, Deserialize, Debug, Clone)]
 struct PublicSmartContract {
@@ -341,10 +346,13 @@ impl WasmContract {
     
         Ok(result)
     }
+    fn bytes_to_token_details(data: &[u8]) -> Result<TokenDetails, Box<dyn std::error::Error>> {
+        Ok(bincode::deserialize(data)?)
+    }
     pub fn read_token_owner(&self, 
         contract_path: &DBWithThreadMode<SingleThreaded>, 
         contract_info: &ContractInfo, 
-        token_id: u64) -> Result<String, Box<dyn std::error::Error>>
+        token_id: i32) -> Result<String, Box<dyn std::error::Error>>
     {   
         let function_name = "read_token";
         let engine = Engine::default();
@@ -363,10 +371,11 @@ impl WasmContract {
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
         // Convert token_id to expected format (assuming u64 for simplicity here)
     
-        // Assuming the wasm function expects a single u64 parameter for token_id
-        let result: i32 = link.get_typed_func::<i32, i32>(&mut store, function_name)?
-            .call(&mut store, token_id as i32)?;
-    
+        let result: i64 = link.get_typed_func::<i32, i64>(&mut store, function_name)?
+        .call(&mut store, token_id)?;    
+            
+        let result_str = result.to_string();
+        println!("{:?}", result_str);
         // Convert i64 result to String (for simplicity, directly converting; might require more meaningful conversion)
         Ok(result.to_string())
     }
@@ -721,7 +730,7 @@ pub fn get_token_owner(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), 
             pub_key: data.to_string(),
         };
         let token_id = "1";
-        let token_id_u64: u64 = token_id.parse()?;
+        let token_id_u64: i32 = token_id.parse()?;
 
         let owner = contract.read_token_owner(contract_path, &contract_info, token_id_u64)?;
         println!("Owner of token {}: {}", token_id_u64.clone(), owner);
