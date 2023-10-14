@@ -17,6 +17,9 @@ use wasmtime_wasi::WasiCtx;
 use wasmtime::MemoryType;
 use wasmtime::Linker;
 use wasmtime_wasi::sync::WasiCtxBuilder;
+use bincode::{serialize, deserialize};
+use bincode::{ Error as BincodeError};
+use rocksdb::Error as RocksDBError;
 
 #[derive(Serialize, Deserialize)]
 pub struct ERC721Token {
@@ -26,7 +29,7 @@ pub struct ERC721Token {
     pub token_to_ipfs: HashMap<u64, String>,  // tokenId -> IPFS hash
     pub next_token_id: u64,
 }
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize,Debug, Clone)]
 pub struct TokenDetails {
     pub owner: String,
     pub ipfs_link: String,
@@ -370,14 +373,44 @@ impl WasmContract {
         // 2.2. Set this memory state into the WebAssembly module's memory.
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
         // Convert token_id to expected format (assuming u64 for simplicity here)
-    
-        let result: i64 = link.get_typed_func::<i32, i64>(&mut store, function_name)?
-        .call(&mut store, token_id)?;    
+        // Assuming `link` is of type `wasmtime::Link`
+        let result = link.get_typed_func::<i32, i64>(&mut store, function_name)?.call(&mut store, token_id)?;
+        println!("{:?}",result);
+        let result_to_unpack = Self::unpack_result(result);
+        println!("{:?}", result_to_unpack);
+        // let result_str = result.to_string();
+        // println!("{:?}", result_str);
+        // let result_to_u8 = Self::i64_to_u8_array(result);
+        // let the_result = Self::decode_token_details(&result_to_u8);
+        Ok("".to_string())
+    }
+    pub fn unpack_result(result: i64) -> Option<TokenDetails> {
+        // Extract the usize value (shifted to the right by 32 bits)
+        let length = (result >> 32) as usize;
+        
+        // Check if length is within a valid range (positive and not too large)
+        if length > 0 && length <= u8::MAX as usize {
+            // Extract the u8 value (lower 8 bits)
+            let value = (result & 0xFF) as u8;
             
-        let result_str = result.to_string();
-        println!("{:?}", result_str);
-        // Convert i64 result to String (for simplicity, directly converting; might require more meaningful conversion)
-        Ok(result.to_string())
+            let mut encoded_value = vec![0u8; length];
+            encoded_value[0] = value;
+            
+            // Now you have the original encoded_value
+    
+            // Decode the encoded_value into TokenDetails
+            if let Ok(details) = Self::decode_token_details(&encoded_value) {
+                return Some(details);
+            }
+        }
+        None // Return None if unpacking or decoding fails
+    }
+    pub fn decode_token_details(encoded_bytes: &[u8]) -> Result<TokenDetails, Box<dyn std::error::Error>> {
+        let details = match deserialize(encoded_bytes) {
+            Ok(value) => value,
+            Err(err) => return Err(err.into()),
+        };
+        Ok(details)
     }
     
     pub fn mint_token(
@@ -462,8 +495,6 @@ impl WasmContract {
         }
         Ok(1)
     }
-    
-    
     
     pub fn exported_functions(&self) -> Vec<String> {
         self.module.exports().map(|export| export.name().to_string()).collect()

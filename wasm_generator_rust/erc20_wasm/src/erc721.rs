@@ -4,6 +4,7 @@ use serde::{Serialize, Deserialize};
 use std::io::Cursor;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
+use bincode::{serialize};
 
 #[derive(Serialize, Deserialize)]
 pub struct ERC721Token {
@@ -155,23 +156,33 @@ impl ERC721Token {
     pub extern "C" fn read_token(token_id: i32) -> i64 {
         let token = match unsafe { TOKEN_PTR } {
             Some(ptr) => unsafe { &*ptr },
-            None => return -1, // Error value indicating uninitialized TOKEN_PTR.
+            None => return -1, // Return -1 indicating uninitialized TOKEN_PTR.
         };
     
         if let Some(details) = token.get_token_details(token_id) {
-            let result = Self::convert_details_to_i64(&details);
-            return result;
-        }
+            // Convert TokenDetails into u8 bytes
+            let encoded_value = Self::encode_token_details(&details);
+            let length = encoded_value.len();
     
-        // If details are not found, return an appropriate error value or default i64 value
-        -1
+            // Pack the u8 and usize values into an i64
+            let packed_result = ((length as i64) << 32) | (encoded_value[0] as i64);
+            packed_result
+        } else {
+            // If details are not found, return -1
+            -1
+        }
     }
     
-    fn convert_details_to_i64(details: &TokenDetails) -> i64 {
+    pub fn convert_details_to_i64(details: &TokenDetails) -> i64 {
         // Implement your logic to convert TokenDetails into an i64 value here
         // For example, using the length of the owner string as the value
         details.owner.len() as i64
     }
+    pub fn encode_token_details(details: &TokenDetails) -> Vec<u8> {
+        let encoded_bytes = serialize(details).expect("Encoding failed");
+        encoded_bytes
+    }
+
     fn get_token_details(&self, token_id: i32) -> Option<TokenDetails> {
         let owner = self.owner_of.get(&token_id)?.clone();
         let ipfs_link = self.token_to_ipfs.get(&token_id)?.clone();
