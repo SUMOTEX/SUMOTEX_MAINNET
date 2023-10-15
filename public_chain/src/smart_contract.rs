@@ -352,7 +352,7 @@ impl WasmContract {
     fn bytes_to_token_details(data: &[u8]) -> Result<TokenDetails, Box<dyn std::error::Error>> {
         Ok(bincode::deserialize(data)?)
     }
-    pub fn read_token_owner(&self, 
+    pub fn read_token(&self, 
         contract_path: &DBWithThreadMode<SingleThreaded>, 
         contract_info: &ContractInfo, 
         token_id: i32) -> Result<String, Box<dyn std::error::Error>>
@@ -376,7 +376,7 @@ impl WasmContract {
         // Assuming `link` is of type `wasmtime::Link`
         let result = link.get_typed_func::<i32, i64>(&mut store, function_name)?.call(&mut store, token_id)?;
         println!("{:?}",result);
-        let result_to_unpack = Self::unpack_result(result);
+        let result_to_unpack =Self::decode_token_details(result, &wasm_memory, &mut store)?;
         println!("{:?}", result_to_unpack);
         // let result_str = result.to_string();
         // println!("{:?}", result_str);
@@ -384,35 +384,52 @@ impl WasmContract {
         // let the_result = Self::decode_token_details(&result_to_u8);
         Ok("".to_string())
     }
-    pub fn unpack_result(result: i64) -> Option<TokenDetails> {
-        // Extract the usize value (shifted to the right by 32 bits)
-        let length = (result >> 32) as usize;
-        
-        // Check if length is within a valid range (positive and not too large)
-        if length > 0 && length <= u8::MAX as usize {
-            // Extract the u8 value (lower 8 bits)
-            let value = (result & 0xFF) as u8;
-            
-            let mut encoded_value = vec![0u8; length];
-            encoded_value[0] = value;
-            
-            // Now you have the original encoded_value
+
+    pub fn decode_token_details(
+        encoded_value: i64,
+        wasm_memory: &wasmtime::Memory,
+        store: &mut wasmtime::Store<WasiCtx>,
+    ) -> Result<TokenDetails, Box<dyn std::error::Error>> {
+        // Extract pointer and length
+        let pointer = (encoded_value >> 32) as usize;
+        let length = (encoded_value & 0xFFFFFFFF) as usize;
     
-            // Decode the encoded_value into TokenDetails
-            if let Ok(details) = Self::decode_token_details(&encoded_value) {
-                return Some(details);
-            }
+        // Validate pointer and length
+        let mem_size = wasm_memory.data(&mut *store).len();
+        let data = &wasm_memory.data(&mut *store)[pointer..pointer + length];
+        if pointer + length > mem_size {
+            return Err(Box::new(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                "Pointer and length exceed WebAssembly memory size.",
+            )));
         }
-        None // Return None if unpacking or decoding fails
-    }
-    pub fn decode_token_details(encoded_bytes: &[u8]) -> Result<TokenDetails, Box<dyn std::error::Error>> {
-        let details = match deserialize(encoded_bytes) {
-            Ok(value) => value,
-            Err(err) => return Err(err.into()),
-        };
-        Ok(details)
-    }
     
+        // Read data from WebAssembly memory
+
+        // Deserialize the data
+        bincode::deserialize(data).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
+    }
+    // pub fn unpack_result(result: i64) -> Option<TokenDetails> {
+    //     // Extract the usize value (shifted to the right by 32 bits)
+    //     let length = (result >> 32) as usize;    
+        
+    //     // Check if length is within a valid range (positive and not too large)
+    //     if length > 0 && length <= u8::MAX as usize {
+    //         // Extract the u8 value (lower 8 bits)
+    //         let value = (result & 0xFF) as u8;
+            
+    //         let mut encoded_value = vec![0u8; length];
+    //         encoded_value[0] = value;
+            
+    //         // Now you have the original encoded_value
+    
+    //         // Decode the encoded_value into TokenDetails
+    //         if let Ok(details) = Self::decode_token_details(&encoded_value) {
+    //             return Some(details);
+    //         }
+    //     }
+    //     None // Return None if unpacking or decoding fails
+    // }
     pub fn mint_token(
         &self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
@@ -763,7 +780,7 @@ pub fn get_token_owner(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), 
         let token_id = "1";
         let token_id_u64: i32 = token_id.parse()?;
 
-        let owner = contract.read_token_owner(contract_path, &contract_info, token_id_u64)?;
+        let owner = contract.read_token(contract_path, &contract_info, token_id_u64)?;
         println!("Owner of token {}: {}", token_id_u64.clone(), owner);
     }
     Ok(())

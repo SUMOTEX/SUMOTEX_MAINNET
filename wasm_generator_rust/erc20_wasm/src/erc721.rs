@@ -26,6 +26,7 @@ fn extract_string_from_wasm_memory(ptr: *mut u8, len: usize) -> String {
 
 static mut TOKEN_PTR: Option<*mut ERC721Token> = None;
 static mut GLOBAL_INSTANCE: Option<ERC721Token> = None;
+static mut TOKEN_DETAILS_BUFFER: [u8; 1024] = [0; 1024];
 
 impl ERC721Token {
     fn deserialize_from_memory(buffer: *const u8, len: usize) -> Result<ERC721Token, Box<dyn std::error::Error>> {
@@ -128,7 +129,6 @@ impl ERC721Token {
         token_id as i32
     }
     
-    
     // #[no_mangle]
     // pub extern "C" fn mint(owner_ptr: *const u8, owner_len: usize, ipfs_hash_ptr: *const u8, ipfs_hash_len: usize) -> i32 {
     //     let token = unsafe {
@@ -173,11 +173,6 @@ impl ERC721Token {
         }
     }
     
-    pub fn convert_details_to_i64(details: &TokenDetails) -> i64 {
-        // Implement your logic to convert TokenDetails into an i64 value here
-        // For example, using the length of the owner string as the value
-        details.owner.len() as i64
-    }
     pub fn encode_token_details(details: &TokenDetails) -> Vec<u8> {
         let encoded_bytes = serialize(details).expect("Encoding failed");
         encoded_bytes
