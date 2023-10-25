@@ -16,6 +16,7 @@ use wasmtime::Val;
 use wasmtime_wasi::WasiCtx;
 use wasmtime::MemoryType;
 use wasmtime::Linker;
+use wasmtime::component::Type;
 use wasmtime_wasi::sync::WasiCtxBuilder;
 use bincode::{serialize, deserialize};
 use bincode::{ Error as BincodeError};
@@ -42,6 +43,13 @@ struct PublicSmartContract {
     nonce: u64,
     timestamp:u64,
 }
+#[repr(C)]
+#[derive(Debug)]
+pub struct OwnerData {
+    ptr: i32,
+    len: i32,
+}
+
 
 impl PublicSmartContract {
     // Creates a new PublicSmartContract
@@ -369,21 +377,93 @@ impl WasmContract {
         let wasm_memory = link.get_memory(&mut store, "memory")
         .ok_or_else(|| "Failed to find `memory` export")?;
         let saved_data = rock_storage::get_from_db_vector(contract_path, &contract_info.pub_key).unwrap_or_default();
-
+      
         // 2.2. Set this memory state into the WebAssembly module's memory.
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
+        println!("Memory: {:?}", saved_data);   
+        let empty = Self::is_memory_empty(&wasm_memory, &store);
+        println!("Memory is empty: {}", empty);   
         // Convert token_id to expected format (assuming u64 for simplicity here)
         // Assuming `link` is of type `wasmtime::Link`
         let result = link.get_typed_func::<i32, i64>(&mut store, function_name)?.call(&mut store, token_id)?;
-        println!("{:?}",result);
+        println!("RESULT OF TOKEN: {:?}",result);
         let result_to_unpack =Self::decode_token_details(result, &wasm_memory, &mut store)?;
-        println!("{:?}", result_to_unpack);
+        println!("Unpack result {:?}", result_to_unpack);
         // let result_str = result.to_string();
         // println!("{:?}", result_str);
         // let result_to_u8 = Self::i64_to_u8_array(result);
         // let the_result = Self::decode_token_details(&result_to_u8);
         Ok("".to_string())
     }
+    pub fn test_write(&self, 
+        contract_path: &DBWithThreadMode<SingleThreaded>,
+        contract_info: &ContractInfo,
+        pub_key: &str)-> Result<(), Box<dyn std::error::Error>>
+        {   
+            println!("Initializing engine and linker...");
+            println!("Contract name and pub key {:?}", pub_key);
+            
+            let engine = Engine::default();
+            let mut linker = Linker::new(&engine);
+            let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+            let mut store = Store::new(&engine, wasi);
+            
+            println!("Attempting to instantiate the WebAssembly module...");
+            let module = Module::from_file(&engine, &contract_info.module_path)?;
+            wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+            let link = linker.instantiate(&mut store, &module)?;
+            
+            println!("Fetching WebAssembly memory...");
+            let wasm_memory = link.get_memory(&mut store, "memory").ok_or("Failed to find `memory` export")?;
+            for export in module.exports() {
+                println!("Exported item: {}", export.name());
+            }
+            
+            let input_string = "Hello, WebAssembly!";
+            let bytes = input_string.as_bytes();
+            
+            // Assuming the start of your static memory is where you want to write
+            let offset = 0;
+            
+            println!("Writing data to WebAssembly memory...");
+            // let write_func = link.get_typed_func::<(i32,i32, i32), _>(&mut store, "write_string_to_memory");
+            // match write_func {
+            //     Ok(write_func) => {
+            //         let write_result = write_func.call(&mut store, (bytes.as_ptr() as i32, offset as i32, bytes.len() as i32));
+            //         match write_result {
+            //             Ok(()) => {
+            //                 println!("Data successfully written to WebAssembly memory");
+            //             }
+            //             Err(err) => {
+            //                 eprintln!("Error writing to memory: {}", err);
+            //             }
+            //         }
+            //     }
+            //     Err(err) => {
+            //         eprintln!("Error getting write function: {}", err);
+            //     }
+            // }
+
+            println!("Attempting to read from WebAssembly memory...");
+            let offset_func = link.get_typed_func::<(), i32>(&mut store, "get_string_offset")?;
+            let ptr = offset_func.call(&mut store, ())?  as usize;
+        
+            let length_func = link.get_typed_func::<(), i32>(&mut store, "get_string_length")?;
+            let len = length_func.call(&mut store, ())?  as usize;
+        
+            //println!("Read from WebAssembly memory: {}", string_value);
+            // Convert the pointer back to a Rust slice and then to a string for printing
+        
+            let data = wasm_memory.data(&store)[ptr..(ptr + len)].to_vec();
+            let output_string = String::from_utf8(data)?;
+            println!("String: {}", output_string);
+            // let slice = &memory_data[pointer_offset as usize..(pointer_offset as usize + bytes.len())];
+            // let output_string = std::str::from_utf8(slice).unwrap();
+            //println!("Read from WebAssembly memory: {}", output_string);
+            
+            Ok(())
+            
+        }
 
     pub fn decode_token_details(
         encoded_value: i64,
@@ -397,6 +477,7 @@ impl WasmContract {
         // Validate pointer and length
         let mem_size = wasm_memory.data(&mut *store).len();
         let data = &wasm_memory.data(&mut *store)[pointer..pointer + length];
+        println!("Data: {:?}", &data);
         if pointer + length > mem_size {
             return Err(Box::new(std::io::Error::new(
                 std::io::ErrorKind::InvalidInput,
@@ -409,27 +490,16 @@ impl WasmContract {
         // Deserialize the data
         bincode::deserialize(data).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
-    // pub fn unpack_result(result: i64) -> Option<TokenDetails> {
-    //     // Extract the usize value (shifted to the right by 32 bits)
-    //     let length = (result >> 32) as usize;    
-        
-    //     // Check if length is within a valid range (positive and not too large)
-    //     if length > 0 && length <= u8::MAX as usize {
-    //         // Extract the u8 value (lower 8 bits)
-    //         let value = (result & 0xFF) as u8;
-            
-    //         let mut encoded_value = vec![0u8; length];
-    //         encoded_value[0] = value;
-            
-    //         // Now you have the original encoded_value
     
-    //         // Decode the encoded_value into TokenDetails
-    //         if let Ok(details) = Self::decode_token_details(&encoded_value) {
-    //             return Some(details);
-    //         }
-    //     }
-    //     None // Return None if unpacking or decoding fails
-    // }
+    pub fn is_memory_empty(wasm_memory: &wasmtime::Memory, store: &wasmtime::Store<WasiCtx>) -> bool {
+        for byte in wasm_memory.data(store) {
+            if *byte != 0 {
+                return false;
+            }
+        }
+        true
+    }
+
     pub fn mint_token(
         &self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
@@ -500,17 +570,104 @@ impl WasmContract {
             ipfs_bytes.len() as i32,
         ));
         match result {
-            Ok(value) => {
+            Ok(result_value) => {
                 let updated_data = wasm_memory.data(&mut store);
                 let updated_byte_vector: Vec<u8> = updated_data.to_vec();
+                if saved_data == updated_data.to_vec() {
+                    println!("No change in the WebAssembly memory after mint operation.");
+                } else {
+                    println!("WebAssembly memory updated after mint operation.");
+                }
                 rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
-                println!("Function succeeded with value: {:?}", value);
-            }
-            Err(err) => {
-                println!("Function failed with error: {}", err);
+                println!("Function succeeded with value: {:?}", result_value);
+                // rest of the logic here
+            },
+            Err(e) => {
+                println!("Error occurred: {}", e);
+                // handle the error
             }
         }
+        // Fetch the string from WebAssembly memory
         Ok(1)
+    }
+    pub fn read_owner_token(
+        &self,
+        contract_path: &DBWithThreadMode<SingleThreaded>,
+        contract_info: &ContractInfo,
+        pub_key: &str,
+        id: i32,
+    ) -> Result<u32, Box<dyn std::error::Error>> {
+        println!("Initializing engine and linker...");
+        println!("Contract name and pub key {:?}",pub_key);
+        let engine = Engine::default();
+        let mut linker = Linker::new(&engine);
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+        let mut store = Store::new(&engine, wasi);
+    
+        println!("Attempting to instantiate the WebAssembly module...");
+        let module = Module::from_file(&engine, &contract_info.module_path)?;
+        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+        let link = linker.instantiate(&mut store, &module)?;
+        // ... (Your operations using token_instance)
+    
+        println!("Fetching WebAssembly memory...");
+    
+        let wasm_memory = link.get_memory(&mut store, "memory")
+            .ok_or_else(|| "Failed to find `memory` export")?;
+        let saved_data = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
+        // 2.2. Set this memory state into the WebAssembly module's memory.
+        if saved_data.len() > wasm_memory.data(&mut store).len() {
+            return Err("Saved data is larger than the available WASM memory.".into());
+        }
+        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data); 
+           
+        //println!("Loaded data into WASM memory: {:?}", &wasm_memory.data(&mut store)[..saved_data.len()]);
+        // Convert the data slice to `OwnerData`
+        println!("Attempting to call owner data function in the WebAssembly module...");
+        println!("Token ID being queried: {}", id);
+        // Fetch the pointer function
+        match link.get_typed_func::<i32, u32>(&mut store, "get_owner_ptr_by_token_id") {
+        Ok(func) => {
+            let ptr_func = func;
+            let ptr = ptr_func.call(&mut store, id)?;
+
+            // Check if the function returned an error indicator
+            if ptr == 0 {
+                return Err("Error occurred while fetching pointer in length function.".into());
+            }
+
+            println!("Pointer: {}", ptr);
+            match link.get_typed_func::<i32, u32>(&mut store, "get_owner_len_by_token_id") {
+                Ok(func) => {
+                    match func.call(&mut store, id) {
+                        Ok(len) =>
+                        {
+                            let len_as_usize = len as usize; 
+                            let ptr_as_usize = ptr as usize; 
+                            println!("Len: {:?}", len);
+                            let all_data =  wasm_memory.data(&store);
+                            //println!("Raw Data: {:?}", all_data);
+                            let data = wasm_memory.data(&store)[ptr_as_usize..(ptr_as_usize + len_as_usize)].to_vec();
+                            println!("Data: {:?}", data);
+                            let name = String::from_utf8(data)?;
+                            println!("String name: {:?}", name);
+                        }
+
+                        Err(e) => println!("Failed to call get_owner_len_by_token_id function: {:?}", e),
+                    
+
+                    }
+                },
+                Err(e) => println!("Error retrieving test_string function: {:?}", e),
+            }
+        },
+        Err(e) => {
+            println!("Error calling owner_of_token_ptr function: {}", e);
+        }
+    }
+
+    Ok(1)
+
     }
     
     pub fn exported_functions(&self) -> Vec<String> {
@@ -717,7 +874,6 @@ pub fn get_erc20_supply(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), B
     if let Some(data) = cmd.strip_prefix("contract key ") {
         let mut contract = WasmContract::new("./sample.wasm")?;
         let contract_path = swarm.behaviour().storage_path.get_contract();
-        // Reading from DB and deserializing
         let contract_info = ContractInfo {
             module_path: "./sample.wasm".to_string(),
             pub_key:data.to_string(),
@@ -738,7 +894,6 @@ pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn
     if let Some(data) = cmd.strip_prefix("mint token ") {
         let mut contract = WasmContract::new("./sample721.wasm")?;
         let contract_path = swarm.behaviour().storage_path.get_contract();
-        // Reading from DB and deserializing
         let contract_info = ContractInfo {
             module_path: "./sample721.wasm".to_string(),
             pub_key:data.to_string(),
@@ -757,6 +912,7 @@ pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn
         };
         let ipfs_hash = "TEST_IPFS";
         let result = contract.mint_token(contract_path, &contract_info,&data.to_string(),ipfs_hash,&wasm_params);
+        let mint_result = contract.read_owner_token(contract_path, &contract_info,&data.to_string(),2);
         match result {
             Ok(value) => {
                 println!("Mint: {}", value);
@@ -782,6 +938,27 @@ pub fn get_token_owner(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), 
 
         let owner = contract.read_token(contract_path, &contract_info, token_id_u64)?;
         println!("Owner of token {}: {}", token_id_u64.clone(), owner);
+    }
+    Ok(())
+}
+pub fn test_memories(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
+    if let Some(data) = cmd.strip_prefix("test contract") {
+        let mut contract = WasmContract::new("./sampletest.wasm")?;
+        let contract_path = swarm.behaviour().storage_path.get_contract();
+        let contract_info = ContractInfo {
+            module_path: "./sampletest.wasm".to_string(),
+            pub_key: data.to_string(),
+        };
+        let the_memory = create_memory(contract.get_store())?;
+        let (name_ptr, name_len) = write_data_to_memory(&the_memory, "TEST_NAMES", contract.get_store())?; 
+        let wasm_params = WasmParams {
+            name: "TEST".to_string(),
+            args: vec![
+                Val::I32(name_ptr as i32),
+                Val::I32(name_len as i32),
+            ],
+        };
+        let result = contract.test_write(contract_path, &contract_info,&data.to_string());
     }
     Ok(())
 }

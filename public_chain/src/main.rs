@@ -303,12 +303,6 @@ async fn main() {
                                 Err(e) => eprintln!("Error minting token: {:?}", e), // Print the error
                             }
                         },
-                        cmd if cmd.starts_with("mint token")=> {
-                            match smart_contract::mint_token(cmd,  swarm_public_net) {
-                                Ok(_) => {} // Do nothing on success
-                                Err(e) => eprintln!("Error minting token: {:?}", e), // Print the error
-                            }
-                        },
                         cmd if cmd.starts_with("token id")=> {
                             match smart_contract::get_token_owner(cmd,  swarm_public_net) {
                                 Ok(_) => {} // Do nothing on success
@@ -319,6 +313,12 @@ async fn main() {
                             match smart_contract::get_erc20_supply(cmd,  swarm_public_net) {
                                 Ok(_) => {} // Do nothing on success
                                 Err(e) => eprintln!("Error creating ERC20 contract: {:?}", e), // Print the error
+                            }
+                        },
+                        cmd if cmd.starts_with("test contract")=> {
+                            match smart_contract::test_memories(cmd,  swarm_public_net) {
+                                Ok(_) => {} // Do nothing on success
+                                Err(e) => eprintln!("Error test memories token: {:?}", e), // Print the error
                             }
                         },
                         _ => error!("unknown command"),  
