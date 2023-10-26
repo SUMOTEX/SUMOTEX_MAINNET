@@ -106,7 +106,7 @@ async fn main() {
     // });
     println!("After starting RPC server");
     //create storage
-    let the_storage = create_pub_storage();
+    //let the_storage = create_pub_storage();
     //info!("Peer Id: {}", p2p::PEER_ID.clone());
     let (response_sender, mut response_rcv) = mpsc::unbounded_channel();
     let (init_sender, mut init_rcv) = mpsc::unbounded_channel();
@@ -181,7 +181,7 @@ async fn main() {
                 swarm_public_net.behaviour_mut().app.genesis();
                 let json = serde_json::to_string("TEST").expect("can jsonify request");
                 let block_account = swarm_public_net.behaviour_mut().storage_path.get_blocks();
-                rock_storage::put_to_db(block_account,"0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c43",&json);
+                //rock_storage::put_to_db(block_account,"0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c43",&json);
                 println!("Storage Path: {:?}",swarm_public_net.behaviour_mut().storage_path.get_blocks());
                 info!("Connected nodes: {}", peers.len());
                 if !peers.is_empty() {
