@@ -33,9 +33,12 @@ use crate::p2p::PEER_ID;
 use crate::p2p::KEYS;
 use crate::public_app::App;
 use crate::public_txn::Txn;
+use std::sync::{RwLock, Arc};
 use publisher::Publisher;
 use tokio::net::TcpListener;
 use crate::p2p::AppBehaviour;
+use rocksdb::DBWithThreadMode;
+use rocksdb::SingleThreaded;
 type MySwarm = Swarm<AppBehaviour>;
 
 enum CustomEvent {
@@ -52,15 +55,26 @@ pub async fn run_epoch(){
 }
 
 pub fn create_pub_storage()-> rock_storage::StoragePath{
-    println!("Creating storage for blocks, accounts and transactions");
-    let db_public_block= rock_storage::create_storage("./public_blockchain");
+    // Create read-write locks for each storage
+    let db_public_block = rock_storage::create_storage("./public_blockchain");
     let db_account = rock_storage::create_storage("./account");
     let db_transactions = rock_storage::create_storage("./transactions");
-    let db_contract = rock_storage::create_storage("./contract");
-    let the_storage = rock_storage::StoragePath::new(db_public_block,db_transactions,db_account,db_contract);
-    println!("Storage created for blocks, accounts, contract and transactions");
+    let db_contract = rock_storage::create_storage("./contract"); // Assuming this returns DBWithThreadMode<SingleThreaded> directly
+
+    // Initialize the StoragePath instance as required by the library
+    let the_storage = rock_storage::StoragePath {
+        blocks:db_public_block,
+        account:db_account,
+        transactions:db_transactions,
+        contract: db_contract,
+    };
+
+    println!("Storage created for blocks, accounts, contract, and transactions");
     return the_storage;
 
+}
+fn db_extract(db: Arc<RwLock<DBWithThreadMode<SingleThreaded>>>) -> DBWithThreadMode<SingleThreaded> {
+    Arc::try_unwrap(db).unwrap().into_inner().unwrap()
 }
 pub fn remove_lock_file() {
     let lock_path = "./public_blockchain/LOCK";
@@ -313,6 +327,12 @@ async fn main() {
                             match smart_contract::get_erc20_supply(cmd,  swarm_public_net) {
                                 Ok(_) => {} // Do nothing on success
                                 Err(e) => eprintln!("Error creating ERC20 contract: {:?}", e), // Print the error
+                            }
+                        },
+                        cmd if cmd.starts_with("supply 721")=> {
+                            match smart_contract::get_erc721_supply(cmd,  swarm_public_net) {
+                                Ok(_) => {} // Do nothing on success
+                                Err(e) => eprintln!("Error getting ERC721 supply: {:?}", e), // Print the error
                             }
                         },
                         cmd if cmd.starts_with("test contract")=> {

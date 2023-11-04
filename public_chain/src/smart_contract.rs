@@ -21,6 +21,9 @@ use wasmtime_wasi::sync::WasiCtxBuilder;
 use bincode::{serialize, deserialize};
 use bincode::{ Error as BincodeError};
 use rocksdb::Error as RocksDBError;
+use wasm_bindgen::JsCast;
+use js_sys::WebAssembly;
+use js_sys::Uint8Array;
 
 #[derive(Serialize, Deserialize)]
 pub struct ERC721Token {
@@ -379,8 +382,7 @@ impl WasmContract {
         let saved_data = rock_storage::get_from_db_vector(contract_path, &contract_info.pub_key).unwrap_or_default();
       
         // 2.2. Set this memory state into the WebAssembly module's memory.
-        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
-        println!("Memory: {:?}", saved_data);   
+        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);  
         let empty = Self::is_memory_empty(&wasm_memory, &store);
         println!("Memory is empty: {}", empty);   
         // Convert token_id to expected format (assuming u64 for simplicity here)
@@ -505,34 +507,36 @@ impl WasmContract {
         contract_path: &DBWithThreadMode<SingleThreaded>,
         contract_info: &ContractInfo,
         pub_key: &str,
-        ipfs_hash: &str, 
-        wasm_params: &WasmParams,
+        ipfs_hash: &str
     ) -> Result<u32, Box<dyn std::error::Error>> {
         println!("Initializing engine and linker...");
         println!("Contract name and pub key {:?}",pub_key);
         let engine = Engine::default();
         let mut linker = Linker::new(&engine);
+        let module = Module::from_file(&engine, "./sample721.wasm")?;
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
         let mut store = Store::new(&engine, wasi);
-    
+
+
         println!("Attempting to instantiate the WebAssembly module...");
-        let module = Module::from_file(&engine, &contract_info.module_path)?;
         wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
         let link = linker.instantiate(&mut store, &module)?;
+        let instance = linker.instantiate(&mut store, &module)?;
+        //let contract = WasmContract::new(instance)?;
         // ... (Your operations using token_instance)
     
         println!("Fetching WebAssembly memory...");
-    
+        //let wasm_memory = contract.instance.get_memory(&mut store,"memory").ok_or_else(|| "Failed to find `memory` export")?;
         let wasm_memory = link.get_memory(&mut store, "memory")
             .ok_or_else(|| "Failed to find `memory` export")?;
         let saved_data = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
         // 2.2. Set this memory state into the WebAssembly module's memory.
+        if saved_data.len() > wasm_memory.data(&mut store).len() {
+            return Err("Saved data is larger than the available WASM memory.".into());
+        }
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
-        for export in module.exports() {
-            println!("Exported item: {}", export.name());
-        }        
+
         let test_amount_supply_func = link.get_typed_func::<(), u64>(&mut store, "total_tokens")?;
-        println!("Attempting to call total_tokens function in the WebAssembly module...");
         match link.get_typed_func::<(), u64>(&mut store, "total_tokens") {
             Ok(func) => {
                 let result = func.call(&mut store, ());
@@ -544,15 +548,7 @@ impl WasmContract {
             Err(e) => println!("Error getting total_tokens function: {}", e),
         }
         let result = test_amount_supply_func.call(&mut store, ())?;
-        println!("Supply {:?}", result);
-        println!("Writing data to WebAssembly memory...");
-    
-        let owner_bytes = pub_key.as_bytes();
-        let ipfs_bytes = ipfs_hash.as_bytes();
-    
-        // wasm_memory.data_mut(&mut store)[wasm_params.args[0].unwrap_i32() as usize..(wasm_params.args[0].unwrap_i32() as usize + owner_bytes.len())].copy_from_slice(owner_bytes);
-        // wasm_memory.data_mut(&mut store)[wasm_params.args[2].unwrap_i32() as usize..(wasm_params.args[2].unwrap_i32() as usize + ipfs_bytes.len())].copy_from_slice(ipfs_bytes);
-    
+
         println!("Attempting to call mint function in the WebAssembly module...");
     
         let mint_func = match link.get_typed_func::<(i32,i32,i32,i32), u32>(&mut store, "mint") {
@@ -562,15 +558,36 @@ impl WasmContract {
                 return Err(err.into());
             }
         };
-        
-        let result = mint_func.call(&mut store, (
-            wasm_params.args[0].unwrap_i32(),
-            owner_bytes.len() as i32,
-            wasm_params.args[2].unwrap_i32(),
-            ipfs_bytes.len() as i32,
+        let new_data_offset = saved_data.len() as i32;
+        let owner_data_bytes = "0x7B502C3A1F48C8609AE212CDFB639DEE39673F5E".as_bytes().len() as i32;
+        let ipfs_data_bytes = "SMTX_IPFS_TEST".as_bytes().len() as i32;
+        let required_memory_size_bytes = new_data_offset + owner_data_bytes + ipfs_data_bytes;        
+
+        let current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
+        // Check if we need more memory pages and grow memory if needed
+        if required_memory_size_bytes > current_memory_size_bytes {
+            // Calculate how many more pages are needed, rounding up
+            let additional_pages_needed = ((required_memory_size_bytes - current_memory_size_bytes + (64 * 1024 - 1)) / (64 * 1024)) as u32;
+            // Grow the memory
+            wasm_memory.grow(&mut store, additional_pages_needed as u64).map_err(|_| "Failed to grow memory")?;
+        }
+        let (name_ptr, name_len) = write_data_to_memory(&wasm_memory, "0x7B502C3A1F48C8609AE212CDFB639DEE39673F5E", new_data_offset, &mut store)?;
+        println!("Owner data pointer: {:?}, length: {:?}", name_ptr, name_len);
+
+        // Calculate the offset for the IPFS hash
+        let ipfs_memory_offset = name_ptr + name_len;
+
+        // Write the IPFS hash
+        let (ipfs_ptr, ipfs_len) = write_data_to_memory(&wasm_memory, "SMTX_IPFS_TEST", ipfs_memory_offset, &mut store)?;
+
+        let mint_result = mint_func.call(&mut store, (
+            name_ptr as i32,
+            name_len as i32,
+            ipfs_ptr as i32,
+            ipfs_len as i32,
         ));
-        match result {
-            Ok(result_value) => {
+        match mint_result {
+            Ok(token_id) => {
                 let updated_data = wasm_memory.data(&mut store);
                 let updated_byte_vector: Vec<u8> = updated_data.to_vec();
                 if saved_data == updated_data.to_vec() {
@@ -579,11 +596,12 @@ impl WasmContract {
                     println!("WebAssembly memory updated after mint operation.");
                 }
                 rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
-                println!("Function succeeded with value: {:?}", result_value);
+                println!("Token ID value: {:?}", token_id);
+                //Ok(token_id);
                 // rest of the logic here
             },
             Err(e) => {
-                println!("Error occurred: {}", e);
+                println!("Mint function failed: {}", e);
                 // handle the error
             }
         }
@@ -616,58 +634,135 @@ impl WasmContract {
             .ok_or_else(|| "Failed to find `memory` export")?;
         let saved_data = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
         // 2.2. Set this memory state into the WebAssembly module's memory.
+        let current_memory_size = wasm_memory.data_size(&store); // Current memory size in bytes
+        // Convert `current_memory_size` from `usize` to `u64` for the calculation.
+        let current_memory_size_pages = (current_memory_size as u64) / (64 * 1024);
+        let required_pages = (saved_data.len() as u64 + (64 * 1024 - 1)) / (64 * 1024);
+        let additional_pages_needed = if required_pages > current_memory_size_pages {
+            required_pages - current_memory_size_pages
+        } else {
+            0  // No additional pages are needed.
+        };
+
+        if additional_pages_needed > 0 {
+            wasm_memory.grow(&mut store, additional_pages_needed as u64).map_err(|_| "Failed to grow memory")?;
+        }
+
         if saved_data.len() > wasm_memory.data(&mut store).len() {
             return Err("Saved data is larger than the available WASM memory.".into());
         }
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data); 
-           
-        //println!("Loaded data into WASM memory: {:?}", &wasm_memory.data(&mut store)[..saved_data.len()]);
-        // Convert the data slice to `OwnerData`
+        let memory_data = wasm_memory.data(&store);
+        // Assuming the memory content is ASCII text
+        if let Ok(text) = std::str::from_utf8(&memory_data) {
+            println!("Memory Contents: {}", text);
+        } else {
+            // If the memory contains binary data, you can print it as bytes
+            println!("Memory Contents (as bytes)");
+        }
         println!("Attempting to call owner data function in the WebAssembly module...");
         println!("Token ID being queried: {}", id);
-        // Fetch the pointer function
-        match link.get_typed_func::<i32, u32>(&mut store, "get_owner_ptr_by_token_id") {
-        Ok(func) => {
-            let ptr_func = func;
-            let ptr = ptr_func.call(&mut store, id)?;
-
-            // Check if the function returned an error indicator
-            if ptr == 0 {
-                return Err("Error occurred while fetching pointer in length function.".into());
-            }
-
-            println!("Pointer: {}", ptr);
-            match link.get_typed_func::<i32, u32>(&mut store, "get_owner_len_by_token_id") {
-                Ok(func) => {
-                    match func.call(&mut store, id) {
-                        Ok(len) =>
-                        {
-                            let len_as_usize = len as usize; 
-                            let ptr_as_usize = ptr as usize; 
-                            println!("Len: {:?}", len);
-                            let all_data =  wasm_memory.data(&store);
-                            //println!("Raw Data: {:?}", all_data);
-                            let data = wasm_memory.data(&store)[ptr_as_usize..(ptr_as_usize + len_as_usize)].to_vec();
-                            println!("Data: {:?}", data);
-                            let name = String::from_utf8(data)?;
-                            println!("String name: {:?}", name);
+        match link.get_typed_func::<i32, i32>(&mut store, "get_owner_ptr") {
+            Ok(func) => {
+                let ptr_func = func;
+                let ptr = ptr_func.call(&mut store, id)?;
+        
+                // Check if the function returned an error indicator
+                if ptr == 0 {
+                    return Err("Error occurred while fetching pointer in length function.".into());
+                }
+                println!("Pointer: {}", ptr);
+        
+                match link.get_typed_func::<i32, i64>(&mut store, "get_owner_len") {
+                    Ok(func) => {
+                        match func.call(&mut store, id) {
+                            Ok(token_result) => {
+                                println!("Len Contract: {:?}", token_result);
+                                //let the_result = Self::extract_details_from_packed(token_result);
+                                //let data = wasm_memory.data(&store)[ptr as usize..(ptr as usize + token_result as usize)].to_vec();
+                                // let name = String::from_utf8(data)?;
+                                let start = ptr as usize;
+                                let end = start + token_result as usize;
+                                if end <= wasm_memory.data(&store).len() {
+                                    let data = wasm_memory.data(&store)[start..end].to_vec();
+                 
+                                    match String::from_utf8(data) {
+                                        Ok(name) => {
+                                            println!("Owner: {:?}", name);
+                                            // Other processing code here
+                                        },
+                                        Err(e) => {
+                                            println!("Error converting bytes to String: {:?}", e);
+                                            // Handle the error appropriately
+                                        },
+                                    }
+                                } else {
+                                    println!("Invalid memory access: Out of bounds");
+                                    // Handle the out-of-bounds memory access appropriately
+                                }
+                                
+                                // Other processing code here
+                            },
+                            Err(e) => {
+                                println!("Failed to call get_owner_len_by_token_id function: {:?}", e);
+                            },
                         }
-
-                        Err(e) => println!("Failed to call get_owner_len_by_token_id function: {:?}", e),
-                    
-
-                    }
-                },
-                Err(e) => println!("Error retrieving test_string function: {:?}", e),
-            }
-        },
-        Err(e) => {
-            println!("Error calling owner_of_token_ptr function: {}", e);
-        }
-    }
-
+                    },
+                    Err(e) => {
+                        println!("Failed to call get_owner_len_by_token_id function: {:?}", e);
+                    },
+                }
+            },
+            Err(e) => {
+                println!("Failed to call get_owner_ptr function: {:?}", e);
+            },
+        }        
     Ok(1)
-
+    }
+    pub fn extract_details_from_packed(packed_result: i64) -> Option<(String, String)> {
+        if packed_result == -1 {
+            // Handle uninitialized TOKEN_PTR
+            return None;
+        } else if packed_result == -2 {
+            // Handle encoding issue
+            return None;
+        }
+    
+        // Extract length and first byte
+        let length = (packed_result >> 32) as i32;
+        let first_byte = (packed_result & 0xFF) as i8;
+    
+        if length <= 0 || first_byte != 0 {
+            // Handle invalid length or unexpected first byte
+            return None;
+        }
+    
+        // Extract owner and IPFS link from the remaining packed_result
+        let owner_and_ipfs_link = (packed_result >> 8) as i64;
+    
+        // Create a mask for extracting the owner length
+        let owner_length_mask = 0xFF << 16;
+        // Extract owner length
+        let owner_length = ((owner_and_ipfs_link & owner_length_mask) >> 16) as i32;
+    
+        // Create a mask for extracting the IPFS link length
+        let ipfs_length_mask = 0xFF << 8;
+        // Extract IPFS link length
+        let ipfs_length = ((owner_and_ipfs_link & ipfs_length_mask) >> 8) as i32;
+    
+        // Create a mask for extracting the owner and IPFS link
+        let owner_ipfs_mask = 0xFF;
+        // Extract owner and IPFS link as a single integer
+        let owner_ipfs = (owner_and_ipfs_link & owner_ipfs_mask) as i32;
+    
+        // Perform more checks here, such as ensuring that the lengths are valid
+        // and that the data is within expected bounds.
+    
+        // Extract owner and IPFS link using their respective lengths
+        let owner = (owner_ipfs >> (32 - owner_length)) as i32;
+        let ipfs_link = (owner_ipfs >> (32 - owner_length - ipfs_length)) as i32;
+    
+        Some((owner.to_string(), ipfs_link.to_string()))
     }
     
     pub fn exported_functions(&self) -> Vec<String> {
@@ -724,16 +819,20 @@ pub fn create_memory(store: &mut Store<WasiCtx>) -> Result<Memory, Box<dyn std::
 }
 
 // Part 2: Write data to the memory
-pub fn write_data_to_memory(memory: &Memory, input: &str, store: &mut Store<WasiCtx>) -> Result<(i32, i32), Box<dyn std::error::Error>> {
+pub fn write_data_to_memory(memory: &Memory, input: &str, offset: i32, store: &mut Store<WasiCtx>) -> Result<(i32, i32), Box<dyn std::error::Error>> {
     let input_bytes = input.as_bytes();
-    let data = memory.data_mut(store); // Use the store here
+    let data = memory.data_mut(store);
 
-    for (i, byte) in input_bytes.iter().enumerate() {
-        data[i] = *byte;
+    if (offset as usize) + input_bytes.len() > data.len() {
+        return Err("Not enough memory allocated".into());
     }
 
-    Ok((0, input_bytes.len() as i32)) // Placeholder for data_ptr, replace 0 with the actual pointer if possible
+    let start = offset as usize;
+    data[start..start + input_bytes.len()].copy_from_slice(input_bytes);
+
+    Ok((offset, input_bytes.len() as i32))
 }
+
 fn val_to_param_value(val: Val) -> ParamValue {
     match val {
         Val::I32(i) => ParamValue::Int32(i),
@@ -762,9 +861,9 @@ pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, 
     }
 
     let the_memory = create_memory(contract.get_store())?;
-
-    let (name_ptr, name_len) = write_data_to_memory(&the_memory, "SUMOTEX-T", contract.get_store())?;
-    let (symbol_ptr, symbol_len) = write_data_to_memory(&the_memory, "SMTX", contract.get_store())?;
+    let owner_memory_offset = 0;
+    let (name_ptr, name_len) = write_data_to_memory(&the_memory, "SUMOTEX-T",owner_memory_offset, contract.get_store())?;
+    let (symbol_ptr, symbol_len) = write_data_to_memory(&the_memory, "SMTX",owner_memory_offset, contract.get_store())?;
 
     let vals = vec![
         Val::I32(name_ptr as i32),
@@ -804,8 +903,10 @@ pub fn create_erc721_contract(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result
     }
 
     let the_memory = create_memory(contract.get_store())?;
-    let (name_ptr, name_len) = write_data_to_memory(&the_memory, "SUMOTEX-CERT", contract.get_store())?;
-    let (symbol_ptr, symbol_len) = write_data_to_memory(&the_memory, "SMTX", contract.get_store())?;
+    let owner_memory_offset = 0;
+    let (name_ptr, name_len) = write_data_to_memory(&the_memory, "SUMOTEX-CERT",owner_memory_offset, contract.get_store())?;
+    let ipfs_memory_offset = name_ptr + name_len;
+    let (symbol_ptr, symbol_len) = write_data_to_memory(&the_memory, "SMTX", ipfs_memory_offset,contract.get_store())?;
 
     let wasm_params = WasmParams {
         name: "initialize".to_string(),
@@ -847,8 +948,10 @@ pub fn create_erc20_contract(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<
     }
 
     let the_memory = create_memory(contract.get_store())?;
-    let (name_ptr, name_len) = write_data_to_memory(&the_memory, "SUMOTEX-T", contract.get_store())?;
-    let (symbol_ptr, symbol_len) = write_data_to_memory(&the_memory, "SMTX", contract.get_store())?;
+    let owner_memory_offset = 0;
+    let (name_ptr, name_len) = write_data_to_memory(&the_memory, "SUMOTEX-T",owner_memory_offset, contract.get_store())?;
+    let ipfs_memory_offset = name_ptr + name_len; 
+    let (symbol_ptr, symbol_len) = write_data_to_memory(&the_memory, "SMTX",ipfs_memory_offset, contract.get_store())?;
 
     let wasm_params = WasmParams {
         name: "initialize".to_string(),
@@ -890,6 +993,26 @@ pub fn get_erc20_supply(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), B
     }
     Ok(())
 }
+pub fn get_erc721_supply(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn std::error::Error>>{
+    if let Some(data) = cmd.strip_prefix("supply 721 ") {
+        let mut contract = WasmContract::new("./sample721.wasm")?;
+        let contract_path = swarm.behaviour().storage_path.get_contract();
+        let contract_info = ContractInfo {
+            module_path: "./sample721.wasm".to_string(),
+            pub_key:data.to_string(),
+        };
+        let result = contract.read_numbers(contract_path,&contract_info,&data.to_string(),"total_tokens");
+        match result {
+            Ok(value) => {
+                println!("Total Supply: {}", value);
+            }
+            Err(e) => {
+                println!("Error reading: {}", e);
+            }
+        }
+    }
+    Ok(())
+}
 pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn std::error::Error>>{
     if let Some(data) = cmd.strip_prefix("mint token ") {
         let mut contract = WasmContract::new("./sample721.wasm")?;
@@ -899,20 +1022,10 @@ pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn
             pub_key:data.to_string(),
         };
         let the_memory = create_memory(contract.get_store())?;
-        let (name_ptr, name_len) = write_data_to_memory(&the_memory, "0x7B502C3A1F48C8609AE212CDFB639DEE39673F5E", contract.get_store())?;
-        let (ipfs_ptr, ipfs_len) = write_data_to_memory(&the_memory, "SMTX_IPFS_TEST", contract.get_store())?;    
-        let wasm_params = WasmParams {
-            name: "mint".to_string(),
-            args: vec![
-                Val::I32(name_ptr as i32),
-                Val::I32(name_len as i32),
-                Val::I32(ipfs_ptr as i32),
-                Val::I32(ipfs_len as i32)
-            ],
-        };
+  
         let ipfs_hash = "TEST_IPFS";
-        let result = contract.mint_token(contract_path, &contract_info,&data.to_string(),ipfs_hash,&wasm_params);
-        let mint_result = contract.read_owner_token(contract_path, &contract_info,&data.to_string(),2);
+        let result = contract.mint_token(contract_path, &contract_info,&data.to_string(),ipfs_hash);
+        let mint_result = contract.read_owner_token(contract_path, &contract_info,&data.to_string(),0);
         match result {
             Ok(value) => {
                 println!("Mint: {}", value);
@@ -950,7 +1063,8 @@ pub fn test_memories(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Bo
             pub_key: data.to_string(),
         };
         let the_memory = create_memory(contract.get_store())?;
-        let (name_ptr, name_len) = write_data_to_memory(&the_memory, "TEST_NAMES", contract.get_store())?; 
+        let owner_memory_offset = 0;
+        let (name_ptr, name_len) = write_data_to_memory(&the_memory, "TEST_NAMES",owner_memory_offset, contract.get_store())?; 
         let wasm_params = WasmParams {
             name: "TEST".to_string(),
             args: vec![

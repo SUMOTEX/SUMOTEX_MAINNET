@@ -4,6 +4,7 @@ use std::fmt::Debug;
 use std::str;
 use std::fs;
 use std::path::Path;
+use std::sync::{RwLock, Arc};
 #[derive(Debug)]
 pub struct StoragePath {
     pub blocks: DB,
@@ -136,4 +137,25 @@ pub fn store_wasm_in_db(db: &DB, key: &str, wasm_filepath: &str) -> Result<(), B
 
 pub fn get_wasm_from_db(db: &DB, key: &str) -> Result<Option<Vec<u8>>, rocksdb::Error> {
     db.get(key)
+}
+struct Storage {
+    data: Arc<RwLock<Vec<u8>>>,
+}
+
+impl Storage {
+    fn new() -> Self {
+        Storage {
+            data: Arc::new(RwLock::new(Vec::new())),
+        }
+    }
+
+    fn read_data(&self) -> Vec<u8> {
+        let data = self.data.read().unwrap();
+        data.clone()
+    }
+
+    fn write_data(&self, new_data: Vec<u8>) {
+        let mut data = self.data.write().unwrap();
+        *data = new_data;
+    }
 }
