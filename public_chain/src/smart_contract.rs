@@ -1033,25 +1033,3 @@ pub fn get_token_owner(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), 
     }
     Ok(())
 }
-pub fn test_memories(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(data) = cmd.strip_prefix("test contract") {
-        let mut contract = WasmContract::new("./sampletest.wasm")?;
-        let contract_path = swarm.behaviour().storage_path.get_contract();
-        let contract_info = ContractInfo {
-            module_path: "./sampletest.wasm".to_string(),
-            pub_key: data.to_string(),
-        };
-        let the_memory = create_memory(contract.get_store())?;
-        let owner_memory_offset = 0;
-        let (name_ptr, name_len) = write_data_to_memory(&the_memory, "TEST_NAMES",owner_memory_offset, contract.get_store())?; 
-        let wasm_params = WasmParams {
-            name: "TEST".to_string(),
-            args: vec![
-                Val::I32(name_ptr as i32),
-                Val::I32(name_len as i32),
-            ],
-        };
-        let result = contract.test_write(contract_path, &contract_info,&data.to_string());
-    }
-    Ok(())
-}
