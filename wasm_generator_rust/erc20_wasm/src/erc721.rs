@@ -93,8 +93,6 @@ impl ERC721Token {
                 return u32::MAX; // Error value indicating uninitialized TOKEN_PTR.
             }
         };
-
-
         // Convert raw pointers to Rust strings using from_utf8_lossy
         let owner_slice = unsafe { std::slice::from_raw_parts(owner_ptr, owner_len) };
         let owner_str = String::from_utf8_lossy(owner_slice).to_string();
@@ -173,21 +171,38 @@ impl ERC721Token {
             std::ptr::null() // Token ID out of bounds.
         }
     }
+    #[no_mangle]
+    pub extern "C" fn get_ipfs_len(token_id: i32) -> i32 {
+        let token_ptr = unsafe { GLOBAL_STATE.token_ptr };
+        if let Some(ptr) = token_ptr {
+            let token = unsafe { &*ptr };
 
-    
-    
-    // #[no_mangle]
-    // pub extern "C" fn get_owner_ptr(token_id: i32) -> *const i8 {
-    //     let token = Self::get_token_or_default();
-    
-    //     if let Some(owner) = token.owner_of.get(token_id as usize) {
-    //         let owner_cstring = CString::new(owner.as_str()).expect("Failed to create CString");
-    //         owner_cstring.as_ptr()  // Use as_ptr() to get the raw pointer
-    //     } else {
-    //         std::ptr::null()
-    //     }
-    // }
-    
+            if token_id >= 0 && (token_id as usize) < token.token_to_ipfs.len() {
+                let ipfs_hash = &token.token_to_ipfs[token_id as usize];
+                ipfs_hash.len() as i32
+            } else {
+                -1 // Token ID out of bounds or not found.
+            }
+        } else {
+            -1 // Token not initialized.
+        }
+    }
+    #[no_mangle]
+    pub extern "C" fn get_ipfs_ptr(token_id: i32) -> *const i8 {
+        let token_ptr = unsafe { GLOBAL_STATE.token_ptr };
+        if let Some(ptr) = token_ptr {
+            let token = unsafe { &*ptr };
+
+            if token_id >= 0 && (token_id as usize) < token.token_to_ipfs.len() {
+                let ipfs_hash = &token.token_to_ipfs[token_id as usize];
+                ipfs_hash.as_ptr() as *const i8
+            } else {
+                std::ptr::null() // Token ID out of bounds or not found.
+            }
+        } else {
+            std::ptr::null() // Token not initialized.
+        }
+    }
 
     pub fn encode_token_details(details: &TokenDetails) -> Vec<u8> {
         let encoded_bytes = serialize(details).expect("Encoding failed");

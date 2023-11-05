@@ -64,7 +64,7 @@ pub fn create_account(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
     let put_item = rock_storage::get_from_db(acc_path,address.to_string());
     println!("Public Acc: {:?} created",put_item);
     println!("Private Key: {:?} created",private_key);
-    println!("Keep your private key safe, its only displayed once. ");
+    println!("Keep your private key safe, its only displayed once.");
     // let test_sign_signature = PublicTxn::sign_transaction(b"Txn",&private_key);
     // println!("Test Sign Txn {:?}",test_sign_signature);
     // let verified_txn = PublicTxn::verify_transaction(b"Txn",&test_sign_signature,&public_key);

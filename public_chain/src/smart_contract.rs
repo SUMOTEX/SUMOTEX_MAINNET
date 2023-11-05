@@ -503,6 +503,7 @@ impl WasmContract {
         &self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
         contract_info: &ContractInfo,
+        owner:&str,
         pub_key: &str,
         ipfs_hash: &str
     ) -> Result<i32, Box<dyn std::error::Error>> {
@@ -552,7 +553,7 @@ impl WasmContract {
             }
         };
         let new_data_offset = saved_data.len() as i32;
-        let owner_data_bytes = "0x7B502C3A1F48C8609AE212CDFB639DEE39673F5E".as_bytes().len() as i32;
+        let owner_data_bytes = owner.as_bytes().len() as i32;
         let ipfs_data_bytes = "SMTX_IPFS_TEST".as_bytes().len() as i32;
         let required_memory_size_bytes = new_data_offset + owner_data_bytes + ipfs_data_bytes;        
 
@@ -575,7 +576,7 @@ impl WasmContract {
         } // `memory_view` goes out of scope here, so we can mutably borrow `store` again
 
 
-        let (name_ptr, name_len) = write_data_to_memory(&wasm_memory, "0x7B502C3A1F48C8609AE212CDFB639DEE39673F5E", new_data_offset, &mut store)?;
+        let (name_ptr, name_len) = write_data_to_memory(&wasm_memory, owner, new_data_offset, &mut store)?;
         println!("Owner data pointer: {:?}, length: {:?}", name_ptr, name_len);
         let ipfs_memory_offset = name_ptr + name_len;
 
@@ -688,9 +689,6 @@ impl WasmContract {
                         match func.call(&mut store, id) {
                             Ok(token_result) => {
                                 println!("Len Contract: {:?}", token_result);
-                                //let the_result = Self::extract_details_from_packed(token_result);
-                                //let data = wasm_memory.data(&store)[ptr as usize..(ptr as usize + token_result as usize)].to_vec();
-                                // let name = String::from_utf8(data)?;
                                 let start = ptr as usize;
                                 let end = start + token_result as usize;
                                 if end <= wasm_memory.data(&store).len() {
@@ -728,51 +726,6 @@ impl WasmContract {
             },
         }        
     Ok(1)
-    }
-    pub fn extract_details_from_packed(packed_result: i64) -> Option<(String, String)> {
-        if packed_result == -1 {
-            // Handle uninitialized TOKEN_PTR
-            return None;
-        } else if packed_result == -2 {
-            // Handle encoding issue
-            return None;
-        }
-    
-        // Extract length and first byte
-        let length = (packed_result >> 32) as i32;
-        let first_byte = (packed_result & 0xFF) as i8;
-    
-        if length <= 0 || first_byte != 0 {
-            // Handle invalid length or unexpected first byte
-            return None;
-        }
-    
-        // Extract owner and IPFS link from the remaining packed_result
-        let owner_and_ipfs_link = (packed_result >> 8) as i64;
-    
-        // Create a mask for extracting the owner length
-        let owner_length_mask = 0xFF << 16;
-        // Extract owner length
-        let owner_length = ((owner_and_ipfs_link & owner_length_mask) >> 16) as i32;
-    
-        // Create a mask for extracting the IPFS link length
-        let ipfs_length_mask = 0xFF << 8;
-        // Extract IPFS link length
-        let ipfs_length = ((owner_and_ipfs_link & ipfs_length_mask) >> 8) as i32;
-    
-        // Create a mask for extracting the owner and IPFS link
-        let owner_ipfs_mask = 0xFF;
-        // Extract owner and IPFS link as a single integer
-        let owner_ipfs = (owner_and_ipfs_link & owner_ipfs_mask) as i32;
-    
-        // Perform more checks here, such as ensuring that the lengths are valid
-        // and that the data is within expected bounds.
-    
-        // Extract owner and IPFS link using their respective lengths
-        let owner = (owner_ipfs >> (32 - owner_length)) as i32;
-        let ipfs_link = (owner_ipfs >> (32 - owner_length - ipfs_length)) as i32;
-    
-        Some((owner.to_string(), ipfs_link.to_string()))
     }
     
     pub fn exported_functions(&self) -> Vec<String> {
@@ -1024,21 +977,33 @@ pub fn get_erc721_supply(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), 
     Ok(())
 }
 pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<i32, Box<dyn std::error::Error>>{
-    if let Some(data) = cmd.strip_prefix("mint token ") {
+    let parts: Vec<&str> = cmd.split_whitespace().collect();
+    if parts.len() == 4 && parts[0] == "mint" && parts[1] == "token" {
+        let contract_pub_key = parts[2]; // The contract public key
+        let account_key = parts[3]; 
         let mut contract = WasmContract::new("./sample721.wasm")?;
         let contract_path = swarm.behaviour().storage_path.get_contract();
         let contract_info = ContractInfo {
             module_path: "./sample721.wasm".to_string(),
-            pub_key:data.to_string(),
+            pub_key:contract_pub_key.to_string(),
         };
         let the_memory = create_memory(contract.get_store())?;
-  
-        let result = contract.mint_token(contract_path, &contract_info,&data.to_string(),"TEST_IPFS");
-
+            // Retrieve the account to check if it exists
+        let acc_path = swarm.behaviour().storage_path.get_account();
+        let account_data = rock_storage::get_from_db(acc_path, &account_key);
+        if account_data.is_none() {
+            return Err("Account not found".into());
+        }
+        let result = contract.mint_token(contract_path, &contract_info,account_key,&contract_pub_key.to_string(),"TEST_IPFS");
         match result {
             Ok(token_id) => {
                 println!("Mint: {}", token_id);
-                contract.read_owner_token(contract_path, &contract_info,&data.to_string(),0);
+                let read_result = contract.read_owner_token(contract_path, &contract_info,&contract_pub_key.to_string(),token_id-1);
+                if let Err(e) = read_result {
+                    println!("Error after minting, could not read token owner: {}", e);
+                    return Err(e);
+                }
+
                 Ok(token_id)
             }
             Err(e) => {
@@ -1046,7 +1011,7 @@ pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<i32, Box<dy
                 Err(e)
             }
         }
-    }else {
+    } else {
         // If the command is not properly formatted, return an error
         Err("Command format not recognized".into())
     }
