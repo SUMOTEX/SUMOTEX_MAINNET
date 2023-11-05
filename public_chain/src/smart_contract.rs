@@ -998,7 +998,7 @@ pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<i32, Box<dy
         match result {
             Ok(token_id) => {
                 println!("Mint: {}", token_id);
-                let read_result = contract.read_owner_token(contract_path, &contract_info,&contract_pub_key.to_string(),token_id-1);
+                let read_result = contract.read_owner_token(contract_path, &contract_info,&contract_pub_key.to_string(),token_id);
                 if let Err(e) = read_result {
                     println!("Error after minting, could not read token owner: {}", e);
                     return Err(e);

@@ -69,7 +69,7 @@ impl ERC721Token {
             symbol: symbol,
             owner_of: Vec::new(),
             token_to_ipfs: Vec::new(),
-            token_id: 1,
+            token_id: 0,
         };
 
         // Box and convert the token into a raw pointer
