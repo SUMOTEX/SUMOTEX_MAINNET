@@ -486,9 +486,6 @@ impl WasmContract {
                 "Pointer and length exceed WebAssembly memory size.",
             )));
         }
-    
-        // Read data from WebAssembly memory
-
         // Deserialize the data
         bincode::deserialize(data).map_err(|e| Box::new(e) as Box<dyn std::error::Error>)
     }
@@ -508,7 +505,7 @@ impl WasmContract {
         contract_info: &ContractInfo,
         pub_key: &str,
         ipfs_hash: &str
-    ) -> Result<u32, Box<dyn std::error::Error>> {
+    ) -> Result<i32, Box<dyn std::error::Error>> {
         println!("Initializing engine and linker...");
         println!("Contract name and pub key {:?}",pub_key);
         let engine = Engine::default();
@@ -530,24 +527,20 @@ impl WasmContract {
         let wasm_memory = link.get_memory(&mut store, "memory")
             .ok_or_else(|| "Failed to find `memory` export")?;
         let saved_data = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
-        // 2.2. Set this memory state into the WebAssembly module's memory.
-        if saved_data.len() > wasm_memory.data(&mut store).len() {
-            return Err("Saved data is larger than the available WASM memory.".into());
+        let saved_data_length = saved_data.len() as u64;
+        let current_memory_size_bytes = wasm_memory.data_size(&store) as u64;
+        if saved_data.len() > wasm_memory.data_size(&store) {
+            // If not, calculate how many additional memory pages are needed
+            // Calculate the number of additional pages needed, rounding up
+            let additional_pages_needed = ((saved_data_length + (64 * 1024 - 1)) / (64 * 1024)) - (current_memory_size_bytes / (64 * 1024));
+            // Attempt to grow the WebAssembly memory by the required number of pages
+            if saved_data_length > current_memory_size_bytes {
+                wasm_memory.grow(&mut store, additional_pages_needed).map_err(|_| "Failed to grow memory")?;
+            }
         }
+        // After ensuring the memory is large enough, copy the saved data into the WebAssembly memory within bounds
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
 
-        let test_amount_supply_func = link.get_typed_func::<(), u64>(&mut store, "total_tokens")?;
-        match link.get_typed_func::<(), u64>(&mut store, "total_tokens") {
-            Ok(func) => {
-                let result = func.call(&mut store, ());
-                match result {
-                    Ok(value) => println!("Supply {:?}", value),
-                    Err(e) => println!("Error calling total_tokens: {}", e),
-                }
-            }
-            Err(e) => println!("Error getting total_tokens function: {}", e),
-        }
-        let result = test_amount_supply_func.call(&mut store, ())?;
 
         println!("Attempting to call mint function in the WebAssembly module...");
     
@@ -570,13 +563,30 @@ impl WasmContract {
             let additional_pages_needed = ((required_memory_size_bytes - current_memory_size_bytes + (64 * 1024 - 1)) / (64 * 1024)) as u32;
             // Grow the memory
             wasm_memory.grow(&mut store, additional_pages_needed as u64).map_err(|_| "Failed to grow memory")?;
+
         }
+        // We need to limit the scope of the memory view so that we can mutably borrow `store` again later
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            // Ensure the new data offset is within the bounds of the current memory size
+            if new_data_offset as usize >= memory_view.len() {
+                return Err("New data offset is out of the current memory bounds.".into());
+            }
+        } // `memory_view` goes out of scope here, so we can mutably borrow `store` again
+
+
         let (name_ptr, name_len) = write_data_to_memory(&wasm_memory, "0x7B502C3A1F48C8609AE212CDFB639DEE39673F5E", new_data_offset, &mut store)?;
         println!("Owner data pointer: {:?}, length: {:?}", name_ptr, name_len);
-
-        // Calculate the offset for the IPFS hash
         let ipfs_memory_offset = name_ptr + name_len;
 
+        // Check that the IPFS data fits within memory bounds
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            if ipfs_memory_offset as usize + ipfs_data_bytes as usize > memory_view.len() {
+                return Err("IPFS data offset or length is out of the current memory bounds.".into());
+            }
+        } // The scope of memory_view ends here
+        
         // Write the IPFS hash
         let (ipfs_ptr, ipfs_len) = write_data_to_memory(&wasm_memory, "SMTX_IPFS_TEST", ipfs_memory_offset, &mut store)?;
 
@@ -598,15 +608,15 @@ impl WasmContract {
                 rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
                 println!("Token ID value: {:?}", token_id);
                 //Ok(token_id);
+                Ok(token_id as i32)
                 // rest of the logic here
             },
             Err(e) => {
                 println!("Mint function failed: {}", e);
                 // handle the error
+                Err(e.into())
             }
         }
-        // Fetch the string from WebAssembly memory
-        Ok(1)
     }
     pub fn read_owner_token(
         &self,
@@ -854,11 +864,11 @@ pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, 
     println!("Successfully instantiated the wasm module.");
 
     // Print the exported functions
-    let functions = contract.exported_functions();
-    println!("Available Functions: {:?}", functions);
-    for func in functions.iter() {
-        println!("Exported Function: {}", func);
-    }
+    //let functions = contract.exported_functions();
+    // println!("Available Functions: {:?}", functions);
+    // for func in functions.iter() {
+    //     println!("Exported Function: {}", func);
+    // }
 
     let the_memory = create_memory(contract.get_store())?;
     let owner_memory_offset = 0;
@@ -1013,7 +1023,7 @@ pub fn get_erc721_supply(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), 
     }
     Ok(())
 }
-pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn std::error::Error>>{
+pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<i32, Box<dyn std::error::Error>>{
     if let Some(data) = cmd.strip_prefix("mint token ") {
         let mut contract = WasmContract::new("./sample721.wasm")?;
         let contract_path = swarm.behaviour().storage_path.get_contract();
@@ -1023,19 +1033,23 @@ pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn
         };
         let the_memory = create_memory(contract.get_store())?;
   
-        let ipfs_hash = "TEST_IPFS";
-        let result = contract.mint_token(contract_path, &contract_info,&data.to_string(),ipfs_hash);
-        let mint_result = contract.read_owner_token(contract_path, &contract_info,&data.to_string(),0);
+        let result = contract.mint_token(contract_path, &contract_info,&data.to_string(),"TEST_IPFS");
+
         match result {
-            Ok(value) => {
-                println!("Mint: {}", value);
+            Ok(token_id) => {
+                println!("Mint: {}", token_id);
+                contract.read_owner_token(contract_path, &contract_info,&data.to_string(),0);
+                Ok(token_id)
             }
             Err(e) => {
                 println!("Error reading: {}", e);
+                Err(e)
             }
         }
+    }else {
+        // If the command is not properly formatted, return an error
+        Err("Command format not recognized".into())
     }
-    Ok(())
 }
 
 pub fn get_token_owner(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
