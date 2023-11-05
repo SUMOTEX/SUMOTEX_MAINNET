@@ -2,9 +2,11 @@ use secp256k1::{Secp256k1, PublicKey, SecretKey};
 use libp2p::{
     swarm::{Swarm},
 };
+use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use crate::p2p::AppBehaviour;
 use crate::rock_storage;
+
 
 pub fn generate_keypair()->(PublicKey,SecretKey) {
     let secp = Secp256k1::new();
@@ -20,6 +22,18 @@ pub struct Account {
     balance: f64,   
     nonce: u64,
     contract_address: Option<Vec<String>>,
+    owned_tokens:  Option<HashMap<String, Vec<u64>>>, // Contract address to list of token IDs
+}
+#[derive(Debug)]
+pub enum SigningError {
+    Secp256k1Error(SecpError),
+    MessageCreationError,
+}
+
+impl From<SecpError> for SigningError {
+    fn from(err: SecpError) -> Self {
+        SigningError::Secp256k1Error(err)
+    }
 }
 
 impl Account {
@@ -28,9 +42,10 @@ impl Account {
         let (public_key,private_key)=generate_keypair();
         Account {
             public_address:public_key.to_string(),
-            balance: 1000000.0,
+            balance: 0.0,
             nonce: 1,
-            contract_address: Some(Vec::new())
+            contract_address: Some(Vec::new()),
+            owned_tokens: None::<HashMap<String, Vec<u64>>>, // Initially, the account does not own any tokens
         }
     }
 
@@ -51,6 +66,45 @@ impl Account {
     // Increment the nonce, typically called when a transaction is made
     fn increment_nonce(&mut self) {
         self.nonce += 1;
+    }
+    // Signs a message with the account's private key
+    pub fn sign_message(&self, message_bytes: &[u8]) -> Result<secp256k1::Signature, SigningError> {
+        // The private key would be needed to sign the message.
+        // It should be securely stored and managed.
+        let private_key = ...; // Retrieve your private key from a secure storage
+
+        let secp = Secp256k1::new();
+        let message = Message::from_slice(message_bytes).map_err(|_| SigningError::MessageCreationError)?;
+        let signature = secp.sign(&message, &private_key)?;
+
+        Ok(signature)
+    }
+
+    // Verifies the signature of a message
+    pub fn verify_signature(
+        &self,
+        message_bytes: &[u8],
+        signature: &secp256k1::Signature,
+    ) -> Result<bool, SigningError> {
+        let secp = Secp256k1::new();
+        let message = Message::from_slice(message_bytes).map_err(|_| SigningError::MessageCreationError)?;
+        let public_key = PublicKey::from_slice(&hex::decode(&self.public_address).unwrap()).unwrap(); // This assumes public_address is hex encoded
+        Ok(secp.verify(&message, signature, &public_key).is_ok())
+    }
+    // Add a token to the account's ownership list
+    pub fn add_token(&mut self, contract_address: &str, token_id: u64) {
+        let token_list = self.owned_tokens.entry(contract_address.to_string()).or_insert_with(Vec::new);
+        token_list.push(token_id);
+    }
+    // Removes a token from the account's ownership list
+    pub fn remove_token(&mut self, contract_address: &str, token_id: u64) -> Result<(), &'static str> {
+        if let Some(token_list) = self.owned_tokens.get_mut(contract_address) {
+            if let Some(index) = token_list.iter().position(|&id| id == token_id) {
+                token_list.remove(index);
+                return Ok(());
+            }
+        }
+        Err("Token not found")
     }
 }
 
