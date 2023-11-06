@@ -133,9 +133,6 @@ async fn main() {
     // Lock the swarm and access it
     let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    
     if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
-        // Now, you can use swarm_public_net as you intended
-        // ...
-
     let mut stdin = BufReader::new(stdin()).lines();
     loop {
         if let Some(port) = whitelisted_listener.pop() {
