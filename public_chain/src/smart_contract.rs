@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 use crate::p2p::AppBehaviour;
 use secp256k1::{Secp256k1, PublicKey, SecretKey};
 use crate::rock_storage;
+use crate::public_block;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use std::fs::File;
@@ -426,25 +427,6 @@ impl WasmContract {
             
             // Assuming the start of your static memory is where you want to write
             let offset = 0;
-            
-            println!("Writing data to WebAssembly memory...");
-            // let write_func = link.get_typed_func::<(i32,i32, i32), _>(&mut store, "write_string_to_memory");
-            // match write_func {
-            //     Ok(write_func) => {
-            //         let write_result = write_func.call(&mut store, (bytes.as_ptr() as i32, offset as i32, bytes.len() as i32));
-            //         match write_result {
-            //             Ok(()) => {
-            //                 println!("Data successfully written to WebAssembly memory");
-            //             }
-            //             Err(err) => {
-            //                 eprintln!("Error writing to memory: {}", err);
-            //             }
-            //         }
-            //     }
-            //     Err(err) => {
-            //         eprintln!("Error getting write function: {}", err);
-            //     }
-            // }
 
             println!("Attempting to read from WebAssembly memory...");
             let offset_func = link.get_typed_func::<(), i32>(&mut store, "get_string_offset")?;

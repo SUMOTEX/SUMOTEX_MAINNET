@@ -114,5 +114,47 @@ impl Txn {
             }
             //let the_outcome:bool= verkle_tree.node_exists_with_root(hash_array,);
     }   
+    pub fn create_transactions(caller_address:str,to_address:str,txn_hash: &str,computed_value:u64) {
+        let mut verkle_tree = VerkleTree::new();
+        let mut transactions: HashMap<String, String>= HashMap::new();
+        let current_timestamp: i64 = SystemTime::now()
+        .duration_since(UNIX_EPOCH)
+        .unwrap()
+        .as_secs() as i64;
+        let mut latest_txn = PublicTxn{
+            caller_address:caller_address,
+            signature:Some(generate_fake_signature()),
+            to_address:to_address,
+            txn_hash:txn_hash.to_string(),
+            nonce:i,
+            value:computed_value,
+            status:1,
+            timestamp: current_timestamp
+        };
+        let serialized_data = serde_json::to_string(&latest_txn).expect("can jsonify request");
+        // Hash the serialized data
+        let mut hasher = Sha256::new();
+        hasher.update(&serialized_data);
+        let hash_result = hasher.finalize();
+            // Convert the hash bytes to a hexadecimal string
+        let hash_hex_string = format!("{:x}", hash_result);
+        verkle_tree.insert(s.as_bytes().to_vec(), hash_result.to_vec());
+        let mut dictionary_data = std::collections::HashMap::new();
+        dictionary_data.insert("key".to_string(), s.to_string());
+        dictionary_data.insert("value".to_string(), serialized_data.to_string());
+        // Serialize the dictionary data (using a suitable serialization format)
+        let serialised_txn = serde_json::to_vec(&dictionary_data).unwrap();
+        transactions.insert(s.to_string(),serialized_data.to_string());
+        //behaviour.floodsub.publish(TXN_TOPIC.clone(),s.to_string());
+        let root_hash = verkle_tree.get_root_string();
+        let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
+        map.insert(root_hash.clone(),transactions);
+        let serialised_dictionary = serde_json::to_vec(&map).unwrap();
+        println!("Broadcasting Transactions to nodes");
+        //behaviour.txn.transactions.push(root_hash.clone());
+        if let Some(publisher) = Publisher::get(){
+            publisher.publish_block("pbft_pre_prepared".to_string(),serialised_dictionary)
+        }
+    }
 
 }

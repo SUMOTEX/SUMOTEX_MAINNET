@@ -42,6 +42,7 @@ pub fn get_global_swarm_public_net() -> Arc<Mutex<Option<Swarm<AppBehaviour>>>> 
     Arc::clone(&GLOBAL_SWARM_PUBLIC_NET)
 }
 
+
 pub async fn create_public_swarm(app: App,storage:StoragePath) {
     // Create and initialize your swarm here
     info!("Peer Id: {}", PEER_ID.clone());

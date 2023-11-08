@@ -4,13 +4,14 @@ use libp2p::{
     floodsub::{Topic},
     swarm::{Swarm},
 };
-use log::{ info, warn};
+use log::{ info, warn,error};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use once_cell::sync::Lazy;
 use crate::p2p::AppBehaviour;
 use crate::public_app::App;
 use crate::rock_storage;
+use crate::public_swarm;
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
 
 
@@ -99,37 +100,45 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
             .publish(BLOCK_TOPIC.clone(), json.as_bytes());
     }
 }
-pub fn handle_create_block_contract(txns: Vec<String>) {
-    let swarm_mutex = public_swarm::get_global_swarm_public_net();
-    // Lock the swarm and access it
-    let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    
-    if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
-        let behaviour = swarm_public_net.behaviour_mut();
-        let latest_block = behaviour
-            .app
-            .blocks
-            .last()
-            .expect("there is at least one block");
-        let block = Block::new(
-            latest_block.id + 1,
-            latest_block.public_hash.clone(),
-            [txns.to_string()].to_vec(),
-            None,
-            None
-        );
-        let json = serde_json::to_string(&block).expect("can jsonify request");
-        let block_db = behaviour.storage_path.get_blocks();
-        rock_storage::put_to_db(block_db,latest_block.public_hash.clone(),&json);
-        behaviour.app.blocks.push(block);
-        info!("broadcasting new block");
-        
-        //rock_storage::put_to_db(latest_block.id+1,);
-        behaviour
-            .floodsub
-            .publish(BLOCK_TOPIC.clone(), json.as_bytes());
-    }
+// pub fn handle_create_block_contract(txns: Vec<String>) {
+//     let swarm_mutex = public_swarm::get_global_swarm_public_net();
+//     let mut swarm_public_net_guard = match swarm_mutex.lock() {
+//         Ok(guard) => guard,
+//         Err(poisoned) => {
+//             error!("Mutex is poisoned. Aborting block creation.");
+//             return;
+//         },
+//     };
+    
+//     if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
+//         let behaviour = swarm_public_net.behaviour_mut();
+//         let latest_block = behaviour
+//             .app
+//             .blocks
+//             .last()
+//             .expect("there should be at least one block");
 
-}
+//         let block = Block::new(
+//             latest_block.id + 1,
+//             latest_block.public_hash.clone(),
+//             txns,
+//             None,
+//             None,
+//         );
+
+//         let json = serde_json::to_string(&block).expect("can jsonify request");
+//         let block_db = behaviour.storage_path.get_blocks();
+//         rock_storage::put_to_db(block_db, latest_block.public_hash.clone(), &json);
+//         behaviour.app.blocks.push(block);
+
+//         behaviour
+//             .floodsub
+//             .publish(BLOCK_TOPIC.clone(), json.as_bytes());
+//     } else {
+//         error!("Swarm is not available. Unable to create contract block.");
+//     }
+// }
+
 
 pub fn handle_finalised_block(swarm: &mut Swarm<AppBehaviour>, block:Block){
     let behaviour = swarm.behaviour_mut();

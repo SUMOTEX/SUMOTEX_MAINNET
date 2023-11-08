@@ -4,6 +4,8 @@ use libp2p::{
 };
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
+use secp256k1::Message;
+use secp256k1::Error as Secp256k1Error;
 use crate::p2p::AppBehaviour;
 use crate::rock_storage;
 
@@ -26,12 +28,12 @@ pub struct Account {
 }
 #[derive(Debug)]
 pub enum SigningError {
-    Secp256k1Error(SecpError),
+    Secp256k1Error(Secp256k1Error),
     MessageCreationError,
 }
 
-impl From<SecpError> for SigningError {
-    fn from(err: SecpError) -> Self {
+impl From<Secp256k1Error> for SigningError {
+    fn from(err: Secp256k1Error) -> Self {
         SigningError::Secp256k1Error(err)
     }
 }
@@ -68,18 +70,12 @@ impl Account {
         self.nonce += 1;
     }
     // Signs a message with the account's private key
-    pub fn sign_message(&self, message_bytes: &[u8]) -> Result<secp256k1::Signature, SigningError> {
-        // The private key would be needed to sign the message.
-        // It should be securely stored and managed.
-        let private_key = ...; // Retrieve your private key from a secure storage
-
+    pub fn sign_message(&self, message_bytes: &[u8], private_key: &SecretKey) -> Result<secp256k1::Signature, secp256k1::Error> {
         let secp = Secp256k1::new();
-        let message = Message::from_slice(message_bytes).map_err(|_| SigningError::MessageCreationError)?;
-        let signature = secp.sign(&message, &private_key)?;
-
-        Ok(signature)
-    }
-
+        let message = Message::from_slice(message_bytes)?;
+    
+        Ok(secp.sign(&message, private_key))
+    } 
     // Verifies the signature of a message
     pub fn verify_signature(
         &self,
@@ -93,18 +89,11 @@ impl Account {
     }
     // Add a token to the account's ownership list
     pub fn add_token(&mut self, contract_address: &str, token_id: u64) {
-        let token_list = self.owned_tokens.entry(contract_address.to_string()).or_insert_with(Vec::new);
-        token_list.push(token_id);
-    }
-    // Removes a token from the account's ownership list
-    pub fn remove_token(&mut self, contract_address: &str, token_id: u64) -> Result<(), &'static str> {
-        if let Some(token_list) = self.owned_tokens.get_mut(contract_address) {
-            if let Some(index) = token_list.iter().position(|&id| id == token_id) {
-                token_list.remove(index);
-                return Ok(());
-            }
+        if self.owned_tokens.is_none() {
+            self.owned_tokens = Some(HashMap::new()); // Initialize the HashMap if it's None
         }
-        Err("Token not found")
+        let token_list = self.owned_tokens.as_mut().unwrap().entry(contract_address.to_string()).or_insert_with(Vec::new);
+        
     }
 }
 

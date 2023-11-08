@@ -53,9 +53,9 @@ pub fn add_api_blocks(app: PubApp) -> impl Responder {
     .header("Access-Control-Allow-Headers", "Authorization, Content-Type")
     .body(json_response)
 }
-pub fn create_nft_contract(app:PubApp)-> impl Responder{
+// pub fn create_nft_contract(app:PubApp)-> impl Responder{
     
-}
+// }
 
 async fn obtain_blocks() -> impl Responder {
     let local_blocks = APP_BLOCKS.lock().unwrap();
