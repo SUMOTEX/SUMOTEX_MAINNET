@@ -45,7 +45,7 @@ pub fn get_total_pbft_view(swarm: &Swarm<AppBehaviour>)->u64 {
     let view_value = swarm.behaviour().pbft.view;
     view_value
 }
-fn generate_fake_signature() -> Vec<u8> {
+pub fn generate_fake_signature() -> Vec<u8> {
     vec![0u8; 64] // Assuming a 64-byte signature for illustrative purposes.
 }
 pub fn create_transactions_epoch() {
@@ -63,12 +63,12 @@ pub fn create_transactions_epoch() {
         .unwrap()
         .as_secs() as i64;
         let mut latest_txn = PublicTxn{
-            caller_address:0,
+            caller_address:"sample_call".to_string(),
             signature:Some(generate_fake_signature()),
-            to_address:1,
+            to_address:"sample_to".to_string(),
             txn_hash:s.to_string(),
             nonce:i,
-            value:"".to_string(),
+            value:100,
             status:1,
             timestamp: current_timestamp
         };
@@ -120,11 +120,11 @@ pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
             .as_secs() as i64;
             let mut latest_txn = PublicTxn{
                 txn_hash:s.to_string(),
-                caller_address:0,
-                to_address:1,
+                caller_address:"sample_caller".to_string(),
+                to_address:"sample_to".to_string(),
                 signature:Some(generate_fake_signature()),
                 nonce:i,
-                value:data.to_owned(),
+                value:123,
                 status:1,
                 timestamp: current_timestamp
             };

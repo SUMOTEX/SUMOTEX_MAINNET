@@ -25,6 +25,7 @@ use rocksdb::Error as RocksDBError;
 use wasm_bindgen::JsCast;
 use js_sys::WebAssembly;
 use js_sys::Uint8Array;
+use crate::public_txn;
 
 #[derive(Serialize, Deserialize)]
 pub struct ERC721Token {
@@ -829,6 +830,8 @@ pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, 
 pub fn create_erc721_contract(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn std::error::Error>>{
     let contract_path = swarm.behaviour().storage_path.get_contract();
     let (public_key,private_key) = generate_keypair();
+    //TODO: Call with signature sign
+    let (public_caller_key,private_caller_key) = generate_keypair();
     read_wasm_file("./sample721.wasm",contract_path,public_key.to_string());
     // Reading from DB and deserializing
     let contract_info = ContractInfo {
@@ -861,12 +864,12 @@ pub fn create_erc721_contract(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result
             Val::I32(symbol_ptr as i32),
             Val::I32(symbol_len as i32),
         ],
-        // ... other params as needed.
     };
-    //Initialise
     let mut contract = WasmContract::new("./sample721.wasm")?;
     contract.call_721(contract_path,&contract_info, &wasm_params)?;
     let the_item = rock_storage::get_from_db(contract_path,public_key.to_string());
+    //TODO: compute value
+    public_txn::Txn::create_transactions(public_caller_key.to_string(),public_key.to_string(),1000);
     println!("Contract Public Key: {:?}",public_key.to_string());
     println!("The Key Item: {:?}",the_item);
     Ok(())
