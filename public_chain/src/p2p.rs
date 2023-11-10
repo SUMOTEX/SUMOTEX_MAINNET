@@ -167,12 +167,12 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 let received_serialized_data =msg.data;
                 let deserialized_data: HashMap<String, HashMap<String, String>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
-                println!("The NODE: {:?}",the_pbft_hash);
-                info!("The new txn from {:?}", deserialized_data);
+                println!("The Node: {:?}",the_pbft_hash);
                 for (key, inner_map) in deserialized_data.iter() {
                     //TODO ADD the hash to database.
                     let (valid_txn,txn_hashes) = self.txn.is_txn_valid(key.to_string(),inner_map.clone());
                     if valid_txn {
+                        println!("Transactions Valid: {:?}",valid_txn);
                         let created_block=self.pbft.pre_prepare(key.to_string(),txn_hashes.clone());
                         if let Some(publisher) = Publisher::get(){
                             publisher.publish("pbft_prepared".to_string(), the_pbft_hash.to_string());
@@ -231,20 +231,22 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     self.app.blocks.push(created_block);
                     println!("Private Block Transactions {:?}",self.app.blocks);
                     publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
-                    }
+                }
             }
             else if msg.topics[0]==Topic::new("transactions")  {
-                // let received_serialized_data:HashMap<String, Vec<String>> =serde_json::from_slice(&msg.data).expect("Deserialization failed");
-                // println!("Source: {:?}",received_serialized_data);
-                //self.txn.try_add_hash_txn(received_serialized_data);
-                // let validity = self.txn.is_txn_valid();
-                // if validity{
-                //     println!("hello, txn valid")
-                // }
-                // info!("SerializeTxn: {:?}", deserialized_data["key"]);
-                // if(self.txn.is_txn_valid(&deserialized_data["key"],&deserialized_data["value"])){
-                //     println!("Valid");
-                // };
+                let received_serialized_data =msg.data;
+                let json_string = String::from_utf8(received_serialized_data).unwrap();
+                println!("Contract creation Transactions: {:?}",json_string);
+                if let Some(publisher) = Publisher::get(){
+                    let (root,txn) = self.pbft.get_txn(json_string);
+                    let created_block = public_block::handle_create_block_pbft(self.app.clone(),root,txn);
+                    let json = serde_json::to_string(&created_block).expect("can jsonify request");
+                    let block_db = self.storage_path.get_blocks();
+                    let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
+                    self.app.blocks.push(created_block);
+                    println!("Contract creation Transactions {:?}",self.app.blocks);
+                    publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
+                }
             }
         }
     }

@@ -80,10 +80,7 @@ impl Txn {
     pub fn try_add_root_txn(&mut self, txn: String) {
         self.transactions.push(txn);
     }
-    
-    pub fn try_add_hash_txn(&mut self, txn: String) {
-        //self.hashed_txn.push(txn);
-    }
+
 
     pub fn is_txn_valid(&mut self,root_hash:String, txn_hash: HashMap<String, String>) -> (bool,Vec<String>) {
             //println!("{:?}",theTxn.timestamp);
@@ -98,7 +95,6 @@ impl Txn {
                 sorted_items.insert(deserialized_data.nonce, deserialized_data);
             }
             for (_, item) in sorted_items.iter() {
-                println!("{:#?}", item.txn_hash);
                 let serialized_data = serde_json::to_string(&item).expect("can jsonify request");
                 // Hash the serialized data
                 let mut hasher = Sha256::new();
@@ -127,7 +123,7 @@ impl Txn {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
-        //TODO FIX TXN HASH GENERATOR
+        //TODO FIX TXN HASH GENERATOR AND HARDCODED NONCE
         let mut hash_item = caller_address.clone()+"_"+&to_address.clone() +"_"+&1000.to_string()+"_"+&computed_value.to_string() +"_"+&current_timestamp.to_string();
         let txn_hash = serde_json::to_string(&hash_item).expect("can jsonify request");
         let mut latest_txn = PublicTxn{
@@ -135,7 +131,7 @@ impl Txn {
             signature:Some(Self::generate_fake_signature()),
             to_address:to_address.clone(),
             txn_hash:txn_hash.to_string(),
-            nonce:1000,
+            nonce:1,
             value:computed_value,
             status:1,
             timestamp: current_timestamp
@@ -147,19 +143,19 @@ impl Txn {
         let hash_result = hasher.finalize();
         // Convert the hash bytes to a hexadecimal string
         let hash_hex_string = format!("{:x}", hash_result);
-        verkle_tree.insert(to_address.as_bytes().to_vec(), hash_result.to_vec());
+        verkle_tree.insert(txn_hash.as_bytes().to_vec(), hash_result.to_vec());
         let mut dictionary_data = std::collections::HashMap::new();
-        dictionary_data.insert("key".to_string(), to_address.to_string());
+        dictionary_data.insert("key".to_string(), txn_hash.to_string());
         dictionary_data.insert("value".to_string(), serialized_data.to_string());
         // Serialize the dictionary data (using a suitable serialization format)
         let serialised_txn = serde_json::to_vec(&dictionary_data).unwrap();
         transactions.insert(txn_hash.to_string(),serialized_data.to_string());
-        //behaviour.floodsub.publish(TXN_TOPIC.clone(),s.to_string());
         let root_hash = verkle_tree.get_root_string();
         let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
         map.insert(root_hash.clone(),transactions);
         let serialised_dictionary = serde_json::to_vec(&map).unwrap();
-        println!("Creating transactions to nodes");
+        println!("Broadcasting transactions to nodes");
+        //behaviour.txn.transactions.push(root_hash.clone());
         if let Some(publisher) = Publisher::get(){
             publisher.publish_block("pbft_pre_prepared".to_string(),serialised_dictionary)
         }

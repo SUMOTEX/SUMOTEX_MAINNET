@@ -254,7 +254,6 @@ async fn main() {
                         Some(p2p::EventType::Publish(title, message))
                     },
                     publish_block = publish_bytes_receiver.recv()=>{
-                        println!("Publish Blocks bytes received");
                         let (title, message) = publish_block.clone().expect("Publish Block exists");
                         // match publish_block {
                         //     Some((title, message)) => {
@@ -271,9 +270,7 @@ async fn main() {
                         Some(p2p::EventType::PublishBlock(title, message.into()))
                     }
                 };
-                println!("Checking for public event... {:?}",public_evt);
                 if let Some(event) = public_evt {
-                    println!("Event received:");
                     match event {
                         p2p::EventType::Init => {
                             let peers = p2p::get_list_peers(&swarm_public_net);
@@ -302,7 +299,6 @@ async fn main() {
                                 .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
                         }
                         p2p::EventType::Publish(title,message)=>{
-                            println!("Called of Publish:");
                             let title_json = serde_json::to_string(&title).expect("can jsonify title");
                             let topic_str = title_json.trim_matches('"');
                             let topic = libp2p::floodsub::Topic::new(topic_str);
@@ -315,7 +311,6 @@ async fn main() {
                             swarm_public_net.behaviour_mut().floodsub.publish(topic,message_json.as_bytes())
                         }
                         p2p::EventType::PublishBlock(title,message)=>{
-                            println!("Called of Publish Block:");
                             let title_json = serde_json::to_string(&title).expect("can jsonify title");
                             let topic_str = title_json.trim_matches('"');
                             let topic = libp2p::floodsub::Topic::new(topic_str);

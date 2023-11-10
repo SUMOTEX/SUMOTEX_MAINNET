@@ -845,10 +845,10 @@ pub fn create_erc721_contract(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result
 
     // Print the exported functions
     let functions = contract.exported_functions();
-    println!("Available Functions: {:?}", functions);
-    for func in functions.iter() {
-        println!("Exported Function: {}", func);
-    }
+    // println!("Available Functions: {:?}", functions);
+    // for func in functions.iter() {
+    //     println!("Exported Function: {}", func);
+    // }
 
     let the_memory = create_memory(contract.get_store())?;
     let owner_memory_offset = 0;
@@ -890,10 +890,10 @@ pub fn create_erc20_contract(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<
 
     // Print the exported functions
     let functions = contract.exported_functions();
-    println!("Available Functions: {:?}", functions);
-    for func in functions.iter() {
-        println!("Exported Function: {}", func);
-    }
+    // println!("Available Functions: {:?}", functions);
+    // for func in functions.iter() {
+    //     println!("Exported Function: {}", func);
+    // }
 
     let the_memory = create_memory(contract.get_store())?;
     let owner_memory_offset = 0;
