@@ -38,8 +38,10 @@ use publisher::Publisher;
 use tokio::net::TcpListener;
 use crate::p2p::AppBehaviour;
 use rocksdb::DBWithThreadMode;
+use rocksdb::{DB, Options, Error};
 use rocksdb::SingleThreaded;
 type MySwarm = Swarm<AppBehaviour>;
+
 
 enum CustomEvent {
     ReceivedRequest(PeerId, Vec<u8>),
@@ -70,7 +72,7 @@ pub fn create_pub_storage()-> rock_storage::StoragePath{
     };
 
     println!("Storage created for blocks, accounts, contract, and transactions");
-    return the_storage;
+    return the_storage
 
 }
 fn db_extract(db: Arc<RwLock<DBWithThreadMode<SingleThreaded>>>) -> DBWithThreadMode<SingleThreaded> {
@@ -81,7 +83,20 @@ pub fn remove_lock_file() {
     if let Err(e) = fs::remove_file(lock_path) {
         eprintln!("Error removing lock file: {:?}", e);
     }
+    let lock_path_2 = "./account/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_2) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+    let lock_path_3 = "./contract/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_3) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+    let lock_path_4 = "./transactions/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_4) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
 }
+
 
 #[tokio::main]
 async fn main() {
@@ -120,15 +135,34 @@ async fn main() {
     // });
     println!("After starting RPC server");
     //create storage
+    remove_lock_file();
     let the_storage = create_pub_storage();
+    // match the_storage {
+    //     Ok(_) => println!("Database opened successfully."),
+    //     Err(e) => {
+    //         eprintln!("Failed to open the database: {}", e);
+    //         // Check if the error is due to a lock file issue
+    //         if e.to_string().contains("LOCK: Resource temporarily unavailable") {
+    //             println!("Attempting to remove stale lock file...");
+    //             remove_lock_file();
+                
+    //             // Retry opening the database after removing the lock file
+    //             match create_pub_storage() {
+    //                 Ok(_) => println!("Database opened successfully after removing stale lock file."),
+    //                 Err(ref e) => eprintln!("Still failed to open the database: {}", e),
+    //             }
+    //         }
+    //     }
+    // }
+
     //info!("Peer Id: {}", p2p::PEER_ID.clone());
     let (response_sender, mut response_rcv) = mpsc::unbounded_channel();
     let (init_sender, mut init_rcv) = mpsc::unbounded_channel();
     let (publisher, mut publish_receiver, mut publish_bytes_receiver): (Publisher, mpsc::UnboundedReceiver<(String, String)>, mpsc::UnboundedReceiver<(String, Vec<u8>)>) = Publisher::new();
     Publisher::set(publisher);
     let app = App::new();
-
     public_swarm::create_public_swarm(app.clone(),the_storage).await;
+   
     let swarm_mutex = public_swarm::get_global_swarm_public_net();
     // Lock the swarm and access it
     let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    

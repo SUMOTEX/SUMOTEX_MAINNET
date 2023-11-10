@@ -159,9 +159,9 @@ impl Txn {
         let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
         map.insert(root_hash.clone(),transactions);
         let serialised_dictionary = serde_json::to_vec(&map).unwrap();
-        println!("Broadcasting Transactions to nodes");
-        //behaviour.txn.transactions.push(root_hash.clone());
+        println!("Creating transactions to nodes");
         if let Some(publisher) = Publisher::get(){
+            println!("Publisher");
             publisher.publish_block("pbft_pre_prepared".to_string(),serialised_dictionary)
         }
     }
