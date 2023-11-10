@@ -46,13 +46,13 @@ pub struct LocalChainRequest {
     pub from_peer_id: String,
 }
 
+#[derive(Debug)]
 pub enum EventType {
     LocalChainResponse(ChainResponse),
     Input(String),
     Init,
     Publish(String, String), // Publish a message to a topic
     PublishBlock(String,Vec<u8>),
-    //Bridge(String,String)
 }
 
 #[derive(NetworkBehaviour)]
@@ -107,7 +107,7 @@ impl AppBehaviour {
         behaviour
     }
     fn send_message(&mut self, target: PeerId, message: String) {
-        println!("{:?}",target)
+        println!("Message Sending {:?}",target)
         // Logic to send the message to the target PeerId
     }
 }
@@ -163,6 +163,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                 }
             } else if msg.topics[0]==Topic::new("pbft_pre_prepared") {
+                println!("PBFT Received");
                 let received_serialized_data =msg.data;
                 let deserialized_data: HashMap<String, HashMap<String, String>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();

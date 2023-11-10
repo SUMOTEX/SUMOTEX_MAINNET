@@ -161,7 +161,6 @@ impl Txn {
         let serialised_dictionary = serde_json::to_vec(&map).unwrap();
         println!("Creating transactions to nodes");
         if let Some(publisher) = Publisher::get(){
-            println!("Publisher");
             publisher.publish_block("pbft_pre_prepared".to_string(),serialised_dictionary)
         }
     }

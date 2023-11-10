@@ -93,7 +93,7 @@ pub fn create_transactions_epoch() {
     let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
     map.insert(root_hash.clone(),transactions);
     let serialised_dictionary = serde_json::to_vec(&map).unwrap();
-    println!("Broadcasting Transactions to nodes");
+    println!("Broadcasting transactions to nodes");
     //behaviour.txn.transactions.push(root_hash.clone());
     if let Some(publisher) = Publisher::get(){
         publisher.publish_block("pbft_pre_prepared".to_string(),serialised_dictionary)
