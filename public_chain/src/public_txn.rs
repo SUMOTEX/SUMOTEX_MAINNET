@@ -125,7 +125,8 @@ impl Txn {
         .as_secs() as i64;
         //TODO FIX TXN HASH GENERATOR AND HARDCODED NONCE
         let mut hash_item = caller_address.clone()+"_"+&to_address.clone() +"_"+&1000.to_string()+"_"+&computed_value.to_string() +"_"+&current_timestamp.to_string();
-        let txn_hash = serde_json::to_string(&hash_item).expect("can jsonify request");
+        let txn_hash_json = serde_json::to_string(&hash_item).expect("can jsonify request");
+        let txn_hash = txn_hash_json.trim_matches('"').to_string(); 
         let mut latest_txn = PublicTxn{
             caller_address:caller_address.clone(),
             signature:Some(Self::generate_fake_signature()),
