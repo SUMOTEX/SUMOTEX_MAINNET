@@ -9,7 +9,6 @@ use secp256k1::Error as Secp256k1Error;
 use crate::p2p::AppBehaviour;
 use crate::rock_storage;
 
-
 pub fn generate_keypair()->(PublicKey,SecretKey) {
     let secp = Secp256k1::new();
     let mut rng = secp256k1::rand::thread_rng();
@@ -70,10 +69,9 @@ impl Account {
         self.nonce += 1;
     }
     // Signs a message with the account's private key
-    pub fn sign_message(&self, message_bytes: &[u8], private_key: &SecretKey) -> Result<secp256k1::Signature, secp256k1::Error> {
+    pub fn sign_message( message_bytes: &[u8], private_key: &SecretKey) -> Result<secp256k1::Signature, secp256k1::Error> {
         let secp = Secp256k1::new();
         let message = Message::from_slice(message_bytes)?;
-    
         Ok(secp.sign(&message, private_key))
     } 
     // Verifies the signature of a message

@@ -129,11 +129,11 @@ async fn main() {
     let (public_key,private_key) = account::generate_keypair();
     println!("Generated public key: {:?}", public_key);
     println!("Generated private key: {:?}", private_key);
-    println!("Before starting RPC server");
+    // println!("Before starting RPC server");
     // let rpc_runner = tokio::spawn(async{
     //     rpc_connector::start_rpc().await
     // });
-    println!("After starting RPC server");
+    // println!("After starting RPC server");
     //create storage
     remove_lock_file();
     let the_storage = create_pub_storage();

@@ -4,6 +4,7 @@ use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use std::collections::BTreeMap;
 use crate::publisher::Publisher;
+use crate::account;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use secp256k1::{Secp256k1, PublicKey, SecretKey, Message, Signature};
@@ -26,7 +27,7 @@ pub struct PublicTxn{
     pub to_address:String,
     pub status:i64,
     pub timestamp:i64,
-    pub signature: Option<Vec<u8>>,
+    pub signature: Vec<u8>,
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -55,7 +56,12 @@ impl PublicTxn {
         let sig = secp.sign(&msg, secret_key);
         sig
     }
+    pub fn sign_message(&self, message_bytes: &[u8], private_key: &SecretKey) -> Result<secp256k1::Signature, secp256k1::Error> {
+        let secp = Secp256k1::new();
+        let message = Message::from_slice(message_bytes)?;
     
+        Ok(secp.sign(&message, private_key))
+    } 
     pub fn verify_transaction(transaction_data: &[u8], signature: &Signature, public_key: &PublicKey) -> bool {
         let secp = Secp256k1::new();
     
@@ -116,7 +122,7 @@ impl Txn {
     pub fn generate_fake_signature() -> Vec<u8> {
         vec![0u8; 64] // Assuming a 64-byte signature for illustrative purposes.
     }
-    pub fn create_transactions(caller_address:String,to_address:String,computed_value:u64) {
+    pub fn create_transactions(caller_address:String,private_key:&SecretKey,to_address:String,computed_value:u64) {
         let mut verkle_tree = VerkleTree::new();
         let mut transactions: HashMap<String, String>= HashMap::new();
         let current_timestamp: i64 = SystemTime::now() 
@@ -124,12 +130,26 @@ impl Txn {
         .unwrap()
         .as_secs() as i64;
         //TODO FIX TXN HASH GENERATOR AND HARDCODED NONCE
+
         let mut hash_item = caller_address.clone()+"_"+&to_address.clone() +"_"+&1000.to_string()+"_"+&computed_value.to_string() +"_"+&current_timestamp.to_string();
         let txn_hash_json = serde_json::to_string(&hash_item).expect("can jsonify request");
         let txn_hash = txn_hash_json.trim_matches('"').to_string(); 
+        let signature_result = account::Account::sign_message(txn_hash.as_bytes(),private_key);
+        let signature_option = match signature_result {
+            Ok(signature) => {
+                // Convert signature to Vec<u8>
+                signature.serialize_compact().to_vec()
+            },
+            Err(e) => {
+                // Handle error, like logging or returning an error
+                println!("Error: {:?}", e);
+                return; // or return an Err if your function returns a Result
+            },
+        };
+        
         let mut latest_txn = PublicTxn{
             caller_address:caller_address.clone(),
-            signature:Some(Self::generate_fake_signature()),
+            signature:signature_option,
             to_address:to_address.clone(),
             txn_hash:txn_hash.to_string(),
             nonce:1,

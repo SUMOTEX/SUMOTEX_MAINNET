@@ -5,6 +5,7 @@ use serde_json::json;
 use libp2p::swarm::Swarm;
 use crate::public_app::App as PubApp;
 use crate::public_block::Block;
+use crate::smart_contract;
 use crate::p2p;
 type MySwarm = Swarm<AppBehaviour>;
 
@@ -53,9 +54,14 @@ pub fn add_api_blocks(app: PubApp) -> impl Responder {
     .header("Access-Control-Allow-Headers", "Authorization, Content-Type")
     .body(json_response)
 }
-// pub fn create_nft_contract(app:PubApp)-> impl Responder{
-    
-// }
+pub fn create_nft_contract(call_address:&str)-> impl Responder{
+    //let contract_address = smart_contract::create_erc721_contract(call_address);
+    HttpResponse::Ok()
+    .header("Access-Control-Allow-Origin", "*")
+    .header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE")
+    .header("Access-Control-Allow-Headers", "Authorization, Content-Type")
+    .body("json_response")
+}
 
 async fn obtain_blocks() -> impl Responder {
     let local_blocks = APP_BLOCKS.lock().unwrap();

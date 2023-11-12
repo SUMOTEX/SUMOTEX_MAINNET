@@ -1,5 +1,4 @@
 use rocksdb::{DB,Error, Options,IteratorMode,SingleThreaded,DBWithThreadMode};
-use std::io::{self, Write};
 use std::fmt::Debug;
 use std::str;
 use std::fs;
