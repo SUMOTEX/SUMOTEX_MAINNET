@@ -29,16 +29,12 @@ mod account;
 mod smart_contract;
 mod rpc_connector;
 use bridge::accept_loop;
-use crate::p2p::PEER_ID;
-use crate::p2p::KEYS;
 use crate::public_app::App;
-use crate::public_txn::Txn;
 use std::sync::{RwLock, Arc};
 use publisher::Publisher;
 use tokio::net::TcpListener;
 use crate::p2p::AppBehaviour;
 use rocksdb::DBWithThreadMode;
-use rocksdb::{DB, Options, Error};
 use rocksdb::SingleThreaded;
 type MySwarm = Swarm<AppBehaviour>;
 
@@ -323,10 +319,10 @@ async fn main() {
                             cmd if cmd.starts_with("ls b") => p2p::handle_print_chain(&swarm_public_net),
                             cmd if cmd.starts_with("ls t") => p2p::handle_print_txn(&swarm_public_net),
                             cmd if cmd.starts_with("ls rt") => p2p::handle_print_raw_txn(&swarm_public_net),
-                            cmd if cmd.starts_with("create b") => public_block::handle_create_block(cmd,  swarm_public_net),
-                            cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd,  swarm_public_net),
-                            cmd if cmd.starts_with("create acc")=> account::create_account(cmd,  swarm_public_net),
-                            cmd if cmd.starts_with("acc d")=> account::get_account(cmd,  swarm_public_net),
+                            cmd if cmd.starts_with("create b") => public_block::handle_create_block(cmd, swarm_public_net),
+                            cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, swarm_public_net),
+                            cmd if cmd.starts_with("create acc")=> account::create_account(cmd, swarm_public_net),
+                            cmd if cmd.starts_with("acc d")=> account::get_account(cmd, swarm_public_net),
                             cmd if cmd.starts_with("contract c")=> {
                                 match smart_contract::create_erc721_contract(cmd,  swarm_public_net) {
                                     Ok(_) => {} // Do nothing on success

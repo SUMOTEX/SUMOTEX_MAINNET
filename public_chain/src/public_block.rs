@@ -4,7 +4,7 @@ use libp2p::{
     floodsub::{Topic},
     swarm::{Swarm},
 };
-use log::{ info, warn,error};
+use log::{ info, warn};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use once_cell::sync::Lazy;

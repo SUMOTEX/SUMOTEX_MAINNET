@@ -2,16 +2,13 @@ use std::collections::HashMap;
 use libp2p::{
     swarm::{Swarm},
 };
-use rocksdb::{DB,Error,DBWithThreadMode,SingleThreaded};
+use rocksdb::{DBWithThreadMode,SingleThreaded};
 use serde::{Deserialize, Serialize};
 use crate::p2p::AppBehaviour;
 use secp256k1::{Secp256k1, PublicKey, SecretKey};
 use crate::rock_storage;
-use crate::public_block;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
-use std::fs::File;
-use std::ffi::CString;
 use wasmtime::*;
 use wasmtime::Val;
 use wasmtime_wasi::WasiCtx;
@@ -23,8 +20,6 @@ use bincode::{serialize, deserialize};
 use bincode::{ Error as BincodeError};
 use rocksdb::Error as RocksDBError;
 use wasm_bindgen::JsCast;
-use js_sys::WebAssembly;
-use js_sys::Uint8Array;
 use crate::public_txn;
 
 #[derive(Serialize, Deserialize)]
