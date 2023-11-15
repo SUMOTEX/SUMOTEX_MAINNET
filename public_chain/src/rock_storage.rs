@@ -4,6 +4,7 @@ use std::str;
 use std::fs;
 use std::path::Path;
 use std::sync::{RwLock, Arc};
+
 #[derive(Debug)]
 pub struct StoragePath {
     pub blocks: DB,
@@ -11,14 +12,18 @@ pub struct StoragePath {
     pub account:DB,
     pub contract:DB
 }
+const BLOCKS_DB_PATH: &str = "./blocks/db";
+const TRANSACTIONS_DB_PATH: &str = "./transactions/db";
+const ACCOUNT_DB_PATH: &str = "./account/db";
+const CONTRACT_DB_PATH: &str = "./contract/db";
 
 impl StoragePath {
     pub fn new(block_path:DB,txn_path:DB,account_path:DB,contract_path:DB) -> Self {
         Self {
-            blocks:block_path,
-            transactions:txn_path,
-            account:account_path,
-            contract:contract_path
+            blocks: create_storage(BLOCKS_DB_PATH),
+            transactions: create_storage(TRANSACTIONS_DB_PATH),
+            account: create_storage(ACCOUNT_DB_PATH),
+            contract: create_storage(CONTRACT_DB_PATH),
         }
     }
     pub fn get_blocks(&self) -> &DB {
@@ -80,6 +85,12 @@ pub fn get_from_db_vector<K: AsRef<[u8]>>(db: &DB, key: K) -> Option<Vec<u8>> {
     }
 }
 
+pub fn open_db(db_path: &str) -> Result<DB, Error> {
+    let mut opts = Options::default();
+    opts.create_if_missing(true); // Creates the database if it does not exist
+    let db = DB::open(&opts, db_path)?;
+    Ok(db)
+}
 
 // pub fn update_in_db<K: AsRef<[u8]>>(db: &DB, key: K, append_str: &str) {
 //     // Retrieve existing value

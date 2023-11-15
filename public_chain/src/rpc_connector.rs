@@ -6,6 +6,12 @@ use serde_json::json;
 use rocket::http::Header;
 use rocket::{ Response};
 use rocket::fairing::{Fairing, Info, Kind};
+use log::error;
+use crate::smart_contract;
+use crate::public_swarm;
+use std::sync::{Arc, Mutex};
+use lazy_static::lazy_static;
+
 // Define a structure for incoming RPC requests.
 #[derive(serde::Deserialize, Debug)]
 struct RpcRequest {
@@ -13,6 +19,12 @@ struct RpcRequest {
     id: serde_json::Value,
     method: String,
     params: Option<serde_json::Value>,
+}
+
+#[derive(serde::Deserialize, Debug)]
+pub struct ContractInfo {
+    call_address: String,
+    private_key: String,
 }
 
 // Route to handle RPC requests.
@@ -71,6 +83,29 @@ fn handle_rpc(request: Json<RpcRequest>) -> Json<serde_json::Value> {
         }
     }
 }
+
+
+// Route to handle RPC requests.
+#[post("/create-nft-contract", data = "<post_data>")]
+fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> {
+    println!("create_nft_contract");
+    let call_address = &post_data.call_address;
+    let private_key = &post_data.private_key;
+    println!("Swarm public net is initialized, proceeding with contract creation");
+    match smart_contract::create_erc721_contract_official(&call_address, &private_key) {
+        Ok(contract_address) => {
+            println!("Contract successfully created: {:?}", contract_address);
+            let response_body = json!({"contract_address": contract_address});
+            Json(json!({"jsonrpc": "2.0", "id": "3", "result": response_body}))
+        },
+        Err(e) => {
+            error!("Error creating contract: {:?}", e);
+            Json(json!({"jsonrpc": "2.0", "id": "1", "result": "error"}))
+        }
+    }
+
+}
+
 pub struct CORS;
 #[rocket::async_trait]
 impl Fairing for CORS {
@@ -80,7 +115,6 @@ impl Fairing for CORS {
             kind: Kind::Response
         }
     }
-
     async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
         response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
         response.set_header(Header::new("Access-Control-Allow-Methods", "POST, GET, PATCH, OPTIONS"));
@@ -88,17 +122,19 @@ impl Fairing for CORS {
         response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
     }
 }
+
 // Launch the Rocket HTTP server.
 pub async fn start_rpc() {
     println!("Starting RPC server...");
     rocket::build()
         .attach(CORS)
+        //.manage(swarm) // Add the swarm to the application state
         .configure(rocket::Config {
             address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
             port: 8545,
             ..rocket::Config::default()
         })
-        .mount("/", routes![handle_rpc])
+        .mount("/", routes![handle_rpc,create_nft_contract])
         .launch()
         .await
         .expect("Failed to start Rocket server");

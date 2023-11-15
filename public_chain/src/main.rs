@@ -125,11 +125,7 @@ async fn main() {
     let (public_key,private_key) = account::generate_keypair();
     println!("Generated public key: {:?}", public_key);
     println!("Generated private key: {:?}", private_key);
-    // println!("Before starting RPC server");
-    // let rpc_runner = tokio::spawn(async{
-    //     rpc_connector::start_rpc().await
-    // });
-    // println!("After starting RPC server");
+
     //create storage
     remove_lock_file();
     let the_storage = create_pub_storage();
@@ -140,12 +136,18 @@ async fn main() {
     Publisher::set(publisher);
     let app = App::new();
     public_swarm::create_public_swarm(app.clone(),the_storage).await;
-   
-    let swarm_mutex = public_swarm::get_global_swarm_public_net();
     // Lock the swarm and access it
+    println!("Before starting RPC server");
+    let rpc_runner = tokio::spawn(async{
+        rpc_connector::start_rpc().await
+    });
+    println!("After starting RPC server");
+    let swarm_mutex = public_swarm::get_global_swarm_public_net();
+
+    let mut stdin = BufReader::new(stdin()).lines();
     let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    
     if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
-        let mut stdin = BufReader::new(stdin()).lines();
+        //rpc_connector::set_global_swarm_public_net(swarm_public_net);
         loop {
             if let Some(port) = whitelisted_listener.pop() {
                 match TcpListener::bind(&port).await {
@@ -202,9 +204,9 @@ async fn main() {
                     let peers = p2p::get_list_peers(&swarm_public_net);
                     swarm_public_net.behaviour_mut().app.genesis();
                     let json = serde_json::to_string("TEST").expect("can jsonify request");
-                    let block_account = swarm_public_net.behaviour_mut().storage_path.get_blocks();
+                    let block_account = swarm_public_net.behaviour().storage_path.get_blocks();
                     rock_storage::put_to_db(block_account,"0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c43",&json);
-                    println!("Storage Path: {:?}",swarm_public_net.behaviour_mut().storage_path.get_blocks());
+                    println!("Storage Path: {:?}",swarm_public_net.behaviour().storage_path.get_blocks());
                     info!("Connected nodes: {}", peers.len());
                     if !peers.is_empty() {
                         let req = p2p::LocalChainRequest {
@@ -361,5 +363,4 @@ async fn main() {
         } else {
             panic!("Swarm not initialized");
         }
-
 }
