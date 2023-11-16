@@ -857,8 +857,7 @@ pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, 
 
     Ok(())
 }
-pub fn create_erc721_contract_official(call_address:&str,private_key:&str)->Result<(), Box<dyn std::error::Error>>{
-
+pub fn create_erc721_contract_official(call_address:&str,private_key:&str)->Result<String, Box<dyn std::error::Error>>{
     let (public_key,private_key) = generate_keypair(); 
     let path = "./contract/db";
     let contract_path = rock_storage::open_db(path);
@@ -898,14 +897,15 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str)->Resu
             public_txn::Txn::create_transactions(call_address.to_string(),&private_key,public_key.to_string(),1000);
             println!("Contract Public Key: {:?}",public_key.to_string());
             println!("The Key Item: {:?}",the_item);
+            Ok(public_key.to_string())
             // Process the_item as needed
         }
         Err(e) => {
             // Handle the error appropriately
             eprintln!("Failed to open contract database: {:?}", e);
+            Err(e.into())
         }
     }
-    Ok(())
 }
 
 //TODO:: DELETE, why? Because its a mock key

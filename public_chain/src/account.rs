@@ -95,22 +95,29 @@ impl Account {
     }
 }
 
-pub fn create_account(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
-    let acc_path = swarm.behaviour().storage_path.get_account();
-    let (public_key,private_key) = generate_keypair();
-    let account = Account::new();
-    let address = account.public_address.clone();
-    let serialized_data = serde_json::to_string(&account).expect("can jsonify request");
-    let _ = rock_storage::put_to_db(acc_path,address.clone().to_string(),&serialized_data);
-    let put_item = rock_storage::get_from_db(acc_path,address.to_string());
-    println!("Public Acc: {:?} created",put_item);
-    println!("Private Key: {:?} created",private_key);
-    println!("Keep your private key safe, its only displayed once.");
-    // let test_sign_signature = PublicTxn::sign_transaction(b"Txn",&private_key);
-    // println!("Test Sign Txn {:?}",test_sign_signature);
-    // let verified_txn = PublicTxn::verify_transaction(b"Txn",&test_sign_signature,&public_key);
-    // println!("Verified Txn Outcome {:?}",verified_txn);
+pub fn create_account()-> Result<(String, String), Box<dyn std::error::Error>>{
+    let path = "./account/db";
+    let account_path = rock_storage::open_db(path);
+    match account_path {
+        Ok(account_db) => {
+            let (public_key,private_key) = generate_keypair();
+            let account = Account::new();
+            let address = account.public_address.clone();
+            let serialized_data = serde_json::to_string(&account).expect("can jsonify request");
+            let _ = rock_storage::put_to_db(&account_db,address.clone().to_string(),&serialized_data);
+            let pub_key = rock_storage::get_from_db(&account_db,address.to_string());
+            println!("Public Acc: {:?} created",pub_key);
+            println!("Private Key: {:?} created",private_key);
+            Ok((public_key.to_string(), private_key.to_string()))
+        }
+        Err(e) => {
+            // Handle the error appropriately
+            eprintln!("Failed to create a wallet: {:?}", e);
+            Err(e.into())
+        }
+    }
 }
+
 pub fn get_account(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
     if let Some(data) = cmd.strip_prefix("acc d ") {
         println!("Account Public Key{:?}",data.to_string());

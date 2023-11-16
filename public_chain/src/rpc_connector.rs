@@ -9,6 +9,7 @@ use rocket::fairing::{Fairing, Info, Kind};
 use log::error;
 use crate::smart_contract;
 use crate::public_swarm;
+use crate::account;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 
@@ -91,16 +92,33 @@ fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> 
     println!("create_nft_contract");
     let call_address = &post_data.call_address;
     let private_key = &post_data.private_key;
-    println!("Swarm public net is initialized, proceeding with contract creation");
     match smart_contract::create_erc721_contract_official(&call_address, &private_key) {
         Ok(contract_address) => {
             println!("Contract successfully created: {:?}", contract_address);
             let response_body = json!({"contract_address": contract_address});
-            Json(json!({"jsonrpc": "2.0", "id": "3", "result": response_body}))
+            Json(json!({"jsonrpc": "1.0", "id": "1", "result": response_body}))
         },
         Err(e) => {
             error!("Error creating contract: {:?}", e);
-            Json(json!({"jsonrpc": "2.0", "id": "1", "result": "error"}))
+            Json(json!({"jsonrpc": "1.0", "id": "1", "result": "error"}))
+        }
+    }
+
+}
+// Route to handle RPC requests.
+#[post("/create-wallet")]
+fn create_wallet()-> Json<serde_json::Value> {
+    match account::create_account() {
+        Ok((wallet_address, private_key)) => {
+            let response_body = json!({
+                "wallet_address": wallet_address,
+                "private_key": private_key.to_string(), // Be cautious with private key handling
+            });
+            Json(json!({"jsonrpc": "1.0", "id": "1", "result": response_body}))
+        },
+        Err(e) => {
+            error!("Error creating wallet: {:?}", e);
+            Json(json!({"jsonrpc": "1.0", "id": "1", "result": "error"}))
         }
     }
 
@@ -134,7 +152,7 @@ pub async fn start_rpc() {
             port: 8545,
             ..rocket::Config::default()
         })
-        .mount("/", routes![handle_rpc,create_nft_contract])
+        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet])
         .launch()
         .await
         .expect("Failed to start Rocket server");
