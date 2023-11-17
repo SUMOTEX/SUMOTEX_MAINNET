@@ -324,7 +324,7 @@ async fn main() {
                             cmd if cmd.starts_with("create b") => public_block::handle_create_block(cmd, swarm_public_net),
                             cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, swarm_public_net),
                             //cmd if cmd.starts_with("create acc")=> account::create_account(cmd, swarm_public_net),
-                            cmd if cmd.starts_with("acc d")=> account::get_account(cmd, swarm_public_net),
+                            //cmd if cmd.starts_with("acc d")=> account::get_account(cmd, swarm_public_net),
                             cmd if cmd.starts_with("contract c")=> {
                                 match smart_contract::create_erc721_contract(cmd,  swarm_public_net) {
                                     Ok(_) => {} // Do nothing on success

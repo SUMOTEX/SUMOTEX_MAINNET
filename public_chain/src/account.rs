@@ -2,6 +2,7 @@ use secp256k1::{Secp256k1, PublicKey, SecretKey};
 use libp2p::{
     swarm::{Swarm},
 };
+use rocksdb::{DB,Error};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use secp256k1::Message;
@@ -93,6 +94,33 @@ impl Account {
         let token_list = self.owned_tokens.as_mut().unwrap().entry(contract_address.to_string()).or_insert_with(Vec::new);
         
     }
+    pub fn get_account(account_key: &str, db_handle: &DB) -> Option<Account> {
+        let account_data = rock_storage::get_from_db(db_handle, account_key);
+        account_data.and_then(|data| serde_json::from_str(&data).ok())
+    }
+
+    pub fn transfer(sender_key: &str, receiver_key: &str, amount: f64, db_path: &str) -> Result<(), &'static str> {
+        let db_handle = rock_storage::open_db(db_path).map_err(|_| "Failed to open database")?;
+    
+        let mut sender_account = Self::get_account(sender_key, &db_handle)
+            .ok_or("Sender account not found")?;
+    
+        if sender_account.balance < amount {
+            return Err("Insufficient balance");
+        }
+    
+        let mut receiver_account = Self::get_account(receiver_key, &db_handle)
+            .ok_or("Receiver account not found")?;
+    
+        sender_account.balance -= amount;
+        receiver_account.balance += amount;
+    
+        save_account(&sender_account, &db_handle)?;
+        save_account(&receiver_account, &db_handle)?;
+    
+        Ok(())
+    }
+    
 }
 
 pub fn create_account()-> Result<(String, String), Box<dyn std::error::Error>>{
@@ -118,13 +146,23 @@ pub fn create_account()-> Result<(String, String), Box<dyn std::error::Error>>{
     }
 }
 
-pub fn get_account(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
-    if let Some(data) = cmd.strip_prefix("acc d ") {
-        println!("Account Public Key{:?}",data.to_string());
-        let acc_path = swarm.behaviour().storage_path.get_account();
-        let the_account = rock_storage::get_from_db(acc_path,data.to_string());
-        println!("{:?}",the_account);
-    }
+// pub fn get_account(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
+//     if let Some(data) = cmd.strip_prefix("acc d ") {
+//         println!("Account Public Key{:?}",data.to_string());
+//         let acc_path = swarm.behaviour().storage_path.get_account();
+//         let the_account = rock_storage::get_from_db(acc_path,data.to_string());
+//         println!("{:?}",the_account);
+//     }
+// }
+fn get_account_no_swarm(account_key: &str, db_handle: &DB) -> Option<Account> {
+    let account_data = rock_storage::get_from_db(db_handle, account_key.to_string());
+    account_data.and_then(|data| serde_json::from_str(&data).ok())
+}
+
+fn save_account(account: &Account, db_handle: &DB) -> Result<(), &'static str> {
+    let serialized_data = serde_json::to_string(account).map_err(|_| "Failed to serialize account")?;
+    rock_storage::put_to_db(db_handle, account.public_address.clone(), &serialized_data)
+        .map_err(|_| "Failed to save account")
 }
 
 
