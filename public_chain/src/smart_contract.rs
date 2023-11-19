@@ -1083,6 +1083,54 @@ pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<i32, Box<dy
         Err("Command format not recognized".into())
     }
 }
+pub fn mint_token_official(contract_address:&String,
+                            account_key:&String,
+                            private_key:&String,
+                            ipfs:&String)->Result<i32, Box<dyn std::error::Error>>{
+        let c_path = "./contract/db";
+        let a_path = "./account/db";
+        let contract_path = match rock_storage::open_db(c_path) {
+            Ok(path) => path,
+            Err(e) => {
+                // Handle the error, maybe log it, and then decide what to do next
+                panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+            }
+        };
+        let acc_path = match rock_storage::open_db(a_path) {
+            Ok(path) => path,
+            Err(e) => {
+                // Handle the error, maybe log it, and then decide what to do next
+                panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+            }
+        };
+        let mut contract = WasmContract::new("./sample721.wasm")?;
+        let contract_info = ContractInfo {
+            module_path: "./sample721.wasm".to_string(),
+            pub_key:contract_address.to_string(),
+        };
+        let the_memory = create_memory(contract.get_store())?;
+        // Retrieve the account to check if it exists
+        let account_data = rock_storage::get_from_db(&acc_path, &account_key);
+        if account_data.is_none() {
+            return Err("Account not found".into());
+        }
+        let result = contract.mint_token(&contract_path, &contract_info,account_key,&contract_address.to_string(),ipfs);
+        match result {
+            Ok(token_id) => {
+                println!("Mint: {}", token_id);
+                // let read_result = contract.read_owner_token(contract_path, &contract_info,&contract_address.to_string(),token_id);
+                // if let Err(e) = read_result {
+                //     println!("Error after minting, could not read token owner: {}", e);
+                //     return Err(e);
+                // }
+                Ok(token_id)
+            }
+            Err(e) => {
+                println!("Error reading: {}", e);
+                Err(e)
+            }
+        }
+}
 
 pub fn get_token_owner(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(data) = cmd.strip_prefix("token id ") {

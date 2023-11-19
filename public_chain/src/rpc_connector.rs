@@ -27,6 +27,20 @@ pub struct ContractInfo {
     call_address: String,
     private_key: String,
 }
+#[derive(serde::Deserialize, Debug)]
+pub struct MintTokenInfo {
+    contract_address: String,
+    owner_address: String,
+    owner_private_key:String,
+    ipfs_detail:String
+}
+#[derive(serde::Deserialize, Debug)]
+pub struct ReadTokenInfo {
+    contract_address: String,
+    owner_address:String,
+    token_id: String,
+}
+
 
 // Route to handle RPC requests.
 #[post("/", data = "<request>")]
@@ -96,14 +110,51 @@ fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> 
         Ok(contract_address) => {
             println!("Contract successfully created: {:?}", contract_address);
             let response_body = json!({"contract_address": contract_address});
-            Json(json!({"jsonrpc": "1.0", "id": "1", "result": response_body}))
+            Json(json!({"jsonrpc": "1.0", "result": response_body}))
         },
         Err(e) => {
             error!("Error creating contract: {:?}", e);
-            Json(json!({"jsonrpc": "1.0", "id": "1", "result": "error"}))
+            Json(json!({"jsonrpc": "1.0", "result": "error"}))
         }
     }
-
+}
+// Route to handle RPC requests.
+#[post("/mint-token", data = "<post_data>")]
+fn mint_token_contract(post_data: Json<MintTokenInfo>)-> Json<serde_json::Value> {
+    println!("mint_token");
+    let contract_address = &post_data.contract_address;
+    let owner_address = &post_data.owner_address;
+    let owner_private_key = &post_data.owner_private_key;
+    let ipfs= &post_data.ipfs_detail;
+    match smart_contract::mint_token_official(&contract_address, &owner_address,&owner_private_key,&ipfs) {
+        Ok(token_id) => {
+            let response_body = json!({"token_id": token_id.to_string()});
+            Json(json!({"jsonrpc": "1.0", "result": response_body}))
+        },
+        Err(e) => {
+            error!("Error minting token: {:?}", e);
+            Json(json!({"jsonrpc": "1.0", "result": "Error Minting Token"}))
+        }
+    }
+}
+// Route to handle RPC requests.
+#[post("/read-token", data = "<post_data>")]
+fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value> {
+    println!("ReadTokenInfo");
+    let contract_address = &post_data.contract_address;
+    let owner_address = &post_data.owner_address;
+    let token_id = &post_data.token_id;
+    match smart_contract::create_erc721_contract_official(&contract_address, &owner_address) {
+        Ok(contract_address) => {
+            println!("Read Token Details: {:?}", contract_address);
+            let response_body = json!({"contract_address": contract_address});
+            Json(json!({"jsonrpc": "1.0",  "result": response_body}))
+        },
+        Err(e) => {
+            error!("Error creating contract: {:?}", e);
+            Json(json!({"jsonrpc": "1.0", "result": "error"}))
+        }
+    }
 }
 // Route to handle RPC requests.
 #[post("/create-wallet")]
@@ -114,11 +165,11 @@ fn create_wallet()-> Json<serde_json::Value> {
                 "wallet_address": wallet_address,
                 "private_key": private_key.to_string(), // Be cautious with private key handling
             });
-            Json(json!({"jsonrpc": "1.0", "id": "1", "result": response_body}))
+            Json(json!({"jsonrpc": "1.0", "result": response_body}))
         },
         Err(e) => {
             error!("Error creating wallet: {:?}", e);
-            Json(json!({"jsonrpc": "1.0", "id": "1", "result": "error"}))
+            Json(json!({"jsonrpc": "1.0", "result": "error"}))
         }
     }
 
@@ -152,7 +203,7 @@ pub async fn start_rpc() {
             port: 8545,
             ..rocket::Config::default()
         })
-        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet])
+        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet,mint_token_contract,read_token_contract])
         .launch()
         .await
         .expect("Failed to start Rocket server");
