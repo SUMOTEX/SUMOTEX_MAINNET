@@ -10,7 +10,7 @@ name = "public_chain"
 [dependencies]
 common = { path = "../common" }
 secp256k1 = {version = "0.20", features = ["rand-std","rand"]}
-rocksdb = "0.17"
+rocksdb = "0.17.0"
 actix-web = "3"
 warp = "0.3"
 chrono = "0.4"

@@ -1133,7 +1133,41 @@ pub fn mint_token_official(contract_address:&String,
             }
         }
 }
+pub fn read_token_by_id(contract_address:&String,id:&String)->Result<(String,String), Box<dyn std::error::Error>>{
+    let c_path = "./contract/db";
+    let a_path = "./account/db";
+    let contract_path = match rock_storage::open_db(c_path) {
+        Ok(path) => path,
+        Err(e) => {
+            // Handle the error, maybe log it, and then decide what to do next
+            panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+        }
+    };
+    let acc_path = match rock_storage::open_db(a_path) {
+        Ok(path) => path,
+        Err(e) => {
+            // Handle the error, maybe log it, and then decide what to do next
+            panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+        }
+    };
+    let mut contract = WasmContract::new("./sample721.wasm")?;
+    let contract_info = ContractInfo {
+        module_path: "./sample721.wasm".to_string(),
+        pub_key:contract_address.to_string(),
+    };
+    let read_result = contract.read_owner_token(contract_path, &contract_info,&contract_address.to_string(),token_id);
+    match read_result {
+        Ok(read_items)=>{
+            
+        }
+        Err(e)=>{
+            println!("Error after minting, could not read token owner: {}", e);
+            return Err(e);
+        }
+    }
 
+
+}
 pub fn get_token_owner(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
     if let Some(data) = cmd.strip_prefix("token id ") {
         let mut contract = WasmContract::new("./sample721.wasm")?;

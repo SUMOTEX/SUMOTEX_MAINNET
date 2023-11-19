@@ -37,7 +37,6 @@ pub struct MintTokenInfo {
 #[derive(serde::Deserialize, Debug)]
 pub struct ReadTokenInfo {
     contract_address: String,
-    owner_address:String,
     token_id: String,
 }
 
@@ -138,15 +137,14 @@ fn mint_token_contract(post_data: Json<MintTokenInfo>)-> Json<serde_json::Value>
     }
 }
 // Route to handle RPC requests.
-#[post("/read-token", data = "<post_data>")]
+#[post("/read-token-by-id", data = "<post_data>")]
 fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value> {
-    println!("ReadTokenInfo");
+    println!("Read Token By ID");
     let contract_address = &post_data.contract_address;
-    let owner_address = &post_data.owner_address;
     let token_id = &post_data.token_id;
-    match smart_contract::create_erc721_contract_official(&contract_address, &owner_address) {
-        Ok(contract_address) => {
-            println!("Read Token Details: {:?}", contract_address);
+    match smart_contract::read_token_by_id(&contract_address, &token_id) {
+        Ok(token_detail) => {
+            println!("Read Token Details: {:?}", token_detail);
             let response_body = json!({"contract_address": contract_address});
             Json(json!({"jsonrpc": "1.0",  "result": response_body}))
         },
