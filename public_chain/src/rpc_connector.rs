@@ -30,8 +30,8 @@ pub struct ContractInfo {
 #[derive(serde::Deserialize, Debug)]
 pub struct MintTokenInfo {
     contract_address: String,
-    owner_address: String,
-    owner_private_key:String,
+    caller_address: String,
+    caller_private_key:String,
     ipfs_detail:String
 }
 #[derive(serde::Deserialize, Debug)]
@@ -123,8 +123,8 @@ fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> 
 fn mint_token_contract(post_data: Json<MintTokenInfo>)-> Json<serde_json::Value> {
     println!("mint_token");
     let contract_address = &post_data.contract_address;
-    let owner_address = &post_data.owner_address;
-    let owner_private_key = &post_data.owner_private_key;
+    let owner_address = &post_data.caller_address;
+    let owner_private_key = &post_data.caller_private_key;
     let ipfs= &post_data.ipfs_detail;
     match smart_contract::mint_token_official(&contract_address, &owner_address,&owner_private_key,&ipfs) {
         Ok(token_id) => {

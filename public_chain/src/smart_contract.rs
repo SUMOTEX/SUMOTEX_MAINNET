@@ -1110,10 +1110,12 @@ pub fn mint_token_official(contract_address:&String,
         };
         let the_memory = create_memory(contract.get_store())?;
         // Retrieve the account to check if it exists
-        let account_data = rock_storage::get_from_db(&acc_path, &account_key);
-        if account_data.is_none() {
-            return Err("Account not found".into());
-        }
+        println!("Acc Key {:?}",account_key);
+        let account_data = rock_storage::get_from_db(&acc_path, account_key);
+        println!("Acc Data {:?}",account_data);
+        // if account_data.is_none() {
+        //     return Err("Account not found".into());
+        // }
         let result = contract.mint_token(&contract_path, &contract_info,account_key,&contract_address.to_string(),ipfs);
         match result {
             Ok(token_id) => {
@@ -1126,7 +1128,7 @@ pub fn mint_token_official(contract_address:&String,
                 Ok(token_id)
             }
             Err(e) => {
-                println!("Error reading: {}", e);
+                println!("Error minting token: {}", e);
                 Err(e)
             }
         }
