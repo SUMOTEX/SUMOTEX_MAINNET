@@ -42,3 +42,8 @@ cargo build --target wasm32-wasi --release
 name = "sample"
 path = "src/erc20_functions.rs"
 proc-macro = true
+
+
+Create a new file .cargo/config.toml
+[target.x86_64-unknown-linux-gnu]
+rustflags = ["-C", "link-arg=-Wl,--allow-multiple-definition"]

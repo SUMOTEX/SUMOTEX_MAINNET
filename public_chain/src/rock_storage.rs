@@ -128,6 +128,7 @@ pub fn create_storage(path: &str)-> DB{
     let db = DB::open(&opts, path).unwrap();
     db
 }
+
 fn path_exists(filepath: &str) -> bool {
     let path = Path::new(filepath);
     path.exists() && path.is_file()
