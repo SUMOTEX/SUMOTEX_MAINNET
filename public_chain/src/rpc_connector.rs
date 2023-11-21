@@ -136,24 +136,24 @@ fn mint_token_contract(post_data: Json<MintTokenInfo>)-> Json<serde_json::Value>
         }
     }
 }
-// Route to handle RPC requests.
-#[post("/read-token-by-id", data = "<post_data>")]
-fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value> {
-    println!("Read Token By ID");
-    let contract_address = &post_data.contract_address;
-    let token_id = &post_data.token_id;
-    match smart_contract::read_token_by_id(&contract_address, &token_id) {
-        Ok(token_detail) => {
-            println!("Read Token Details: {:?}", token_detail);
-            let response_body = json!({"contract_address": contract_address});
-            Json(json!({"jsonrpc": "1.0",  "result": response_body}))
-        },
-        Err(e) => {
-            error!("Error creating contract: {:?}", e);
-            Json(json!({"jsonrpc": "1.0", "result": "error"}))
-        }
-    }
-}
+// // Route to handle RPC requests.
+// #[post("/read-token-by-id", data = "<post_data>")]
+// fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value> {
+//     println!("Read Token By ID");
+//     let contract_address = &post_data.contract_address;
+//     let token_id = &post_data.token_id;
+//     match smart_contract::read_token_by_id(&contract_address, &token_id) {
+//         Ok(token_detail) => {
+//             println!("Read Token Details: {:?}", token_detail);
+//             let response_body = json!({"contract_address": contract_address});
+//             Json(json!({"jsonrpc": "1.0",  "result": response_body}))
+//         },
+//         Err(e) => {
+//             error!("Error creating contract: {:?}", e);
+//             Json(json!({"jsonrpc": "1.0", "result": "error"}))
+//         }
+//     }
+// }
 // Route to handle RPC requests.
 #[post("/create-wallet")]
 fn create_wallet()-> Json<serde_json::Value> {
@@ -201,7 +201,7 @@ pub async fn start_rpc() {
             port: 8545,
             ..rocket::Config::default()
         })
-        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet,mint_token_contract,read_token_contract])
+        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet,mint_token_contract])
         .launch()
         .await
         .expect("Failed to start Rocket server");
