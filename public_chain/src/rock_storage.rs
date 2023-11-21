@@ -158,8 +158,16 @@ pub fn get_all_from_db(db: &DB) -> Vec<(String, String)> {
 pub fn create_storage(path: &str)-> Result<DB, Error>{
     let mut opts = Options::default();
     opts.create_if_missing(true);
-    let db = DB::open(&opts, path).unwrap();
-    Ok(db)
+    match DB::open(&opts, path) {
+        Ok(db) => Ok(db),
+        Err(e) => {
+            eprintln!("Failed to open database: {:?}", e);
+            Err(e.into())
+            // Handle the error, possibly by creating the missing file or directory, 
+            // or by taking other appropriate actions.
+            // ...
+        }
+    }
 }
 
 fn path_exists(filepath: &str) -> bool {
