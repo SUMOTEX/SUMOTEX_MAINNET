@@ -52,12 +52,12 @@ pub async fn run_epoch(){
     }
 }
 
-pub fn create_pub_storage()-> rock_storage::StoragePath{
+pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::error::Error>>{
     // Create read-write locks for each storage
-    let db_public_block = rock_storage::create_storage("./public_blockchain");
-    let db_account = rock_storage::create_storage("./account");
-    let db_transactions = rock_storage::create_storage("./transactions");
-    let db_contract = rock_storage::create_storage("./contract"); // Assuming this returns DBWithThreadMode<SingleThreaded> directly
+    let db_public_block = rock_storage::create_storage("./public_blockchain")?;
+    let db_account = rock_storage::create_storage("./account")?;
+    let db_transactions = rock_storage::create_storage("./transactions")?;
+    let db_contract = rock_storage::create_storage("./contract")?;
 
     // Initialize the StoragePath instance as required by the library
     let the_storage = rock_storage::StoragePath {
@@ -68,7 +68,7 @@ pub fn create_pub_storage()-> rock_storage::StoragePath{
     };
 
     println!("Storage created for blocks, accounts, contract, and transactions");
-    return the_storage
+    return Ok(the_storage)
 
 }
 fn db_extract(db: Arc<RwLock<DBWithThreadMode<SingleThreaded>>>) -> DBWithThreadMode<SingleThreaded> {
@@ -127,8 +127,8 @@ async fn main() {
     println!("Generated private key: {:?}", private_key);
 
     //create storage
-    //remove_lock_file();
-    let the_storage = create_pub_storage();
+    remove_lock_file();
+    let the_storage = create_pub_storage().expect("Failed to create storage");
     //info!("Peer Id: {}", p2p::PEER_ID.clone());
     let (response_sender, mut response_rcv) = mpsc::unbounded_channel();
     let (init_sender, mut init_rcv) = mpsc::unbounded_channel();

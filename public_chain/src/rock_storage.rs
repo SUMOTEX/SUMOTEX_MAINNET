@@ -19,11 +19,44 @@ const CONTRACT_DB_PATH: &str = "./contract/db";
 
 impl StoragePath {
     pub fn new(block_path:DB,txn_path:DB,account_path:DB,contract_path:DB) -> Self {
+        let blocks = match create_storage(BLOCKS_DB_PATH) {
+            Ok(db) => db,
+            Err(e) => {
+                // Handle error (e.g., log it)
+                // You might want to return an error or a default value
+                panic!("Failed to create blocks storage: {}", e);
+            }
+        };
+    
+        let transactions = match create_storage(TRANSACTIONS_DB_PATH) {
+            Ok(db) => db,
+            Err(e) => {
+                // Handle error
+                panic!("Failed to create transactions storage: {}", e);
+            }
+        };
+    
+        let account = match create_storage(ACCOUNT_DB_PATH) {
+            Ok(db) => db,
+            Err(e) => {
+                // Handle error
+                panic!("Failed to create account storage: {}", e);
+            }
+        };
+    
+        let contract = match create_storage(CONTRACT_DB_PATH) {
+            Ok(db) => db,
+            Err(e) => {
+                // Handle error
+                panic!("Failed to create contract storage: {}", e);
+            }
+        };
+    
         Self {
-            blocks: create_storage(BLOCKS_DB_PATH),
-            transactions: create_storage(TRANSACTIONS_DB_PATH),
-            account: create_storage(ACCOUNT_DB_PATH),
-            contract: create_storage(CONTRACT_DB_PATH),
+            blocks,
+            transactions,
+            account,
+            contract,
         }
     }
     pub fn get_blocks(&self) -> &DB {
@@ -122,11 +155,11 @@ pub fn get_all_from_db(db: &DB) -> Vec<(String, String)> {
     results
 }
 
-pub fn create_storage(path: &str)-> DB{
+pub fn create_storage(path: &str)-> Result<DB, Error>{
     let mut opts = Options::default();
     opts.create_if_missing(true);
     let db = DB::open(&opts, path).unwrap();
-    db
+    Ok(db)
 }
 
 fn path_exists(filepath: &str) -> bool {
