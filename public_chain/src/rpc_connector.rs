@@ -37,9 +37,20 @@ pub struct MintTokenInfo {
 #[derive(serde::Deserialize, Debug)]
 pub struct ReadTokenInfo {
     contract_address: String,
-    token_id: String,
+    token_id: i32,
 }
 
+#[derive(serde::Deserialize, Debug)]
+pub struct ReadAccountInfo {
+    pub_address: String
+}
+
+#[derive(serde::Deserialize, Debug)]
+pub struct TransferTokenInfo {
+    from_address: String,
+    to_address:String,
+    amount:String
+}
 
 // Route to handle RPC requests.
 #[post("/", data = "<request>")]
@@ -137,27 +148,64 @@ fn mint_token_contract(post_data: Json<MintTokenInfo>)-> Json<serde_json::Value>
     }
 }
 // // Route to handle RPC requests.
-// #[post("/read-token-by-id", data = "<post_data>")]
-// fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value> {
-//     println!("Read Token By ID");
-//     let contract_address = &post_data.contract_address;
-//     let token_id = &post_data.token_id;
-//     match smart_contract::read_token_by_id(&contract_address, &token_id) {
-//         Ok(token_detail) => {
-//             println!("Read Token Details: {:?}", token_detail);
-//             let response_body = json!({"contract_address": contract_address});
-//             Json(json!({"jsonrpc": "1.0",  "result": response_body}))
-//         },
-//         Err(e) => {
-//             error!("Error creating contract: {:?}", e);
-//             Json(json!({"jsonrpc": "1.0", "result": "error"}))
-//         }
-//     }
-// }
+#[post("/read-token-by-id", data = "<post_data>")]
+fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value> {
+    println!("Read Token By ID");
+    let contract_address = &post_data.contract_address;
+    let token_id = &post_data.token_id;
+    match smart_contract::read_token_by_id(&contract_address, token_id) {
+        Ok(token_detail) => {
+            println!("Read Token Details: {:?}", token_detail);
+            let response_body = json!({"contract_address": contract_address});
+            Json(json!({"jsonrpc": "1.0",  "result": response_body}))
+        },
+        Err(e) => {
+            error!("Error creating contract: {:?}", e);
+            Json(json!({"jsonrpc": "1.0", "result": "error"}))
+        }
+    }
+}
 // Route to handle RPC requests.
 #[post("/create-wallet")]
 fn create_wallet()-> Json<serde_json::Value> {
     match account::create_account() {
+        Ok((wallet_address, private_key)) => {
+            let response_body = json!({
+                "wallet_address": wallet_address,
+                "private_key": private_key.to_string(), // Be cautious with private key handling
+            });
+            Json(json!({"jsonrpc": "1.0", "result": response_body}))
+        },
+        Err(e) => {
+            error!("Error creating wallet: {:?}", e);
+            Json(json!({"jsonrpc": "1.0", "result": "error"}))
+        }
+    }
+
+}
+// Get balance
+#[post("/get-wallet-balance")]
+fn get_balance(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
+    let pub_add = &post_data.pub_address;
+    match account::get_balance(pub_add) {
+        Ok((wallet_address, private_key)) => {
+            let response_body = json!({
+                "wallet_address": wallet_address,
+                "private_key": private_key.to_string(), // Be cautious with private key handling
+            });
+            Json(json!({"jsonrpc": "1.0", "result": response_body}))
+        },
+        Err(e) => {
+            error!("Error creating wallet: {:?}", e);
+            Json(json!({"jsonrpc": "1.0", "result": "error"}))
+        }
+    }
+
+}
+#[post("/transfer-token")]
+fn transfer_token(post_data: Json<TransferTokenInfo>)-> Json<serde_json::Value> {
+    let pub_add = &post_data.pub_address;
+    match account::get_balance(pub_add) {
         Ok((wallet_address, private_key)) => {
             let response_body = json!({
                 "wallet_address": wallet_address,

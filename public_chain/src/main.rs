@@ -127,7 +127,7 @@ async fn main() {
     println!("Generated private key: {:?}", private_key);
 
     //create storage
-    //   remove_lock_file();
+    remove_lock_file();
     let the_storage = create_pub_storage().expect("Failed to create storage");
     //info!("Peer Id: {}", p2p::PEER_ID.clone());
     let (response_sender, mut response_rcv) = mpsc::unbounded_channel();

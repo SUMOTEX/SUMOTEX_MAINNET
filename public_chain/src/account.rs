@@ -145,15 +145,20 @@ pub fn create_account()-> Result<(String, String), Box<dyn std::error::Error>>{
         }
     }
 }
+pub fn get_balance(public_key: &str) -> Result<f64, Box<dyn std::error::Error>> {
+    let path = "./account/db";
+    let account_path = rock_storage::open_db(path);
+    // Retrieve the serialized account data from the database using the public key
+    let account_data = rock_storage::get_from_db(account_path, public_key.to_string())
+        .ok_or("Account not found")?; // Convert the Option to a Result to handle the case where the account isn't found
 
-// pub fn get_account(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
-//     if let Some(data) = cmd.strip_prefix("acc d ") {
-//         println!("Account Public Key{:?}",data.to_string());
-//         let acc_path = swarm.behaviour().storage_path.get_account();
-//         let the_account = rock_storage::get_from_db(acc_path,data.to_string());
-//         println!("{:?}",the_account);
-//     }
-// }
+    // Deserialize the account data from JSON to an Account struct
+    let account: Account = serde_json::from_str(&account_data)?;
+
+    // Return the balance from the account
+    Ok(account.balance)
+}
+
 fn get_account_no_swarm(account_key: &str, db_handle: &DB) -> Option<Account> {
     let account_data = rock_storage::get_from_db(db_handle, account_key.to_string());
     account_data.and_then(|data| serde_json::from_str(&data).ok())
