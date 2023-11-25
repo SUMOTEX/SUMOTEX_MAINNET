@@ -99,31 +99,34 @@ impl Account {
         account_data.and_then(|data| serde_json::from_str(&data).ok())
     }
 
-
+    pub fn transfer(sender_key: &str, receiver_key: &str, amount: f64) -> Result<(), &'static str> {
+        let path = "./account/db";
+        // Open the database and handle the Result
+        let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
+    
+        let mut sender_account = Self::get_account(sender_key, &db_handle)
+            .ok_or("Sender account not found")?;
+    
+        if sender_account.balance < amount {
+            return Err("Insufficient balance");
+        }
+    
+        let mut receiver_account = Self::get_account(receiver_key, &db_handle)
+            .ok_or("Receiver account not found")?;
+    
+        sender_account.balance -= amount;
+        receiver_account.balance += amount;
+    
+        // Assuming save_account expects a reference to a DB handle
+        save_account(&sender_account, &db_handle).map_err(|_| "Failed to save sender account")?;
+        save_account(&receiver_account, &db_handle).map_err(|_| "Failed to save receiver account")?;
+    
+        Ok(())
+    }
     
 }
-pub fn transfer(sender_key: &str, receiver_key: &str, amount: f64 -> Result<(), &'static str> {
-    let path = "./account/db";
-    let account_path = rock_storage::open_db(path);
 
-    let mut sender_account = Self::get_account(sender_key, &account_path)
-        .ok_or("Sender account not found")?;
 
-    if sender_account.balance < amount {
-        return Err("Insufficient balance");
-    }
-
-    let mut receiver_account = Self::get_account(receiver_key, &account_path)
-        .ok_or("Receiver account not found")?;
-
-    sender_account.balance -= amount;
-    receiver_account.balance += amount;
-
-    save_account(&sender_account, &account_path)?;
-    save_account(&receiver_account, &account_path)?;
-
-    Ok(())
-}
 pub fn create_account()-> Result<(String, String), Box<dyn std::error::Error>>{
     let path = "./account/db";
     let account_path = rock_storage::open_db(path);
@@ -149,15 +152,26 @@ pub fn create_account()-> Result<(String, String), Box<dyn std::error::Error>>{
 pub fn get_balance(public_key: &str) -> Result<f64, Box<dyn std::error::Error>> {
     let path = "./account/db";
     let account_path = rock_storage::open_db(path);
-    // Retrieve the serialized account data from the database using the public key
-    let account_data = rock_storage::get_from_db(account_path, public_key.to_string())
-        .ok_or("Account not found")?; // Convert the Option to a Result to handle the case where the account isn't found
+    match account_path {
+        Ok(db_handle) => {
+            // Now that we have the `db_handle`, we can pass it to `rock_storage::get_from_db`
+            // Retrieve the serialized account data from the database using the public key
+            let account_data = rock_storage::get_from_db(&db_handle, public_key.to_string())
+            .ok_or("Account not found")?; // Convert the Option to a Result to handle the case where the account isn't found
 
-    // Deserialize the account data from JSON to an Account struct
-    let account: Account = serde_json::from_str(&account_data)?;
+            // Deserialize the account data from JSON to an Account struct
+            let account: Account = serde_json::from_str(&account_data)?;
 
-    // Return the balance from the account
-    Ok(account.balance)
+            // Return the balance from the account
+            Ok(account.balance)
+        }
+        Err(e) => {
+            // Handle the error, e.g., by logging it or converting it to your custom error type
+            // If this is in a function that returns a Result, you can return the error here
+            return Err(e.into());
+        }
+    }
+
 }
 
 fn get_account_no_swarm(account_key: &str, db_handle: &DB) -> Option<Account> {

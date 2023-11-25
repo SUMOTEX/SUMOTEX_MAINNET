@@ -1133,7 +1133,7 @@ pub fn mint_token_official(contract_address:&String,
             }
         }
 }
-pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<(u32), Box<dyn std::error::Error>>{
+pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<u32, Box<dyn std::error::Error>>{
     let c_path = "./contract/db";
     let a_path = "./account/db";
     let contract_path = match rock_storage::open_db(c_path) {

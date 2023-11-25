@@ -185,7 +185,7 @@ fn create_wallet()-> Json<serde_json::Value> {
 
 }
 // Get balance
-#[post("/get-wallet-balance")]
+#[post("/get-wallet-balance",data="<post_data>")]
 fn get_balance(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
     let pub_add = &post_data.pub_address;
     match account::get_balance(pub_add) {
@@ -202,22 +202,19 @@ fn get_balance(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
     }
 
 }
-#[post("/transfer-token")]
+#[post("/transfer-token",data="<post_data>")]
 fn transfer_token(post_data: Json<TransferTokenInfo>)-> Json<serde_json::Value> {
     let from_address = &post_data.from_address;
     let from_priv_address = &post_data.from_private_key;
     let to_address = &post_data.to_address;
     let amount = &post_data.amount;
-    match account::transfer(from_address,to_address,amount) {
-        Ok((wallet_address, private_key)) => {
-            let response_body = json!({
-                "wallet_address": wallet_address,
-                "private_key": private_key.to_string(), // Be cautious with private key handling
-            });
+    match account::Account::transfer(from_address,to_address,*amount) {
+        Ok(()) => {
+            let response_body = json!({});
             Json(json!({"jsonrpc": "1.0", "result": response_body}))
         },
         Err(e) => {
-            error!("Error creating wallet: {:?}", e);
+            error!("Error: {:?}", e);
             Json(json!({"jsonrpc": "1.0", "result": "error"}))
         }
     }
