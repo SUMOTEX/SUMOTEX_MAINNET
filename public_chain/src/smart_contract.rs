@@ -639,7 +639,7 @@ impl WasmContract {
         contract_info: &ContractInfo,
         pub_key: &str,
         id: i32,
-    ) -> Result<u32, Box<dyn std::error::Error>> {
+    ) -> Result<String, Box<dyn std::error::Error>> {
         println!("Initializing engine and linker...");
         println!("Contract name and pub key {:?}",pub_key);
         let engine = Engine::default();
@@ -711,15 +711,18 @@ impl WasmContract {
                                     match String::from_utf8(data) {
                                         Ok(name) => {
                                             println!("Owner: {:?}", name);
+                                            return Ok(name);
                                             // Other processing code here
                                         },
                                         Err(e) => {
                                             println!("Error converting bytes to String: {:?}", e);
-                                            // Handle the error appropriately
+                                            return Err(e.into());
+                                            // Handle the error appropriatelyv
                                         },
                                     }
                                 } else {
                                     println!("Invalid memory access: Out of bounds");
+                                    return Err("error".into());
                                     // Handle the out-of-bounds memory access appropriately
                                 }
                                 
@@ -727,21 +730,130 @@ impl WasmContract {
                             },
                             Err(e) => {
                                 println!("Failed to call get_owner_len_by_token_id function: {:?}", e);
+                                return Err(e.into());
                             },
                         }
                     },
                     Err(e) => {
                         println!("Failed to call get_owner_len_by_token_id function: {:?}", e);
+                        return Err(e.into());
                     },
                 }
             },
             Err(e) => {
                 println!("Failed to call get_owner_ptr function: {:?}", e);
+                return Err(e.into());
             },
         }        
-    Ok(1)
+    Ok("".to_string())
     }
+    pub fn read_ipfs_token(
+        &self,
+        contract_path: &DBWithThreadMode<SingleThreaded>,
+        contract_info: &ContractInfo,
+        pub_key: &str,
+        id: i32,
+    ) -> Result<String, Box<dyn std::error::Error>> {
+        println!("Contract name and pub key {:?}",pub_key);
+        let engine = Engine::default();
+        let mut linker = Linker::new(&engine);
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+        let mut store = Store::new(&engine, wasi);
     
+        let module = Module::from_file(&engine, &contract_info.module_path)?;
+        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+        let link = linker.instantiate(&mut store, &module)?;
+        // ... (Your operations using token_instance)
+    
+        let wasm_memory = link.get_memory(&mut store, "memory")
+            .ok_or_else(|| "Failed to find `memory` export")?;
+        let saved_data = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
+        // 2.2. Set this memory state into the WebAssembly module's memory.
+        let current_memory_size = wasm_memory.data_size(&store); // Current memory size in bytes
+        // Convert `current_memory_size` from `usize` to `u64` for the calculation.
+        let current_memory_size_pages = (current_memory_size as u64) / (64 * 1024);
+        let required_pages = (saved_data.len() as u64 + (64 * 1024 - 1)) / (64 * 1024);
+        let additional_pages_needed = if required_pages > current_memory_size_pages {
+            required_pages - current_memory_size_pages
+        } else {
+            0  // No additional pages are needed.
+        };
+
+        if additional_pages_needed > 0 {
+            wasm_memory.grow(&mut store, additional_pages_needed as u64).map_err(|_| "Failed to grow memory")?;
+        }
+
+        if saved_data.len() > wasm_memory.data(&mut store).len() {
+            return Err("Saved data is larger than the available WASM memory.".into());
+        }
+        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data); 
+        let memory_data = wasm_memory.data(&store);
+        // Assuming the memory content is ASCII text
+        if let Ok(text) = std::str::from_utf8(&memory_data) {
+            println!("Memory Contents: {}", text);
+        } else {
+            // If the memory contains binary data, you can print it as bytes
+            println!("Memory Contents (as bytes)");
+        }
+        match link.get_typed_func::<i32, i32>(&mut store, "get_ipfs_ptr") {
+            Ok(func) => {
+                let ptr_func = func;
+                let ptr = ptr_func.call(&mut store, id)?;
+        
+                // Check if the function returned an error indicator
+                if ptr == 0 {
+                    return Err("Error occurred while fetching pointer in length function.".into());
+                }
+                println!("Pointer: {}", ptr);
+        
+                match link.get_typed_func::<i32, i64>(&mut store, "get_ipfs_len") {
+                    Ok(func) => {
+                        match func.call(&mut store, id) {
+                            Ok(token_result) => {
+                                println!("Len Contract: {:?}", token_result);
+                                let start = ptr as usize;
+                                let end = start + token_result as usize;
+                                if end <= wasm_memory.data(&store).len() {
+                                    let data = wasm_memory.data(&store)[start..end].to_vec();
+                 
+                                    match String::from_utf8(data) {
+                                        Ok(name) => {
+                                            println!("IPFS: {:?}", name);
+                                            return Ok(name);
+                                            // Other processing code here
+                                        },
+                                        Err(e) => {
+                                            println!("Error converting bytes to String: {:?}", e);
+                                            return Err(e.into());
+                                            // Handle the error appropriately
+                                        },
+                                    }
+                                } else {
+                                    println!("Invalid memory access: Out of bounds");
+                                    return Err("error".into());
+                                    // Handle the out-of-bounds memory access appropriately
+                                }
+                                
+                                // Other processing code here
+                            },
+                            Err(e) => {
+                                println!("Failed to call get_ipfs_len function: {:?}", e);
+                                return Err(e.into());
+                            },
+                        }
+                    },
+                    Err(e) => {
+                        println!("Failed to call get_ptr_len function: {:?}", e);
+                        return Err(e.into());
+                    },
+                }
+            },
+            Err(e) => {
+                println!("Failed to call get_ipfs_len function: {:?}", e);
+                return Err(e.into());
+            },
+        }        
+    }
     pub fn exported_functions(&self) -> Vec<String> {
         self.module.exports().map(|export| export.name().to_string()).collect()
     }
@@ -1133,7 +1245,7 @@ pub fn mint_token_official(contract_address:&String,
             }
         }
 }
-pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<u32, Box<dyn std::error::Error>>{
+pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<(String,String), Box<dyn std::error::Error>>{
     let c_path = "./contract/db";
     let a_path = "./account/db";
     let contract_path = match rock_storage::open_db(c_path) {
@@ -1157,10 +1269,17 @@ pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<u32, Box<dyn s
     };
     let read_result = contract.read_owner_token(&contract_path, &contract_info,&contract_address.to_string(),*id);
     match read_result {
-        Ok(read_items)=>{
-            Ok(read_items)
+        Ok(read_items) => {
+            let read_ipfs = match contract.read_ipfs_token(&contract_path, &contract_info, &contract_address.to_string(), *id) {
+                Ok(ipfs_data) => ipfs_data,
+                Err(e) => {
+                    println!("Error reading IPFS data: {}", e);
+                    "default value or error info".to_string() // Provide a default value or error information
+                }
+            };
+            Ok((read_items, read_ipfs)) // Use `read_items` here instead of `read_item`
         }
-        Err(e)=>{
+        Err(e) => {
             println!("Error after minting, could not read token owner: {}", e);
             Err(e.into())
         }
