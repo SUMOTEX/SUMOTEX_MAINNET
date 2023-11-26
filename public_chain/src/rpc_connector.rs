@@ -157,7 +157,7 @@ fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value>
     match smart_contract::read_token_by_id(&contract_address, token_id) {
         Ok(token_detail) => {
             println!("Read Token Details: {:?}", token_detail);
-            let response_body = json!({"contract_address": contract_address});
+            let response_body = json!({"token_detail": token_detail});
             Json(json!({"jsonrpc": "1.0",  "result": response_body}))
         },
         Err(e) => {
