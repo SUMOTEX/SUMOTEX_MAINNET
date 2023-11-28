@@ -1,5 +1,6 @@
 use rocket::Request;
 use rocket::post;
+use rocket::get;
 use rocket::routes;
 use rocket::serde::json::Json;
 use serde_json::json;
@@ -235,9 +236,19 @@ fn transfer_nft(post_data: Json<TransferTokenInfo>)-> Json<serde_json::Value> {
             Json(json!({"jsonrpc": "1.0", "result": "error"}))
         }
     }
-
 }
+#[get("/healthcheck")]
+fn healthcheck() -> Json<serde_json::Value> {
+    // Perform any necessary health checks here. For simplicity, this example
+    // will just return a success message.
 
+    let response_body = json!({
+        "status": "OK",
+        "message": "Service is up and running"
+    });
+
+    Json(json!({"jsonrpc": "1.0", "result": response_body}))
+}
 pub struct CORS;
 #[rocket::async_trait]
 impl Fairing for CORS {
