@@ -246,7 +246,7 @@ fn healthcheck() -> Json<serde_json::Value> {
         "status": "OK",
         "message": "Service is up and running"
     });
-    Json(json!({response_body}))
+    Json(({response_body}))
 }
 pub struct CORS;
 #[rocket::async_trait]
