@@ -246,8 +246,7 @@ fn healthcheck() -> Json<serde_json::Value> {
         "status": "OK",
         "message": "Service is up and running"
     });
-
-    Json(json!({"jsonrpc": "1.0", "result": response_body}))
+    Json(json!({response_body}))
 }
 pub struct CORS;
 #[rocket::async_trait]
@@ -277,7 +276,7 @@ pub async fn start_rpc() {
             port: 80,
             ..rocket::Config::default()
         })
-        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet,mint_token_contract])
+        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet,mint_token_contract,healthcheck])
         .launch()
         .await
         .expect("Failed to start Rocket server");
