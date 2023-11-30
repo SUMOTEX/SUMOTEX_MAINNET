@@ -15,7 +15,6 @@ Update to this if you are getting error for libp2p-noise on v0.39
      sk 
  } 
 
-
  > sudo apt install librocksdb-dev libsnappy-dev
 
  To run this application as a systemd service:
