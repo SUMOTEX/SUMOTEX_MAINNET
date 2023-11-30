@@ -273,7 +273,7 @@ pub async fn start_rpc() {
         //.manage(swarm) // Add the swarm to the application state
         .configure(rocket::Config {
             address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-            port: 80,
+            port: 8000,
             ..rocket::Config::default()
         })
         .mount("/", routes![handle_rpc,create_nft_contract,create_wallet,mint_token_contract,healthcheck])
