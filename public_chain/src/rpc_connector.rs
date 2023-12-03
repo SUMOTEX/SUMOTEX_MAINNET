@@ -197,7 +197,7 @@ fn get_balance(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
             Json(json!({"jsonrpc": "1.0", "result": response_body}))
         },
         Err(e) => {
-            error!("Error creating wallet: {:?}", e);
+            error!("Error getting balance wallet: {:?}", e);
             Json(json!({"jsonrpc": "1.0", "result": "error"}))
         }
     }
@@ -273,10 +273,13 @@ pub async fn start_rpc() {
         //.manage(swarm) // Add the swarm to the application state
         .configure(rocket::Config {
             address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-            port: 8000,
+            //prod
+            //port:8000,
+            //dev
+            port: 8545,
             ..rocket::Config::default()
         })
-        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet,mint_token_contract,healthcheck])
+        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet,mint_token_contract,get_balance,healthcheck])
         .launch()
         .await
         .expect("Failed to start Rocket server");

@@ -125,30 +125,27 @@ impl Account {
     }
     
 }
-
-
-pub fn create_account()-> Result<(String, String), Box<dyn std::error::Error>>{
+fn open_account_db() -> Result<DB, Box<dyn std::error::Error>> {
     let path = "./account/db";
-    let account_path = rock_storage::open_db(path);
-    match account_path {
-        Ok(account_db) => {
-            let (public_key,private_key) = generate_keypair();
-            let account = Account::new();
-            let address = account.public_address.clone();
-            let serialized_data = serde_json::to_string(&account).expect("can jsonify request");
-            let _ = rock_storage::put_to_db(&account_db,address.clone().to_string(),&serialized_data);
-            let pub_key = rock_storage::get_from_db(&account_db,address.to_string());
-            println!("Public Acc: {:?} created",pub_key);
-            println!("Private Key: {:?} created",private_key);
-            Ok((public_key.to_string(), private_key.to_string()))
-        }
-        Err(e) => {
-            // Handle the error appropriately
-            eprintln!("Failed to create a wallet: {:?}", e);
-            Err(e.into())
-        }
-    }
+    rock_storage::open_db(path).map_err(|e| e.into())
 }
+pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> {
+    let account_db = open_account_db()?;
+    
+    let (public_key, private_key) = generate_keypair();
+    let account = Account::new();
+    let address = account.public_address.clone();
+    let serialized_data = serde_json::to_string(&account)?;
+
+    match rock_storage::put_to_db(&account_db, address.clone().to_string(), &serialized_data) {
+        Ok(_) => println!("Account stored successfully"),
+        Err(e) => eprintln!("Failed to store account: {:?}", e),
+    }
+
+    println!("Public Acc: {} created", public_key); // Avoid logging private key
+    Ok((public_key, private_key))
+}
+
 pub fn get_balance(public_key: &str) -> Result<f64, Box<dyn std::error::Error>> {
     let path = "./account/db";
     let account_path = rock_storage::open_db(path);
@@ -161,7 +158,7 @@ pub fn get_balance(public_key: &str) -> Result<f64, Box<dyn std::error::Error>> 
 
             // Deserialize the account data from JSON to an Account struct
             let account: Account = serde_json::from_str(&account_data)?;
-
+            println!("Acc {:?}",account);
             // Return the balance from the account
             Ok(account.balance)
         }
