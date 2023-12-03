@@ -197,7 +197,7 @@ fn get_balance(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
             Json(json!({"jsonrpc": "1.0", "result": response_body}))
         },
         Err(e) => {
-            error!("Error getting balance wallet: {:?}", e);
+            error!("Error getting wallet: {:?}", e);
             Json(json!({"jsonrpc": "1.0", "result": "error"}))
         }
     }

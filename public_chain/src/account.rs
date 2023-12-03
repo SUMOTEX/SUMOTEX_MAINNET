@@ -134,42 +134,56 @@ pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> 
     
     let (public_key, private_key) = generate_keypair();
     let account = Account::new();
-    let address = account.public_address.clone();
     let serialized_data = serde_json::to_string(&account)?;
 
-    match rock_storage::put_to_db(&account_db, address.clone().to_string(), &serialized_data) {
+    match rock_storage::put_to_db(&account_db, public_key.clone().to_string(), &serialized_data) {
         Ok(_) => println!("Account stored successfully"),
         Err(e) => eprintln!("Failed to store account: {:?}", e),
     }
 
     println!("Public Acc: {} created", public_key); // Avoid logging private key
-    Ok((public_key, private_key))
+    Ok((public_key.to_string(), private_key.to_string()))
 }
+
+// pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> {
+//     // ... rest of the code ...
+//     // Instead of generating a new key, use a hardcoded key for testing
+//     let account_db = open_account_db()?;
+//     let account = Account::new();
+//     let public_key = "test_public_key";
+//     let private_key = "test_private_key";
+//     let serialized_data = serde_json::to_string(&account)?;
+//     // ... rest of the code ...
+//     match rock_storage::put_to_db(&account_db, public_key.clone().to_string(), &serialized_data) {
+//             Ok(_) => println!("Account stored successfully"),
+//             Err(e) => eprintln!("Failed to store account: {:?}", e),
+//         }
+//     Ok((public_key.to_string(), private_key.to_string()))
+// }
+
 
 pub fn get_balance(public_key: &str) -> Result<f64, Box<dyn std::error::Error>> {
     let path = "./account/db";
     let account_path = rock_storage::open_db(path);
+
     match account_path {
         Ok(db_handle) => {
-            // Now that we have the `db_handle`, we can pass it to `rock_storage::get_from_db`
-            // Retrieve the serialized account data from the database using the public key
-            let account_data = rock_storage::get_from_db(&db_handle, public_key.to_string())
-            .ok_or("Account not found")?; // Convert the Option to a Result to handle the case where the account isn't found
-
-            // Deserialize the account data from JSON to an Account struct
-            let account: Account = serde_json::from_str(&account_data)?;
-            println!("Acc {:?}",account);
-            // Return the balance from the account
-            Ok(account.balance)
+            match rock_storage::get_from_db(&db_handle, public_key.to_string()) {
+                Some(data) => {
+                    let account: Account = serde_json::from_str(&data)?;
+                    Ok(account.balance)
+                },
+                None => {
+                    Err("Account not found".into())
+                }
+            }
         }
         Err(e) => {
-            // Handle the error, e.g., by logging it or converting it to your custom error type
-            // If this is in a function that returns a Result, you can return the error here
-            return Err(e.into());
+            Err(e.into())
         }
     }
-
 }
+
 
 fn get_account_no_swarm(account_key: &str, db_handle: &DB) -> Option<Account> {
     let account_data = rock_storage::get_from_db(db_handle, account_key.to_string());

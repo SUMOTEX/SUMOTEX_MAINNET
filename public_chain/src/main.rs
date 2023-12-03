@@ -9,6 +9,7 @@ use tokio::{
     sync::mpsc,
     time::sleep
 };
+use std::path::Path;
 use std::fs;
 use libp2p::Multiaddr;
 use std::str::FromStr;
@@ -53,22 +54,33 @@ pub async fn run_epoch(){
 }
 
 pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::error::Error>>{
-    // Create read-write locks for each storage
-    let db_public_block = rock_storage::create_storage("./public_blockchain")?;
-    let db_account = rock_storage::create_storage("./account")?;
-    let db_transactions = rock_storage::create_storage("./transactions")?;
-    let db_contract = rock_storage::create_storage("./contract")?;
+    let paths = [
+        "./public_blockchain",
+        "./account",
+        "./transactions",
+        "./contract",
+    ];
 
-    // Initialize the StoragePath instance as required by the library
+    for path in &paths {
+        if !Path::new(path).exists() {
+            rock_storage::create_storage(path)?;
+        }
+    }
+
+    let db_public_block = rock_storage::open_storage("./public_blockchain")?;
+    let db_account = rock_storage::open_storage("./account")?;
+    let db_transactions = rock_storage::open_storage("./transactions")?;
+    let db_contract = rock_storage::open_storage("./contract")?;
+
     let the_storage = rock_storage::StoragePath {
-        blocks:db_public_block,
-        account:db_account,
-        transactions:db_transactions,
+        blocks: db_public_block,
+        account: db_account,
+        transactions: db_transactions,
         contract: db_contract,
     };
 
-    println!("Storage created for blocks, accounts, contract, and transactions");
-    return Ok(the_storage)
+    println!("Storage initialized for blocks, accounts, contracts, and transactions");
+    Ok(the_storage)
 
 }
 fn db_extract(db: Arc<RwLock<DBWithThreadMode<SingleThreaded>>>) -> DBWithThreadMode<SingleThreaded> {

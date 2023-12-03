@@ -169,7 +169,17 @@ pub fn create_storage(path: &str)-> Result<DB, Error>{
         }
     }
 }
+pub fn open_storage(path: &str) -> Result<DB, Box<Error>> {
+    // Create an instance of Options, used to configure the database
+    let mut opts = Options::default();
+    opts.create_if_missing(false); // Do not create a new database if it doesn't exist
 
+    // Attempt to open the database
+    match DB::open(&opts, path) {
+        Ok(db) => Ok(db),
+        Err(e) => Err(Box::new(e)),
+    }
+}
 fn path_exists(filepath: &str) -> bool {
     let path = Path::new(filepath);
     path.exists() && path.is_file()
