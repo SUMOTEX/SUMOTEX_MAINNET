@@ -279,7 +279,7 @@ pub async fn start_rpc() {
             // port: 8545,
             ..rocket::Config::default()
         })
-        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet,mint_token_contract,get_balance,healthcheck])
+        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet,mint_token_contract,transfer_nft,transfer_token,get_balance,healthcheck])
         .launch()
         .await
         .expect("Failed to start Rocket server");
