@@ -54,62 +54,7 @@ pub struct TransferTokenInfo {
     amount:f64
 }
 
-// Route to handle RPC requests.
-#[post("/", data = "<request>")]
-fn handle_rpc(request: Json<RpcRequest>) -> Json<serde_json::Value> {
-   // println!("RPC called");
-    match request.method.as_str() {
-        "eth_chainId" => {
-            Json(json!({"jsonrpc": "2.0", "id": request.id, "result": "0x184"}))  // 0x58 is 88 in hexadecimal
-        },
-        "eth_getBalance" => {
-            // This is just a mock. In reality, you should extract the address from the params and look up the balance.
-            if let Some(params) = &request.params {
-                Json(json!({"jsonrpc": "2.0", "id": request.id, "result": "1000"}))
-                //let address = params[0].as_str().unwrap_or_default();
-                // match account::get_balance(address).await {
-                //     Ok(balance) => Json(json!({"jsonrpc": "2.0", "id": request.id, "result": balance})),
-                //     Err(_) => Json(json!({"jsonrpc": "2.0", "id": request.id, "error": {"code": -32603, "message": "Internal error"}}))
-                // }
-            } else {
-                Json(json!({"jsonrpc": "2.0", "id": request.id, "error": {"code": -32602, "message": "Invalid params"}}))
-            }
-        },
-        "eth_accounts" => {
-            // Mocking a single Ethereum address. You should query your actual accounts here.
-            println!("{:?}",request);
-            Json(json!({"jsonrpc": "2.0", "id": request.id, "result": ["0x742d35Cc6634C0532925a3b844Bc454e4438f44e"]}))
-        },
-        "eth_sendTransaction" => {
-            // Mock a transaction hash for now
-            Json(json!({"jsonrpc": "2.0", "id": request.id, "result": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef"}))
-        },
-        "eth_call" => {
-            // Mock a return value
-            Json(json!({"jsonrpc": "2.0", "id": request.id, "result": "0x"}))
-        },
-        "eth_getTransactionReceipt" => {
-            // Mock a transaction receipt
-            Json(json!({"jsonrpc": "2.0", "id": request.id, "result": {
-                "transactionHash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
-                "status": "0x1",
-                // ... other receipt fields
-            }}))
-        },
-        "eth_estimateGas" => {
-            // Mock a gas estimation
-            Json(json!({"jsonrpc": "2.0", "id": request.id, "result": "0x5208"}))
-        },
-        "net_version" => {
-            // Mock a network version
-            Json(json!({"jsonrpc": "2.0", "id": request.id, "result": "1"}))
-        },
-        _ => {
-            // Unsupported method
-            Json(json!({"jsonrpc": "2.0", "id": request.id, "error": {"code": -32601, "message": "Method not found"}}))
-        }
-    }
-}
+
 
 
 // Route to handle RPC requests.
@@ -279,7 +224,7 @@ pub async fn start_rpc() {
             // port: 8545,
             ..rocket::Config::default()
         })
-        .mount("/", routes![handle_rpc,create_nft_contract,create_wallet,mint_token_contract,transfer_nft,transfer_token,get_balance,healthcheck])
+        .mount("/", routes![create_nft_contract,create_wallet,mint_token_contract,transfer_nft,transfer_token,get_balance,healthcheck])
         .launch()
         .await
         .expect("Failed to start Rocket server");
