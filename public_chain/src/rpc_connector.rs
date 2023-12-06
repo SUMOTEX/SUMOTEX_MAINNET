@@ -27,6 +27,8 @@ struct RpcRequest {
 pub struct ContractInfo {
     call_address: String,
     private_key: String,
+    contract_name:String,
+    contract_symbol:String
 }
 #[derive(serde::Deserialize, Debug)]
 pub struct MintTokenInfo {
@@ -63,7 +65,9 @@ fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> 
     println!("create_nft_contract");
     let call_address = &post_data.call_address;
     let private_key = &post_data.private_key;
-    match smart_contract::create_erc721_contract_official(&call_address, &private_key) {
+    let contract_name = &post_data.contract_name;
+    let contract_symbol = &post_data.contract_symbol;
+    match smart_contract::create_erc721_contract_official(&call_address, &private_key,contract_name,contract_symbol) {
         Ok(contract_address) => {
             println!("Contract successfully created: {:?}", contract_address);
             let response_body = json!({"contract_address": contract_address});
