@@ -16,11 +16,14 @@ use wasmtime::MemoryType;
 use wasmtime::Linker;
 use wasmtime::component::Type;
 use wasmtime_wasi::sync::WasiCtxBuilder;
+use wasmparser::{Parser, Payload, Operator};
 use bincode::{serialize, deserialize};
 use bincode::{ Error as BincodeError};
 use rocksdb::Error as RocksDBError;
 use wasm_bindgen::JsCast;
-use wasmtime::{Module, Store, Engine};
+use std::collections::HashSet;
+use std::fs::File;
+use std::io::Read; 
 use std::fs;
 use crate::public_txn;
 use crate::rock_storage::StoragePath;
@@ -981,7 +984,7 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
                 module_path: "./sample721.wasm".to_string(),
                 pub_key:public_key.to_string(),
             };
-        
+            disassemble_wasm("./sample721.wasm");
             let mut contract = WasmContract::new("./sample721.wasm")?;
 
             println!("Contract successfully created.");
@@ -1021,23 +1024,33 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
         }
     }
 }
-pub fn disassemble_wasm(file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
-    let engine = Engine::default();
-    let store = Store::new(&engine, ()); // Pass an empty tuple as the context
+pub fn disassemble_wasm(file_path: &str) ->Result<(), Box<dyn std::error::Error>> {
+    let mut file = File::open(file_path)?;
+    let mut wasm_bytes = Vec::new();
+    file.read_to_end(&mut wasm_bytes)?;
 
-    // Read the WebAssembly binary
-    let data = fs::read(file_path)?;
+    let parser = Parser::new(0);
+    let mut opcodes = HashSet::new();
 
-    // Create a module from the binary data
-    let module = Module::new(&engine, &data)?;
-
-    // Iterate over the exports, filtering for functions
-    for export in module.exports() {
-        if let wasmtime::ExternType::Func(_) = export.ty() {
-            println!("Function Export: {}", export.name());
-            // Additional processing for each function can be done here
+    for payload in parser.parse_all(&wasm_bytes) {
+        match payload? {
+            Payload::CodeSectionEntry(body) => {
+                let operators = body.get_operators_reader()?;
+                for operator in operators {
+                    let op = operator?;
+                    opcodes.insert(format!("{:?}", op));
+                }
+            },
+            _ => {}
         }
     }
+
+    // Print the unique opcodes
+    println!("Unique opcodes count: {}", opcodes.len());
+    for opcode in &opcodes {
+        println!("{}", opcode);
+    }
+
 
     Ok(())
 }
