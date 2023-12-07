@@ -20,6 +20,8 @@ use bincode::{serialize, deserialize};
 use bincode::{ Error as BincodeError};
 use rocksdb::Error as RocksDBError;
 use wasm_bindgen::JsCast;
+use wasmtime::{Module, Store, Engine};
+use std::fs;
 use crate::public_txn;
 use crate::rock_storage::StoragePath;
 use crate::public_swarm;
@@ -1019,7 +1021,26 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
         }
     }
 }
+pub fn disassemble_wasm(file_path: &str) -> Result<(), Box<dyn std::error::Error>> {
+    let engine = Engine::default();
+    let store = Store::new(&engine, ()); // Pass an empty tuple as the context
 
+    // Read the WebAssembly binary
+    let data = fs::read(file_path)?;
+
+    // Create a module from the binary data
+    let module = Module::new(&engine, &data)?;
+
+    // Iterate over the exports, filtering for functions
+    for export in module.exports() {
+        if let wasmtime::ExternType::Func(_) = export.ty() {
+            println!("Function Export: {}", export.name());
+            // Additional processing for each function can be done here
+        }
+    }
+
+    Ok(())
+}
 //TODO:: DELETE, why? Because its a mock key
 pub fn create_erc721_contract(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn std::error::Error>>{
     let contract_path = swarm.behaviour().storage_path.get_contract();
