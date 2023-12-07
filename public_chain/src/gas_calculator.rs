@@ -11,9 +11,24 @@ const GAS_PER_BYTE: u64 = 10; // Example cost per byte
 const GAS_PER_FUNCTION_CALL: u64 = 100; // Base cost for function call
 
 
-/// Calculate gas for a simple ETH transfer.
-pub fn calculate_gas_for_simple_transfer() -> u64 {
-    GAS_COST_SIMPLE_TRANSFER
+struct GasCalculator {
+    base_cost: u64,
+    per_byte_cost: u64,
+    per_instruction_cost: u64,
+}
+
+impl GasCalculator {
+    fn new(base_cost: u64, per_byte_cost: u64, per_instruction_cost: u64) -> Self {
+        GasCalculator {
+            base_cost,
+            per_byte_cost,
+            per_instruction_cost,
+        }
+    }
+
+    fn calculate(&self, memory_size: usize, instructions: u64) -> u64 {
+        self.base_cost + (memory_size as u64 * self.per_byte_cost) + (instructions * self.per_instruction_cost)
+    }
 }
 
 /// Calculate gas for contract creation.
