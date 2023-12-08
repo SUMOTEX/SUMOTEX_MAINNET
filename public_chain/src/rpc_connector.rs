@@ -11,6 +11,8 @@ use log::error;
 use crate::smart_contract;
 use crate::public_swarm;
 use crate::account;
+use crate::public_txn;
+use crate::public_txn::TransactionType;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 
@@ -21,6 +23,14 @@ struct RpcRequest {
     id: serde_json::Value,
     method: String,
     params: Option<serde_json::Value>,
+}
+
+#[derive(Debug,serde::Serialize, serde::Deserialize)]
+struct TransactionInfo {
+    caller_address: String,
+    to_address: String,
+    computed_value: u64,
+    transaction_type: String
 }
 
 #[derive(serde::Deserialize, Debug)]
@@ -56,9 +66,48 @@ pub struct TransferTokenInfo {
     amount:f64
 }
 
+// Route to handle RPC requests for transaction creation
+#[post("/create-transaction", data = "<transaction_data>")]
+fn create_transaction(transaction_data: Json<TransactionInfo>) -> Json<serde_json::Value> {
+    println!("Creating transaction");
+
+    // Extracting data from request
+    let caller_address = &transaction_data.caller_address;
+    let to_address = &transaction_data.to_address;
+    let computed_value = transaction_data.computed_value;
+    let transaction_type = match transaction_data.transaction_type.as_str() {
+        "SimpleTransfer" => TransactionType::SimpleTransfer,
+        "ContractCreation" => TransactionType::ContractCreation,
+        "ContractInteraction" => TransactionType::ContractInteraction,
+        _ => return Json(json!({"jsonrpc": "2.0", "error": "Invalid transaction type"}))
+    };
 
 
-
+    match public_txn::Txn::create_and_prepare_transaction(
+        transaction_type,
+        caller_address.to_string(),
+        to_address.to_string(),
+        computed_value
+    ) {
+        Ok((txn_hash_hex,gas_cost, _)) => {
+            println!("Transaction successfully prepared: {:?}", txn_hash_hex);
+            Json(json!({
+                "jsonrpc": "2.0", 
+                "result": {
+                    "transaction_hash": txn_hash_hex,
+                    "gas_cost": gas_cost
+                }
+            }))
+        },
+        Err(e) => {
+            println!("Error creating transaction: {:?}", e);
+            Json(json!({
+                "jsonrpc": "2.0", 
+                "error": "Transaction creation failed"
+            }))
+        }
+    }
+}
 // Route to handle RPC requests.
 #[post("/create-nft-contract", data = "<post_data>")]
 fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> {
@@ -79,6 +128,7 @@ fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> 
         }
     }
 }
+
 // Route to handle RPC requests.
 #[post("/mint-token", data = "<post_data>")]
 fn mint_token_contract(post_data: Json<MintTokenInfo>)-> Json<serde_json::Value> {

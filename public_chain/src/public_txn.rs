@@ -215,22 +215,20 @@ impl Txn {
         transaction_type: TransactionType, 
         caller_address: String,
         to_address: String,
-        computed_value: u64,
-        private_key: &SecretKey
-    ) -> Result<(String, PublicTxn), Box<dyn std::error::Error>> {
+        computed_value: u64
+    ) -> Result<(String,u64, PublicTxn), Box<dyn std::error::Error>> {
         let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
-        let nonce = account::get_account_no_swarm(&caller_address)
-            .ok_or("Account not found")?
-            .nonce;
+        let account = account::get_account_no_swarm(&caller_address).expect("Account not found");
+        let nonce = account.get_nonce();
 
         let txn_data = format!(
-            "{}{}{}{}{}",
+            "{}{}{}{}",
             caller_address, to_address, computed_value, current_timestamp, // other fields if necessary
         );
 
         let txn_hash = Sha256::digest(txn_data.as_bytes());
         let txn_hash_hex = format!("{:x}", txn_hash);
-
+        let gas_cost= 1000;
         let new_txn = PublicTxn {
             txn_type: transaction_type,
             caller_address,
@@ -244,7 +242,7 @@ impl Txn {
             gas_cost: 100 // Placeholder
         };
 
-        Ok((txn_hash_hex, new_txn))
+        Ok((txn_hash_hex, gas_cost, new_txn))
     }
 
     // Stage 2: Sign and Submit Transaction Block
@@ -265,8 +263,8 @@ impl Txn {
         verkle_tree.insert(txn_hash_hex.as_bytes().to_vec(), hash_result.to_vec());
 
         let mut dictionary_data = HashMap::new();
-        dictionary_data.insert("key".to_string(), txn_hash_hex);
-        dictionary_data.insert("value".to_string(), serialized_data);
+        dictionary_data.insert("key".to_string(), txn_hash_hex.clone());
+        dictionary_data.insert("value".to_string(), serialized_data.clone());
         let serialised_txn = serde_json::to_vec(&dictionary_data)?;
         let root_hash = verkle_tree.get_root_string();
 

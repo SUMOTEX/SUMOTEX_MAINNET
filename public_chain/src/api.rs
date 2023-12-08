@@ -1,7 +1,7 @@
 use actix_web::{web,post, App, HttpResponse, HttpServer, Responder,middleware::Logger};
 use crate::p2p::AppBehaviour;
 use std::sync::{Arc, Mutex};
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize};
 use serde_json::json;
 use libp2p::swarm::Swarm;
 use log::error;

@@ -11,7 +11,6 @@ use once_cell::sync::Lazy;
 use crate::p2p::AppBehaviour;
 use crate::public_app::App;
 use crate::rock_storage;
-use crate::public_swarm;
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
 
 

@@ -12,7 +12,6 @@ use tokio::{
 
 use libp2p::Transport;
 use log::{ info};
-use once_cell::sync::OnceCell;
 use crate::p2p::PEER_ID;
 use crate::p2p::AppBehaviour;
 use crate::p2p::KEYS;
