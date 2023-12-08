@@ -24,6 +24,7 @@ use crate::gas_calculator;
 use crate::public_txn;
 use crate::rock_storage::StoragePath;
 use crate::public_swarm;
+use crate::public_txn::TransactionType;
 
 #[derive(Serialize, Deserialize)]
 pub struct ERC721Token {
@@ -1007,7 +1008,7 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
             contract.call_721(&contract_db,&contract_info, &wasm_params)?;
             let the_item = rock_storage::get_from_db(&contract_db,public_key.to_string());
             //TODO: compute value
-            public_txn::Txn::create_transactions(call_address.to_string(),&private_key,public_key.to_string(),1000);
+            public_txn::Txn::create_transactions(TransactionType::ContractCreation,call_address.to_string(),&private_key,public_key.to_string(),1000);
             println!("Contract Public Key: {:?}",public_key.to_string());
             println!("The Key Item: {:?}",the_item);
             Ok(public_key.to_string())

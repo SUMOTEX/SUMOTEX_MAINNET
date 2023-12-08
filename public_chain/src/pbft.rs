@@ -15,6 +15,7 @@ use rand::distributions::Alphanumeric;
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::p2p::AppBehaviour;
 use crate::public_txn::PublicTxn;
+use crate::public_txn::TransactionType;
 
 pub static PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_pre_prepared"));
 
@@ -24,6 +25,7 @@ enum Message {
     Prepare(u64),       // View number, Sequence number
     Commit(u64),        // View number, Sequence number
 }
+
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct PBFTNode {
@@ -48,6 +50,10 @@ pub fn get_total_pbft_view(swarm: &Swarm<AppBehaviour>)->u64 {
 pub fn generate_fake_signature() -> Vec<u8> {
     vec![0u8; 64] // Assuming a 64-byte signature for illustrative purposes.
 }
+fn get_transaction_type() -> TransactionType {
+    // Some logic to determine the transaction type
+    TransactionType::ContractInteraction
+}
 pub fn create_transactions_epoch() {
     let mut i: i64 =0;
     let mut verkle_tree = VerkleTree::new();
@@ -62,8 +68,9 @@ pub fn create_transactions_epoch() {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
+        let txn_type = get_transaction_type();
         let mut latest_txn = PublicTxn{
-            txn_type:1,
+            txn_type:txn_type,
             gas_cost:0,
             caller_address:"sample_call".to_string(),
             signature:(generate_fake_signature()),
@@ -120,9 +127,10 @@ pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
             .duration_since(UNIX_EPOCH)
             .unwrap()
             .as_secs() as i64;
+            let txn_type = get_transaction_type();
             let mut latest_txn = PublicTxn{
                 txn_hash:s.to_string(),
-                txn_type:1,
+                txn_type:txn_type,
                 gas_cost:0,
                 caller_address:"sample_caller".to_string(),
                 to_address:"sample_to".to_string(),

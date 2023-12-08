@@ -17,7 +17,7 @@ pub struct Txn{
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
-enum TransactionType {
+pub enum TransactionType {
     SimpleTransfer,
     ContractCreation,
     ContractInteraction,
@@ -26,7 +26,7 @@ enum TransactionType {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PublicTxn{
     pub txn_hash: String,
-    pub txn_type: u64,  // Added field for transaction type
+    pub txn_type: TransactionType,  // Added field for transaction type
     pub nonce:u64,
     pub value: u64,
     pub gas_cost: u64, 
@@ -142,11 +142,23 @@ impl Txn {
         .duration_since(UNIX_EPOCH)
         .unwrap()
         .as_secs() as i64;
-        //TODO FIX TXN HASH GENERATOR AND HARDCODED NONCE
-
-        let mut hash_item = caller_address.clone()+"_"+&to_address.clone() +"_"+&1000.to_string()+"_"+&computed_value.to_string() +"_"+&current_timestamp.to_string();
-        let txn_hash_json = serde_json::to_string(&hash_item).expect("can jsonify request");
-        let txn_hash = txn_hash_json.trim_matches('"').to_string(); 
+        // Create a string that represents the transaction data
+        let txn_data = format!(
+            "{}{}{}{}{}",
+            caller_address,
+            to_address,
+            computed_value,
+            current_timestamp,
+            match transaction_type {
+                TransactionType::SimpleTransfer => "SimpleTransfer",
+                TransactionType::ContractCreation => "ContractCreation",
+                TransactionType::ContractInteraction => "ContractInteraction",
+            },
+            // other fields can be added here if necessary
+        );
+        let mut hasher = Sha256::new();
+        hasher.update(txn_data.as_bytes());
+        let txn_hash = format!("{:x}", hasher.finalize());    
         let signature_result = account::Account::sign_message(txn_hash.as_bytes(),private_key);
         let signature_option = match signature_result {
             Ok(signature) => {
