@@ -81,7 +81,7 @@ impl GasCalculator {
         self.base_cost + (memory_size as u64 * self.per_byte_cost) + (instructions * self.per_instruction_cost)
     }
 }
-pub fn disassemble_wasm(file_path: &str) ->Result<(), Box<dyn std::error::Error>> {
+pub fn calculate_gas_for_contract_creation(file_path: &str) -> Result<u64, Box<dyn std::error::Error>> {
     let mut file = File::open(file_path)?;
     let mut wasm_bytes = Vec::new();
     file.read_to_end(&mut wasm_bytes)?;
@@ -102,15 +102,8 @@ pub fn disassemble_wasm(file_path: &str) ->Result<(), Box<dyn std::error::Error>
         }
     }
 
-    // Print the unique opcodes
-    println!("Unique opcodes count: {}", opcodes.len());
-    for opcode in &opcodes {
-        println!("{}", opcode);
-    }
-
-    calculate_gas_by_opcode(&opcodes);
-
-    Ok(())
+    let total_gas = calculate_gas_by_opcode(&opcodes);
+    Ok(total_gas)
 }
 
 fn calculate_gas_by_opcode(opcodes: &HashSet<String>) {
@@ -134,18 +127,6 @@ fn calculate_gas_by_opcode(opcodes: &HashSet<String>) {
 
 
 
-/// Calculate gas for contract creation.
-pub fn calculate_gas_for_contract_creation(data: &[u8],function_call: u64) -> u64 {
-    let data_size_gas = data.len() as u64; // Example, replace with actual gas calculation
-    let function_call_gas = function_call; // Example, replace with actual gas calculation
-
-    let mut gas_used = 0;
-    gas_used += data_size_gas;
-    gas_used += function_call_gas;
-
-    // Now return the calculated gas
-    gas_used
-}
 
 /// Calculate gas for interacting with a contract.
 pub fn calculate_gas_for_contract_interaction(data: &[u8],function_cost:u64) -> u64 {
