@@ -63,11 +63,13 @@ pub fn create_transactions_epoch() {
         .unwrap()
         .as_secs() as i64;
         let mut latest_txn = PublicTxn{
+            txn_type:1,
+            gas_cost:0,
             caller_address:"sample_call".to_string(),
             signature:(generate_fake_signature()),
             to_address:"sample_to".to_string(),
             txn_hash:s.to_string(),
-            nonce:i,
+            nonce:i as u64,
             value:100,
             status:1,
             timestamp: current_timestamp
@@ -120,10 +122,12 @@ pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
             .as_secs() as i64;
             let mut latest_txn = PublicTxn{
                 txn_hash:s.to_string(),
+                txn_type:1,
+                gas_cost:0,
                 caller_address:"sample_caller".to_string(),
                 to_address:"sample_to".to_string(),
                 signature:(generate_fake_signature()),
-                nonce:i,
+                nonce:i as u64,
                 value:123,
                 status:1,
                 timestamp: current_timestamp

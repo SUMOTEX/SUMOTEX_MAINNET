@@ -106,7 +106,7 @@ pub fn calculate_gas_for_contract_creation(file_path: &str) -> Result<u64, Box<d
     Ok(total_gas)
 }
 
-fn calculate_gas_by_opcode(opcodes: &HashSet<String>) {
+fn calculate_gas_by_opcode(opcodes: &HashSet<String>)->u64 {
     let mut total_gas = 0;
     let gas_map = opcode_gas_costs();
 
@@ -122,7 +122,7 @@ fn calculate_gas_by_opcode(opcodes: &HashSet<String>) {
         }
     }
 
-    println!("Total gas for all opcodes: {}", total_gas);
+    total_gas
 }
 
 

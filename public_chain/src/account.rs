@@ -123,12 +123,16 @@ impl Account {
     
         Ok(())
     }
+    pub fn get_nonce(&self) -> u64 {
+        self.nonce
+    }
     
 }
 fn open_account_db() -> Result<DB, Box<dyn std::error::Error>> {
     let path = "./account/db";
     rock_storage::open_db(path).map_err(|e| e.into())
 }
+
 pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> {
     let account_db = open_account_db()?;
     
@@ -141,7 +145,7 @@ pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> 
         Err(e) => eprintln!("Failed to store account: {:?}", e),
     }
 
-    println!("Public Acc: {} created", public_key); // Avoid logging private key
+    println!("Public Acc: {}", public_key); // Avoid logging private key
     Ok((public_key.to_string(), private_key.to_string()))
 }
 
@@ -168,11 +172,19 @@ pub fn get_balance(public_key: &str) -> Result<f64, Box<dyn std::error::Error>> 
     }
 }
 
+pub fn get_account_no_swarm(account_key: &str) -> Option<Account> {
+    let path = "./account/db";
+    let account_path = rock_storage::open_db(path);
 
-fn get_account_no_swarm(account_key: &str, db_handle: &DB) -> Option<Account> {
-    let account_data = rock_storage::get_from_db(db_handle, account_key.to_string());
-    account_data.and_then(|data| serde_json::from_str(&data).ok())
+    match account_path {
+        Ok(db_handle) => {
+            let account_data = rock_storage::get_from_db(&db_handle, account_key.to_string());
+            account_data.and_then(|data| serde_json::from_str(&data).ok())
+        }
+        Err(_) => None, // Return None in case of error
+    }
 }
+
 
 fn save_account(account: &Account, db_handle: &DB) -> Result<(), &'static str> {
     let serialized_data = serde_json::to_string(account).map_err(|_| "Failed to serialize account")?;

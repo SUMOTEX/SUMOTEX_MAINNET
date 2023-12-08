@@ -26,8 +26,8 @@ enum TransactionType {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PublicTxn{
     pub txn_hash: String,
-    pub txn_type: TransactionType,  // Added field for transaction type
-    pub nonce:i64,
+    pub txn_type: u64,  // Added field for transaction type
+    pub nonce:u64,
     pub value: u64,
     pub gas_cost: u64, 
     pub caller_address:String,
@@ -153,10 +153,12 @@ impl Txn {
                 return; // or return an Err if your function returns a Result
             },
         };
-        let gas_cost = gas_calculator::calculate_gas_cost(&txn_hash.as_bytes()); // Example function call
-        let account = account::get_account_no_swarm(account_key, &db_handle).expect("Account not found");
+        //Replace later
+        let gas_cost = 100;
+        let account = account::get_account_no_swarm(&caller_address).expect("Account not found");
         let nonce = account.get_nonce();
         let mut latest_txn = PublicTxn{
+            txn_type:1,
             caller_address:caller_address.clone(),
             signature:signature_option,
             to_address:to_address.clone(),
