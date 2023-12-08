@@ -29,6 +29,7 @@ mod api;
 mod account;
 mod smart_contract;
 mod rpc_connector;
+mod gas_calculator;
 use bridge::accept_loop;
 use crate::public_app::App;
 use std::sync::{RwLock, Arc};
