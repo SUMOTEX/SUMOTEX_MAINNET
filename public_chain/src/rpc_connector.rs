@@ -272,9 +272,9 @@ pub async fn start_rpc() {
         .configure(rocket::Config {
             address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
            //prod
-            //port:8000,
+            port:8000,
             //dev
-            port: 8545,
+            //port: 8545,
             ..rocket::Config::default()
         })
         .mount("/", routes![create_nft_contract,create_transaction,create_wallet,mint_token_contract,transfer_nft,transfer_token,get_balance,healthcheck])
