@@ -145,22 +145,6 @@ pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> 
     Ok((public_key.to_string(), private_key.to_string()))
 }
 
-// pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> {
-//     // ... rest of the code ...
-//     // Instead of generating a new key, use a hardcoded key for testing
-//     let account_db = open_account_db()?;
-//     let account = Account::new();
-//     let public_key = "test_public_key";
-//     let private_key = "test_private_key";
-//     let serialized_data = serde_json::to_string(&account)?;
-//     // ... rest of the code ...
-//     match rock_storage::put_to_db(&account_db, public_key.clone().to_string(), &serialized_data) {
-//             Ok(_) => println!("Account stored successfully"),
-//             Err(e) => eprintln!("Failed to store account: {:?}", e),
-//         }
-//     Ok((public_key.to_string(), private_key.to_string()))
-// }
-
 
 pub fn get_balance(public_key: &str) -> Result<f64, Box<dyn std::error::Error>> {
     let path = "./account/db";

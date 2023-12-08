@@ -5,6 +5,7 @@ use std::collections::HashMap;
 use std::collections::BTreeMap;
 use crate::publisher::Publisher;
 use crate::account;
+use crate::gas_calculator;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use secp256k1::{Secp256k1, PublicKey, SecretKey, Message, Signature};
@@ -15,14 +16,20 @@ pub struct Txn{
     pub hashed_txn:Vec<String>,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+enum TransactionType {
+    SimpleTransfer,
+    ContractCreation,
+    ContractInteraction,
+}
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct PublicTxn{
     pub txn_hash: String,
+    pub txn_type: TransactionType,  // Added field for transaction type
     pub nonce:i64,
-    // pub version:String,
     pub value: u64,
-    // pub gas_limit: u64,
+    pub gas_cost: u64, 
     pub caller_address:String,
     pub to_address:String,
     pub status:i64,
@@ -146,16 +153,19 @@ impl Txn {
                 return; // or return an Err if your function returns a Result
             },
         };
-        
+        let gas_cost = gas_calculator::calculate_gas_cost(&txn_hash.as_bytes()); // Example function call
+        let account = account::get_account_no_swarm(account_key, &db_handle).expect("Account not found");
+        let nonce = account.get_nonce();
         let mut latest_txn = PublicTxn{
             caller_address:caller_address.clone(),
             signature:signature_option,
             to_address:to_address.clone(),
             txn_hash:txn_hash.to_string(),
-            nonce:1,
+            nonce,
             value:computed_value,
             status:1,
-            timestamp: current_timestamp
+            timestamp: current_timestamp,
+            gas_cost
         };
         let serialized_data = serde_json::to_string(&latest_txn).expect("can jsonify request");
         // Hash the serialized data

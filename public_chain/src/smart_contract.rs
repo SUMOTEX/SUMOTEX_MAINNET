@@ -980,11 +980,11 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
                 module_path: "./sample721.wasm".to_string(),
                 pub_key:public_key.to_string(),
             };
-            gas_calculator::disassemble_wasm("./sample721.wasm");
+            gas_calculator::calculate_gas_for_contract_creation("./sample721.wasm");
             let mut contract = WasmContract::new("./sample721.wasm")?;
 
             println!("Contract successfully created.");
-            println!("Successfully instantiated the wasm module.");
+            println!("Successfully created wasm module.");
         
             let functions = contract.exported_functions();
         
