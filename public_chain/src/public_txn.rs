@@ -46,6 +46,15 @@ pub struct RootTxn{
     pub root_txn_hash: String,
 }
 
+impl TransactionType {
+    fn as_str(&self) -> &'static str {
+        match self {
+            TransactionType::SimpleTransfer => "SimpleTransfer",
+            TransactionType::ContractCreation => "ContractCreation",
+            TransactionType::ContractInteraction => "ContractInteraction",
+        }
+    }
+}
 
 impl PublicTxn {
     pub fn sign_transaction(transaction_data: &[u8], secret_key: &SecretKey) -> Signature {
@@ -218,31 +227,42 @@ impl Txn {
         computed_value: u64
     ) -> Result<(String,u64, PublicTxn), Box<dyn std::error::Error>> {
         let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
-        let account = account::get_account_no_swarm(&caller_address).expect("Account not found");
-        let nonce = account.get_nonce();
-
-        let txn_data = format!(
-            "{}{}{}{}",
-            caller_address, to_address, computed_value, current_timestamp, // other fields if necessary
-        );
-
-        let txn_hash = Sha256::digest(txn_data.as_bytes());
-        let txn_hash_hex = format!("{:x}", txn_hash);
-        let gas_cost= 1000;
-        let new_txn = PublicTxn {
-            txn_type: transaction_type,
-            caller_address,
-            to_address,
-            txn_hash: txn_hash_hex.clone(),
-            nonce,
-            value: computed_value,
-            status: 0, // Placeholder
-            timestamp: current_timestamp,
-            signature: Vec::new(), // Placeholder
-            gas_cost: 100 // Placeholder
-        };
-
-        Ok((txn_hash_hex, gas_cost, new_txn))
+        match transaction_type {
+            TransactionType::ContractCreation | TransactionType::ContractInteraction => {
+            //TransactionType::ContractCreation => {
+                // Handle contract-specific transactions
+                Self::handle_contract_transaction(transaction_type, &caller_address, &to_address, computed_value, current_timestamp)
+            },
+            _ => {
+                // For other transaction types
+                let account = account::get_account_no_swarm(&caller_address).expect("Account not found");
+                let nonce = account.get_nonce();
+    
+                let txn_data = format!(
+                    "{}{}{}{}",
+                    caller_address, to_address, computed_value, current_timestamp
+                );
+    
+                let txn_hash = Sha256::digest(txn_data.as_bytes());
+                let txn_hash_hex = format!("{:x}", txn_hash);
+                let gas_cost = 1000;  // Example gas cost, adjust as needed
+    
+                let new_txn = PublicTxn {
+                    txn_type: transaction_type,
+                    caller_address,
+                    to_address,
+                    txn_hash: txn_hash_hex.clone(),
+                    nonce,
+                    value: computed_value,
+                    status: 0, // Placeholder
+                    timestamp: current_timestamp,
+                    signature: Vec::new(), // Placeholder
+                    gas_cost, // Placeholder
+                };
+    
+                Ok((txn_hash_hex, gas_cost, new_txn))
+            }
+        }
     }
 
     // Stage 2: Sign and Submit Transaction Block
@@ -279,5 +299,45 @@ impl Txn {
 
         Ok(())
     }
+    fn handle_contract_transaction(
+        transaction_type: TransactionType,
+        caller_address: &str,
+        to_address: &str,
+        computed_value: u64,
+        current_timestamp: i64
+    ) -> Result<(String, u64, PublicTxn), Box<dyn std::error::Error>> {
+        // Handle the contract-specific logic here
+        // For example, you might have different steps or calculations for contract transactions
+    
+        // After processing, create the transaction hash, calculate the gas cost, and prepare the transaction object
+        let txn_data = format!(
+            "{}{}{}{}{}",
+            caller_address,
+            to_address,
+            computed_value,
+            current_timestamp,
+            transaction_type.as_str() // Convert the enum to a string representation or similar
+        );
+    
+        let txn_hash = Sha256::digest(txn_data.as_bytes());
+        let txn_hash_hex = format!("{:x}", txn_hash);
+        let gas_cost = 1000; // This is an example function call
+    
+        let new_txn = PublicTxn {
+            txn_type: transaction_type,
+            caller_address: caller_address.to_string(),
+            to_address: to_address.to_string(),
+            txn_hash: txn_hash_hex.clone(),
+            nonce: 0, // You need to fetch or calculate the correct nonce
+            value: computed_value,
+            status: 0, // Placeholder
+            timestamp: current_timestamp,
+            signature: Vec::new(), // Placeholder
+            gas_cost,
+        };
+    
+        Ok((txn_hash_hex, gas_cost, new_txn))
+    }
+    
 
 }

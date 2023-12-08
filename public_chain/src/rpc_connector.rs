@@ -82,7 +82,6 @@ fn create_transaction(transaction_data: Json<TransactionInfo>) -> Json<serde_jso
         _ => return Json(json!({"jsonrpc": "2.0", "error": "Invalid transaction type"}))
     };
 
-
     match public_txn::Txn::create_and_prepare_transaction(
         transaction_type,
         caller_address.to_string(),
@@ -278,7 +277,7 @@ pub async fn start_rpc() {
             port: 8545,
             ..rocket::Config::default()
         })
-        .mount("/", routes![create_nft_contract,create_wallet,mint_token_contract,transfer_nft,transfer_token,get_balance,healthcheck])
+        .mount("/", routes![create_nft_contract,create_transaction,create_wallet,mint_token_contract,transfer_nft,transfer_token,get_balance,healthcheck])
         .launch()
         .await
         .expect("Failed to start Rocket server");
