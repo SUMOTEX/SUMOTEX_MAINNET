@@ -94,7 +94,6 @@ impl Txn {
         self.transactions.push(txn);
     }
 
-
     pub fn is_txn_valid(&mut self,root_hash:String, txn_hash: HashMap<String, String>) -> (bool,Vec<String>) {
             //println!("{:?}",theTxn.timestamp);
             //TODO: To do verification on the transactions and store in another place.
@@ -183,7 +182,7 @@ impl Txn {
             txn_hash:txn_hash.to_string(),
             nonce,
             value:computed_value,
-            status:1,
+            status:0,
             timestamp: current_timestamp,
             gas_cost
         };
@@ -210,6 +209,77 @@ impl Txn {
         if let Some(publisher) = Publisher::get(){
             publisher.publish_block("pbft_pre_prepared".to_string(),serialised_dictionary)
         }
+    }
+    // Stage 1: Create and Prepare Transaction
+    pub fn create_and_prepare_transaction(
+        transaction_type: TransactionType, 
+        caller_address: String,
+        to_address: String,
+        computed_value: u64,
+        private_key: &SecretKey
+    ) -> Result<(String, PublicTxn), Box<dyn std::error::Error>> {
+        let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
+        let nonce = account::get_account_no_swarm(&caller_address)
+            .ok_or("Account not found")?
+            .nonce;
+
+        let txn_data = format!(
+            "{}{}{}{}{}",
+            caller_address, to_address, computed_value, current_timestamp, // other fields if necessary
+        );
+
+        let txn_hash = Sha256::digest(txn_data.as_bytes());
+        let txn_hash_hex = format!("{:x}", txn_hash);
+
+        let new_txn = PublicTxn {
+            txn_type: transaction_type,
+            caller_address,
+            to_address,
+            txn_hash: txn_hash_hex.clone(),
+            nonce,
+            value: computed_value,
+            status: 0, // Placeholder
+            timestamp: current_timestamp,
+            signature: Vec::new(), // Placeholder
+            gas_cost: 100 // Placeholder
+        };
+
+        Ok((txn_hash_hex, new_txn))
+    }
+
+    // Stage 2: Sign and Submit Transaction Block
+    pub fn sign_and_submit_transaction(
+        txn_hash_hex: String,
+        mut transaction: PublicTxn,
+        private_key: &SecretKey,
+        publisher: &Publisher
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let signature = account::Account::sign_message(txn_hash_hex.as_bytes(), private_key)?
+            .serialize_compact().to_vec();
+        transaction.signature = signature;
+
+        // Update the Verkle tree and prepare the transaction for broadcast
+        let mut verkle_tree = VerkleTree::new();
+        let serialized_data = serde_json::to_string(&transaction)?;
+        let hash_result = Sha256::digest(serialized_data.as_bytes());
+        verkle_tree.insert(txn_hash_hex.as_bytes().to_vec(), hash_result.to_vec());
+
+        let mut dictionary_data = HashMap::new();
+        dictionary_data.insert("key".to_string(), txn_hash_hex);
+        dictionary_data.insert("value".to_string(), serialized_data);
+        let serialised_txn = serde_json::to_vec(&dictionary_data)?;
+        let root_hash = verkle_tree.get_root_string();
+
+        let mut transactions = HashMap::new();
+        transactions.insert(txn_hash_hex, serialized_data);
+        let mut map = HashMap::new();
+        map.insert(root_hash.clone(), transactions);
+        let serialised_dictionary = serde_json::to_vec(&map)?;
+
+        println!("Broadcasting transactions to nodes");
+        publisher.publish_block("pbft_pre_prepared".to_string(), serialised_dictionary);
+
+        Ok(())
     }
 
 }

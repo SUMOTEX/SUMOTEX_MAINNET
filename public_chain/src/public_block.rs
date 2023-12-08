@@ -147,7 +147,7 @@ pub fn handle_finalised_block(swarm: &mut Swarm<AppBehaviour>, block:Block){
     rock_storage::put_to_db(block_db,block.public_hash.clone(),&json);
     let the_item: Option<String> = rock_storage::get_from_db(block_db,block.public_hash.clone());
     behaviour.app.blocks.push(block);
-    info!("broadcasting new block");
+    info!("Broadcasting new block");
     behaviour
         .floodsub
         .publish(BLOCK_TOPIC.clone(), json.as_bytes());
