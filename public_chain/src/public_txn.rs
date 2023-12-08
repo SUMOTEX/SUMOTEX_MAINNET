@@ -129,7 +129,13 @@ impl Txn {
     pub fn generate_fake_signature() -> Vec<u8> {
         vec![0u8; 64] // Assuming a 64-byte signature for illustrative purposes.
     }
-    pub fn create_transactions(caller_address:String,private_key:&SecretKey,to_address:String,computed_value:u64) {
+    pub fn create_transactions(
+        transaction_type: TransactionType, 
+        caller_address:String,
+        private_key:&SecretKey,
+        to_address:String,
+        computed_value:u64
+    ) {
         let mut verkle_tree = VerkleTree::new();
         let mut transactions: HashMap<String, String>= HashMap::new();
         let current_timestamp: i64 = SystemTime::now() 
@@ -158,7 +164,7 @@ impl Txn {
         let account = account::get_account_no_swarm(&caller_address).expect("Account not found");
         let nonce = account.get_nonce();
         let mut latest_txn = PublicTxn{
-            txn_type:1,
+            txn_type: transaction_type,
             caller_address:caller_address.clone(),
             signature:signature_option,
             to_address:to_address.clone(),
