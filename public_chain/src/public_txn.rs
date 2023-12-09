@@ -6,8 +6,10 @@ use std::collections::BTreeMap;
 use crate::publisher::Publisher;
 use crate::account;
 use crate::gas_calculator;
+use crate::rock_storage;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
+use std::io::{Error, ErrorKind};
 use secp256k1::{Secp256k1, PublicKey, SecretKey, Message, Signature};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -245,9 +247,7 @@ impl Txn {
     
                 let txn_hash = Sha256::digest(txn_data.as_bytes());
                 let txn_hash_hex = format!("{:x}", txn_hash);
-                let serialized_txn = serde_json::to_string(txn_data).map_err(|err| {
-                    Error::new(format!("Serialization error: {}", err))
-                })?;
+                let serialized_txn = serde_json::to_string(&txn_data);
                 let path = "./transactions/db";
                 // Open the database and handle the Result
                 let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
@@ -277,12 +277,16 @@ impl Txn {
         private_key: &SecretKey,
     ) -> Result<(), Box<dyn std::error::Error>> {
         // Fetch the transaction details based on the transaction hash
-        let mut transaction = get_transaction_by_hash(txn_hash_hex.clone())?; // Replace with actual function to retrieve the transaction
+        let path = "./transactions/db";
+        // Open the database and handle the Result
+        let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
 
+        let mut transaction = rock_storage::get_from_db(&db_handle, txn_hash_hex.clone())
+        .ok_or("Transaction not found")?;  // Replace with an actual error message or error type
+    
         // Sign the transaction
         let signature = account::Account::sign_message(txn_hash_hex.as_bytes(), private_key)?
         .serialize_compact().to_vec();
-        transaction.signature = signature;
 
         // Update the Verkle tree and prepare the transaction for broadcast
         let mut verkle_tree = VerkleTree::new();
@@ -302,9 +306,9 @@ impl Txn {
         map.insert(root_hash.clone(), transactions);
         let serialised_dictionary = serde_json::to_vec(&map)?;
 
-        println!("Broadcasting transactions to nodes");
+        println!("Broadcasting transactions");
         if let Some(publisher) = Publisher::get(){
-            publisher.publish_block("block_pbft_pre_prepared".to_string(),serialised_dictionary)
+            publisher.publish_block("txn_pbft_prepared".to_string(),serialised_dictionary)
         }
         Ok(())
     }
@@ -327,9 +331,7 @@ impl Txn {
             current_timestamp,
             transaction_type.as_str() // Convert the enum to a string representation or similar
         );
-        let serialized_txn = serde_json::to_string(txn_data).map_err(|err| {
-            Error::new(format!("Serialization error: {}", err))
-        })?;
+        let serialized_txn = serde_json::to_string(&txn_data);
         let path = "./transactions/db";
         // Open the database and handle the Result
         let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;

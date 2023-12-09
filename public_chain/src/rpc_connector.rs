@@ -15,15 +15,8 @@ use crate::public_txn;
 use crate::public_txn::TransactionType;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
+use secp256k1::SecretKey;
 
-// Define a structure for incoming RPC requests.
-#[derive(serde::Deserialize, Debug)]
-struct RpcRequest {
-    jsonrpc: String,
-    id: serde_json::Value,
-    method: String,
-    params: Option<serde_json::Value>,
-}
 
 #[derive(Debug,serde::Serialize, serde::Deserialize)]
 struct TransactionInfo {
@@ -73,7 +66,7 @@ pub struct TransferTokenInfo {
     amount:f64
 }
 
-#[derive(Debug, Serialize, Deserialize)]
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct SignedTransaction {
     transaction_hash: String,
     signature: String,
@@ -138,13 +131,10 @@ fn sign_transaction(transaction_signed_data: Json<TransactionSignedInfo>) -> Jso
         Err(_) => return Json(json!({"jsonrpc": "2.0", "error": "Invalid private key"})),
     };
     match public_txn::Txn::sign_and_submit_transaction(transaction_signed_data.txn_hash.clone(),&private_key){
-        Ok((txn_hash_hex,gas_cost, _)) => {
-            println!("Transaction successfully published: {:?}", txn_hash_hex);
+        Ok(()) => {
             Json(json!({
                 "jsonrpc": "2.0", 
                 "result": {
-                    "transaction_hash": txn_hash_hex,
-                    "gas_cost": gas_cost
                 }
             }))
         },

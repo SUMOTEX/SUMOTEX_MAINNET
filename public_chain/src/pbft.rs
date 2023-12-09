@@ -21,9 +21,9 @@ pub static BLOCK_PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 enum Message {
-    PrePrepare(u64), // View number, Content
-    Prepare(u64),       // View number, Sequence number
-    Commit(u64),        // View number, Sequence number
+    PrePrepare(u64), 
+    Prepare(u64),      
+    Commit(u64),        
 }
 
 
@@ -104,7 +104,7 @@ pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
         //behaviour.txn.transactions.push(root_hash.clone());
         behaviour
             .floodsub
-            .publish(PBFT_PREPREPARED_TOPIC.clone(), serialised_dictionary);
+            .publish(BLOCK_PBFT_PREPREPARED_TOPIC.clone(), serialised_dictionary);
     }
 
 }
