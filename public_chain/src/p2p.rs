@@ -107,6 +107,8 @@ impl AppBehaviour {
         behaviour.floodsub.subscribe(pbft::BLOCK_PBFT_PREPREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_PBFT_PREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_PBFT_COMMIT_TOPIC.clone());
+        behaviour.floodsub.subscribe(TXN_PBFT_PREPARED_TOPIC.clone());
+        behaviour.floodsub.subscribe(TXN_PBFT_COMMIT_TOPIC.clone());
         behaviour.floodsub.subscribe(PRIVATE_BLOCK_GENESIS_CREATION.clone());
         behaviour.floodsub.subscribe(HYBRID_BLOCK_CREATION.clone());
         behaviour
@@ -186,6 +188,15 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                 }
             }
+            //TODO ADD TRANSACTIONS PBFT
+            else if msg.topics[0]==Topic::new("txn_pbft_prepared"){
+                let received_serialized_data =msg.data;
+                let json_string = String::from_utf8(received_serialized_data).unwrap();
+                info!("RECEIVED PBFT PREPARED: {:?}",json_string);
+                if let Some(publisher) = Publisher::get(){
+                    publisher.publish("block_pbft_commit".to_string(), json_string.to_string());
+                }
+
             else if msg.topics[0]==Topic::new("block_pbft_prepared"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
