@@ -180,7 +180,7 @@ impl Txn {
             },
         };
         //Replace later
-        let gas_cost = 100;
+        let gas_cost = 1000;
         let account = account::get_account_no_swarm(&caller_address).expect("Account not found");
         let nonce = account.get_nonce();
         let mut latest_txn = PublicTxn{
@@ -216,7 +216,7 @@ impl Txn {
         println!("Broadcasting transactions to nodes");
         //behaviour.txn.transactions.push(root_hash.clone());
         if let Some(publisher) = Publisher::get(){
-            publisher.publish_block("pbft_pre_prepared".to_string(),serialised_dictionary)
+            publisher.publish_block("block_pbft_pre_prepared".to_string(),serialised_dictionary)
         }
     }
     // Stage 1: Create and Prepare Transaction
@@ -245,6 +245,13 @@ impl Txn {
     
                 let txn_hash = Sha256::digest(txn_data.as_bytes());
                 let txn_hash_hex = format!("{:x}", txn_hash);
+                let serialized_txn = serde_json::to_string(txn_data).map_err(|err| {
+                    Error::new(format!("Serialization error: {}", err))
+                })?;
+                let path = "./transactions/db";
+                // Open the database and handle the Result
+                let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
+            
                 let gas_cost = 1000;  // Example gas cost, adjust as needed
     
                 let new_txn = PublicTxn {
@@ -259,7 +266,6 @@ impl Txn {
                     signature: Vec::new(), // Placeholder
                     gas_cost, // Placeholder
                 };
-    
                 Ok((txn_hash_hex, gas_cost, new_txn))
             }
         }
@@ -268,12 +274,14 @@ impl Txn {
     // Stage 2: Sign and Submit Transaction Block
     pub fn sign_and_submit_transaction(
         txn_hash_hex: String,
-        mut transaction: PublicTxn,
         private_key: &SecretKey,
-        publisher: &Publisher
     ) -> Result<(), Box<dyn std::error::Error>> {
+        // Fetch the transaction details based on the transaction hash
+        let mut transaction = get_transaction_by_hash(txn_hash_hex.clone())?; // Replace with actual function to retrieve the transaction
+
+        // Sign the transaction
         let signature = account::Account::sign_message(txn_hash_hex.as_bytes(), private_key)?
-            .serialize_compact().to_vec();
+        .serialize_compact().to_vec();
         transaction.signature = signature;
 
         // Update the Verkle tree and prepare the transaction for broadcast
@@ -295,8 +303,9 @@ impl Txn {
         let serialised_dictionary = serde_json::to_vec(&map)?;
 
         println!("Broadcasting transactions to nodes");
-        publisher.publish_block("pbft_pre_prepared".to_string(), serialised_dictionary);
-
+        if let Some(publisher) = Publisher::get(){
+            publisher.publish_block("block_pbft_pre_prepared".to_string(),serialised_dictionary)
+        }
         Ok(())
     }
     fn handle_contract_transaction(
@@ -318,6 +327,12 @@ impl Txn {
             current_timestamp,
             transaction_type.as_str() // Convert the enum to a string representation or similar
         );
+        let serialized_txn = serde_json::to_string(txn_data).map_err(|err| {
+            Error::new(format!("Serialization error: {}", err))
+        })?;
+        let path = "./transactions/db";
+        // Open the database and handle the Result
+        let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
     
         let txn_hash = Sha256::digest(txn_data.as_bytes());
         let txn_hash_hex = format!("{:x}", txn_hash);

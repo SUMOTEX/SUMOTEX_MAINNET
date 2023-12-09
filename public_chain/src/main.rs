@@ -46,13 +46,6 @@ enum CustomEvent {
     ReceivedResponse(PeerId, Vec<u8>),
     // ... potentially other custom events specific to your application
 }
-pub async fn run_epoch(){
-    loop {
-        println!{"Start Epoch"};
-        pbft::create_transactions_epoch();
-        sleep(Duration::from_secs(60)).await; // Replace 5 with the number of seconds you want to wait
-    }
-}
 
 pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::error::Error>>{
     let paths = [
@@ -168,9 +161,6 @@ async fn main() {
                         // Loop to listen
                         let accept_loop_task = tokio::spawn(async {
                             accept_loop(listener).await;
-                        });
-                        let epoch_runner = tokio::spawn(async{
-                            run_epoch().await;
                         });
                         println!("TCP Port: {:?}",port);
                         break;

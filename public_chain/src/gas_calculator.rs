@@ -1,9 +1,8 @@
 // gas_calculator.rs
-use wasmparser::{Parser, Payload, Operator};
+use wasmparser::{Parser, Payload};
 use std::collections::{HashSet,HashMap};
 use std::fs::File;
 use std::io::Read; 
-use std::fs;
 // Define average gas costs for various operations as constants.
 // These values are placeholders and should be adjusted based on actual gas costs in your blockchain environment.
 const GAS_COST_SIMPLE_TRANSFER: u64 = 21000;

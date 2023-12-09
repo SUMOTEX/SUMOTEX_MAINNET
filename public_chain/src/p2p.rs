@@ -31,8 +31,13 @@ pub static CHAIN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("chains"));
 pub static TXN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("transactions"));
 pub static PRIVATE_BLOCK_GENESIS_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("private_blocks_genesis_creation"));
 pub static HYBRID_BLOCK_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("hybrid_block_creation"));
-pub static PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_prepared"));
-pub static PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("pbft_commit"));
+//For blocks
+pub static BLOCK_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_prepared"));
+pub static BLOCK_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_commit"));
+
+//Transaction mempool verifications PBFT engine
+pub static TXN_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_prepared"));
+pub static TXN_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_commit"));
 
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -99,9 +104,9 @@ impl AppBehaviour {
         behaviour.floodsub.subscribe(CHAIN_TOPIC.clone());
         behaviour.floodsub.subscribe(public_block::BLOCK_TOPIC.clone());
         behaviour.floodsub.subscribe(TXN_TOPIC.clone());
-        behaviour.floodsub.subscribe(pbft::PBFT_PREPREPARED_TOPIC.clone());
-        behaviour.floodsub.subscribe(PBFT_PREPARED_TOPIC.clone());
-        behaviour.floodsub.subscribe(PBFT_COMMIT_TOPIC.clone());
+        behaviour.floodsub.subscribe(pbft::BLOCK_PBFT_PREPREPARED_TOPIC.clone());
+        behaviour.floodsub.subscribe(BLOCK_PBFT_PREPARED_TOPIC.clone());
+        behaviour.floodsub.subscribe(BLOCK_PBFT_COMMIT_TOPIC.clone());
         behaviour.floodsub.subscribe(PRIVATE_BLOCK_GENESIS_CREATION.clone());
         behaviour.floodsub.subscribe(HYBRID_BLOCK_CREATION.clone());
         behaviour
@@ -162,7 +167,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         );
                     }
                 }
-            } else if msg.topics[0]==Topic::new("pbft_pre_prepared") {
+            } else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
                 println!("PBFT Received");
                 let received_serialized_data =msg.data;
                 let deserialized_data: HashMap<String, HashMap<String, String>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
@@ -175,21 +180,21 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         println!("Transactions Valid: {:?}",valid_txn);
                         let created_block=self.pbft.pre_prepare(key.to_string(),txn_hashes.clone());
                         if let Some(publisher) = Publisher::get(){
-                            publisher.publish("pbft_prepared".to_string(), the_pbft_hash.to_string());
+                            publisher.publish("block_pbft_prepared".to_string(), the_pbft_hash.to_string());
                             self.pbft.prepare("PBFT Valid and prepare".to_string());
                         }
                     }
                 }
             }
-            else if msg.topics[0]==Topic::new("pbft_prepared"){
+            else if msg.topics[0]==Topic::new("block_pbft_prepared"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
                 info!("RECEIVED PBFT PREPARED: {:?}",json_string);
                 if let Some(publisher) = Publisher::get(){
-                    publisher.publish("pbft_commit".to_string(), json_string.to_string());
+                    publisher.publish("block_pbft_commit".to_string(), json_string.to_string());
                 }
 
-            }else if msg.topics[0]==Topic::new("pbft_commit"){
+            }else if msg.topics[0]==Topic::new("block_pbft_commit"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
                 self.pbft.commit("COMMIT READY".to_string());

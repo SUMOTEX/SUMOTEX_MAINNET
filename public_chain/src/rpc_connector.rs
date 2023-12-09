@@ -35,7 +35,7 @@ struct TransactionInfo {
 #[derive(Debug,serde::Serialize, serde::Deserialize)]
 struct TransactionSignedInfo {
     caller_address: String,
-    to_address: String,
+    txn_hash:String,
     computed_value: u64,
     transaction_type: String,
     private_key:String
@@ -126,42 +126,36 @@ fn create_transaction(transaction_data: Json<TransactionInfo>) -> Json<serde_jso
 #[post("/sign-transaction", data = "<transaction_signed_data>")]
 fn sign_transaction(transaction_signed_data: Json<TransactionSignedInfo>) -> Json<serde_json::Value> {
     println!("Signing transaction");
-
-    // Convert private key from hex string to SecretKey
-    let private_key_bytes = hex::decode(&transaction_signed_data.private_key).expect("Invalid private key format");
-    let private_key = SecretKey::from_slice(&private_key_bytes).expect("Invalid private key");
-
-    // Serialize the transaction data
-    let txn_data = format!(
-        "{}{}{}",
-        transaction_signed_data.caller_address,
-        transaction_signed_data.to_address,
-        transaction_signed_data.computed_value
-    );
-
-    // Hash the transaction data
-    let mut hasher = Sha256::new();
-    hasher.update(txn_data.as_bytes());
-    let hash_result = hasher.finalize();
-
-    // Create a message from the hash
-    let message = Message::from_slice(&hash_result).expect("Invalid message");
-
-    // Sign the transaction
-    let secp = Secp256k1::new();
-    let sig = secp.sign(&message, &private_key);
-    let signature = sig.serialize_compact();
-
-    // Create response with the transaction hash and signature
-    let signed_txn = SignedTransaction {
-        transaction_hash: format!("{:x}", hash_result),
-        signature: hex::encode(signature),
+    // Attempt to decode the provided private key
+    let private_key_bytes = match hex::decode(&transaction_signed_data.private_key) {
+        Ok(bytes) => bytes,
+        Err(_) => return Json(json!({"jsonrpc": "2.0", "error": "Invalid private key format"})),
     };
 
-    Json(serde_json::json!({
-        "jsonrpc": "2.0",
-        "result": signed_txn
-    }))
+    // Attempt to create a SecretKey from the decoded bytes
+    let private_key = match SecretKey::from_slice(&private_key_bytes) {
+        Ok(key) => key,
+        Err(_) => return Json(json!({"jsonrpc": "2.0", "error": "Invalid private key"})),
+    };
+    match public_txn::Txn::sign_and_submit_transaction(transaction_signed_data.txn_hash.clone(),&private_key){
+        Ok((txn_hash_hex,gas_cost, _)) => {
+            println!("Transaction successfully published: {:?}", txn_hash_hex);
+            Json(json!({
+                "jsonrpc": "2.0", 
+                "result": {
+                    "transaction_hash": txn_hash_hex,
+                    "gas_cost": gas_cost
+                }
+            }))
+        },
+        Err(e) => {
+            println!("Error signing transaction: {:?}", e);
+            Json(json!({
+                "jsonrpc": "2.0", 
+                "error": "Transaction signed failed"
+            }))
+        }
+    }
 }
 // Route to handle RPC requests.
 #[post("/create-nft-contract", data = "<post_data>")]
@@ -328,9 +322,9 @@ pub async fn start_rpc() {
         .configure(rocket::Config {
             address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
            //prod
-            port:8000,
+            //port:8000,
             //dev
-            //port: 8545,
+            port: 8545,
             ..rocket::Config::default()
         })
         .mount("/", routes![create_nft_contract,
