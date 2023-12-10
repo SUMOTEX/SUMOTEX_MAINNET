@@ -312,6 +312,28 @@ impl Txn {
         }
         Ok(())
     }
+    // Method to update the status of a specific transaction
+    pub fn update_transaction_status(
+        &mut self, 
+        txn_hash: &str, 
+        new_status: i64
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let db_path = "./transactions/db";
+        let db_handle = rock_storage::open_db(db_path)?;
+
+        let txn_data = rock_storage::get_from_db(&db_handle, txn_hash.to_string())
+            .ok_or("Transaction not found")?; // Handle missing transactions appropriately
+
+        let mut transaction: PublicTxn = serde_json::from_str(&txn_data)?;
+
+        // Update the transaction status
+        transaction.set_status(new_status);
+
+        // Serialize and save the updated transaction
+        rock_storage::put_into_db(&db_handle, txn_hash.to_string(), serde_json::to_string(&transaction)?)?;
+
+        Ok(())
+    }
     fn handle_contract_transaction(
         transaction_type: TransactionType,
         caller_address: &str,

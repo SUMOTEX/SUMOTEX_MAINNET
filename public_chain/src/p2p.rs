@@ -170,7 +170,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                 }
             } else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
-                println!("PBFT Received");
+                println!("Block Received");
                 let received_serialized_data =msg.data;
                 let deserialized_data: HashMap<String, HashMap<String, String>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
@@ -188,15 +188,22 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                 }
             }
-            //TODO ADD TRANSACTIONS PBFT
             else if msg.topics[0]==Topic::new("txn_pbft_prepared"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
-                info!("RECEIVED PBFT PREPARED: {:?}",json_string);
+                info!("Transactions prepared: {:?}",json_string);
                 if let Some(publisher) = Publisher::get(){
-                    publisher.publish("block_pbft_commit".to_string(), json_string.to_string());
+                    publisher.publish("txn_pbft_commit".to_string(), json_string.to_string());
                 }
-
+            }
+            else if msg.topics[0]==Topic::new("txn_pbft_commit"){
+                println!("Transactions received");
+                let received_serialized_data =msg.data;
+                let json_string = String::from_utf8(received_serialized_data).unwrap();
+                if let Some(publisher) = Publisher::get(){
+                    //Commit to mempool
+                }
+            }
             else if msg.topics[0]==Topic::new("block_pbft_prepared"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
@@ -217,7 +224,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     let block_db = self.storage_path.get_blocks();
                     let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
                     self.app.blocks.push(created_block);
-                    println!("BLOCKS {:?}",self.app.blocks);
                     publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
                 }
             }
