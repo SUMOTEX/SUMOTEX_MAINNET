@@ -316,7 +316,6 @@ impl Txn {
     }
     // Method to update the status of a specific transaction
     pub fn update_transaction_status(
-        &mut self, 
         txn_hash: &str, 
         new_status: i64
     ) -> Result<(), Box<dyn std::error::Error>> {

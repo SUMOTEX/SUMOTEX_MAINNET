@@ -237,7 +237,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 if let Some(publisher) = Publisher::get(){
                     let (root,txn) = self.pbft.get_txn(json_string);
                     let created_block=handle_create_block_pbft(self.app.clone(),root,txn);
-                    println!("The Created Block After Validity: {:?}",created_block);
+                    println!("Created Block After Validity: {:?}",created_block);
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
                     let block_db = self.storage_path.get_blocks();
                     let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);

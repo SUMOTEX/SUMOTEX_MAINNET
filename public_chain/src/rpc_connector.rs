@@ -276,7 +276,7 @@ fn transfer_nft(post_data: Json<TransferTokenInfo>)-> Json<serde_json::Value> {
     }
 }
 #[post("/complete-transaction", data = "<transaction_info>")]
-fn complete_transaction(transaction_info: Json<TransactionInfo>) -> Json<serde_json::Value> {
+fn complete_transaction(transaction_info: Json<TransactionSignedInfo>) -> Json<serde_json::Value> {
     println!("Completing transaction");
 
     // Extract transaction information
@@ -284,7 +284,7 @@ fn complete_transaction(transaction_info: Json<TransactionInfo>) -> Json<serde_j
 
     // Implement logic to complete the transaction
     // For example, updating its status in your database or any other required actions
-    match public_txn::Txn::complete_transaction(txn_hash,2) {
+    match public_txn::Txn::update_transaction_status(txn_hash,2) {
         Ok(_) => {
             Json(json!({
                 "jsonrpc": "2.0",

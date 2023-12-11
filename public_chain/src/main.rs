@@ -204,9 +204,6 @@ async fn main() {
                     println!("Initialization event.");
                     let peers = p2p::get_list_peers(&swarm_public_net);
                     swarm_public_net.behaviour_mut().app.genesis();
-                    let json = serde_json::to_string("TEST").expect("can jsonify request");
-                    let block_account = swarm_public_net.behaviour().storage_path.get_blocks();
-                    rock_storage::put_to_db(block_account,"0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c43",&json);
                     println!("Storage Path: {:?}",swarm_public_net.behaviour().storage_path.get_blocks());
                     info!("Connected nodes: {}", peers.len());
                     if !peers.is_empty() {
