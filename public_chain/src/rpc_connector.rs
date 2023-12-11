@@ -277,8 +277,6 @@ fn transfer_nft(post_data: Json<TransferTokenInfo>)-> Json<serde_json::Value> {
 }
 #[post("/complete-transaction", data = "<transaction_info>")]
 fn complete_transaction(transaction_info: Json<TransactionSignedInfo>) -> Json<serde_json::Value> {
-    println!("Completing transaction");
-
     // Extract transaction information
     let txn_hash = &transaction_info.txn_hash;
 
@@ -292,7 +290,6 @@ fn complete_transaction(transaction_info: Json<TransactionSignedInfo>) -> Json<s
             }))
         },
         Err(e) => {
-            println!("Error completing transaction: {:?}", e);
             Json(json!({
                 "jsonrpc": "2.0",
                 "error": "Transaction completion failed"
@@ -338,9 +335,9 @@ pub async fn start_rpc() {
         .configure(rocket::Config {
             address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
            //prod
-            //port:8000,
+            port:8000,
             //dev
-            port: 8545,
+            //port: 8545,
             ..rocket::Config::default()
         })
         .mount("/", routes![create_nft_contract,
