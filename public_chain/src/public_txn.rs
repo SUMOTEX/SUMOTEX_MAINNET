@@ -9,7 +9,7 @@ use crate::gas_calculator;
 use crate::rock_storage;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
-use secp256k1::{Secp256k1, PublicKey, SecretKey, Message, Signature};
+use secp256k1::{Signature, SecretKey};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Txn{
@@ -251,6 +251,7 @@ impl Txn {
 
     // Stage 2: Sign and Submit Transaction Block
     pub fn sign_and_submit_transaction(
+        public_key:&String,
         txn_hash_hex: String,
         private_key: &SecretKey,
     ) -> Result<(), Box<dyn std::error::Error>> {
@@ -269,30 +270,43 @@ impl Txn {
                 println!("Private Key {}",private_key);
                 let hash_bytes = hex::decode(txn_hash_hex.clone())?;
                 let hash_array: [u8; 32] = hash_bytes.try_into().map_err(|_| "Invalid hash length")?;
-                let signature = account::Account::sign_message(&hash_array, private_key)?
+                let signature_bytes = account::Account::sign_message(&hash_array, private_key)?
                 .serialize_compact().to_vec();
-                println!("Signature: {:?}", signature);
-                // Update the Verkle tree and prepare the transaction for broadcast
-                let mut verkle_tree = VerkleTree::new();
-                let serialized_data = serde_json::to_string(&txn)?;
-                let hash_result = Sha256::digest(serialized_data.as_bytes());
-                verkle_tree.insert(txn_hash_hex.as_bytes().to_vec(), hash_result.to_vec());
-        
-                let mut dictionary_data = HashMap::new();
-                dictionary_data.insert("key".to_string(), txn_hash_hex.clone());
-                dictionary_data.insert("value".to_string(), serialized_data.clone());
-                let serialised_txn = serde_json::to_vec(&dictionary_data)?;
-                let root_hash = verkle_tree.get_root_string();
-        
-                let mut transactions = HashMap::new();
-                transactions.insert(txn_hash_hex, serialized_data);
-                let mut map = HashMap::new();
-                map.insert(root_hash.clone(), transactions);
-                let serialised_dictionary = serde_json::to_vec(&map)?;
-        
-                println!("Broadcasting transactions");
-                if let Some(publisher) = Publisher::get(){
-                    publisher.publish_block("txn_pbft_prepared".to_string(),serialised_dictionary)
+                let signature = match Signature::from_compact(signature_bytes.as_slice()) {
+                    Ok(sig) => sig,
+                    Err(e) => {
+                        eprintln!("Failed to convert the signature");
+                        return Err(e.into());
+                    }
+                };
+                let verified_signature =  account::Account::verify_signature(&public_key,&hash_array,&signature);
+                if verified_signature.is_ok() && verified_signature.unwrap() {
+                    // Update the Verkle tree and prepare the transaction for broadcast
+                    let mut verkle_tree = VerkleTree::new();
+                    let serialized_data = serde_json::to_string(&txn)?;
+                    let hash_result = Sha256::digest(serialized_data.as_bytes());
+                    verkle_tree.insert(txn_hash_hex.as_bytes().to_vec(), hash_result.to_vec());
+            
+                    let mut dictionary_data = HashMap::new();
+                    dictionary_data.insert("key".to_string(), txn_hash_hex.clone());
+                    dictionary_data.insert("value".to_string(), serialized_data.clone());
+                    let serialised_txn = serde_json::to_vec(&dictionary_data)?;
+                    let root_hash = verkle_tree.get_root_string();
+            
+                    let mut transactions = HashMap::new();
+                    transactions.insert(txn_hash_hex, serialized_data);
+                    let mut map = HashMap::new();
+                    map.insert(root_hash.clone(), transactions);
+                    let serialised_dictionary = serde_json::to_vec(&map)?;
+            
+                    println!("Broadcasting transactions");
+                    if let Some(publisher) = Publisher::get(){
+                        publisher.publish_block("txn_pbft_prepared".to_string(),serialised_dictionary)
+                    }
+                } else {
+                    // If the signature verification fails, handle the error accordingly
+                    eprintln!("Signature verification failed");
+                    // You can return an error or take other appropriate actions
                 }
             }
             Err(e) => {
@@ -323,6 +337,7 @@ impl Txn {
 
         Ok(())
     }
+
     fn handle_contract_transaction(
         transaction_type: TransactionType,
         caller_address: &str,

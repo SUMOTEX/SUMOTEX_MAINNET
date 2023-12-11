@@ -200,24 +200,30 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
             }
             else if msg.topics[0] == Topic::new("txn_pbft_commit") {
                 println!("Transaction PBFT Commit");
-                if let Ok(json_string) = String::from_utf8(msg.data) {
-                    if let Ok(transaction) = serde_json::from_str::<PublicTxn>(&json_string) {
-                        match txn_pool::Mempool::get_instance().lock() {
-                            Ok(mut mempool) => {
-                                mempool.add_transaction(transaction);
-                                println!("Transaction added to mempool");
+                match String::from_utf8(msg.data) {
+                    Ok(json_string) => {
+                        match serde_json::from_str::<PublicTxn>(&json_string) {
+                            Ok(transaction) => {
+                                match txn_pool::Mempool::get_instance().lock() {
+                                    Ok(mut mempool) => {
+                                        mempool.add_transaction(transaction);
+                                        println!("Transaction added to mempool");
+                                    },
+                                    Err(_) => println!("Failed to acquire lock on mempool"),
+                                }
                             },
-                            Err(_) => println!("Failed to acquire lock on mempool"),
+                            Err(e) => {
+                                // Enhanced error handling
+                                eprintln!("Failed to deserialize transaction data: {}", e);
+                                // Return or propagate error, or implement a fallback mechanism
+                            }
                         }
-                    } else {
-                        println!("Failed to deserialize transaction data");
+                    },
+                    Err(e) => {
+                        // Handle invalid UTF-8 data error
+                        eprintln!("Received data is not valid UTF-8: {}", e);
+                        // Return or propagate error, or implement a fallback mechanism
                     }
-                } else {
-                    println!("Received data is not valid UTF-8");
-                }
-                if let Some(publisher) = Publisher::get() {
-                    // Commit to mempool or additional actions with publisher
-                    // ...
                 }
             }
             

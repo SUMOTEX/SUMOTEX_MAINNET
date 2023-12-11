@@ -73,13 +73,13 @@ impl Account {
     } 
     // Verifies the signature of a message
     pub fn verify_signature(
-        &self,
+        public_address:&String,
         message_bytes: &[u8],
         signature: &secp256k1::Signature,
     ) -> Result<bool, SigningError> {
         let secp = Secp256k1::new();
         let message = Message::from_slice(message_bytes).map_err(|_| SigningError::MessageCreationError)?;
-        let public_key = PublicKey::from_slice(&hex::decode(&self.public_address).unwrap()).unwrap(); // This assumes public_address is hex encoded
+        let public_key = PublicKey::from_slice(&hex::decode(public_address).unwrap()).unwrap(); // This assumes public_address is hex encoded
         Ok(secp.verify(&message, signature, &public_key).is_ok())
     }
     // Add a token to the account's ownership list

@@ -13,7 +13,6 @@ use crate::public_swarm;
 use crate::account;
 use crate::public_txn;
 use crate::public_txn::TransactionType;
-use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
 use secp256k1::SecretKey;
 
@@ -118,7 +117,9 @@ fn create_transaction(transaction_data: Json<TransactionInfo>) -> Json<serde_jso
 
 #[post("/sign-transaction", data = "<transaction_signed_data>")]
 fn sign_transaction(transaction_signed_data: Json<TransactionSignedInfo>) -> Json<serde_json::Value> {
+    
     println!("Signing transaction");
+    let caller_address = &transaction_signed_data.caller_address;
     // Attempt to decode the provided private key
     let private_key_bytes = match hex::decode(&transaction_signed_data.private_key) {
         Ok(bytes) => bytes,
@@ -130,7 +131,7 @@ fn sign_transaction(transaction_signed_data: Json<TransactionSignedInfo>) -> Jso
         Ok(key) => key,
         Err(_) => return Json(json!({"jsonrpc": "2.0", "error": "Invalid private key"})),
     };
-    match public_txn::Txn::sign_and_submit_transaction(transaction_signed_data.txn_hash.clone(),&private_key){
+    match public_txn::Txn::sign_and_submit_transaction(caller_address,transaction_signed_data.txn_hash.clone(),&private_key){
         Ok(()) => {
             Json(json!({
                 "jsonrpc": "2.0", 

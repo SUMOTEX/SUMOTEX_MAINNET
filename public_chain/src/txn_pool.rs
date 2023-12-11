@@ -1,7 +1,6 @@
 use crate::public_txn::PublicTxn;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
-use rocksdb::{DB, Options};
 
 pub struct Mempool {
     // Assuming transactions are stored in a vector
