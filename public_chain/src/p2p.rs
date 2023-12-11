@@ -215,7 +215,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 } else {
                     println!("Received data is not valid UTF-8");
                 }
-            
                 if let Some(publisher) = Publisher::get() {
                     // Commit to mempool or additional actions with publisher
                     // ...

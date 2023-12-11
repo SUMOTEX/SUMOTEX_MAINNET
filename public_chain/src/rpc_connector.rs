@@ -48,7 +48,7 @@ pub struct MintTokenInfo {
     ipfs_detail:String
 }
 #[derive(serde::Deserialize, Debug)]
-pub struct ReadTokenInfo {
+pub struct ReadTokenInfo {  
     contract_address: String,
     token_id: i32,
 }
@@ -335,9 +335,9 @@ pub async fn start_rpc() {
         .configure(rocket::Config {
             address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
            //prod
-            port:8000,
+            //port:8000,
             //dev
-            //port: 8545,
+            port: 8545,
             ..rocket::Config::default()
         })
         .mount("/", routes![create_nft_contract,

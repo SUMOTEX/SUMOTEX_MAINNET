@@ -58,41 +58,6 @@ impl TransactionType {
 }
 
 impl PublicTxn {
-    pub fn sign_transaction(transaction_data: &[u8], secret_key: &SecretKey) -> Signature {
-        let secp = Secp256k1::new();
-    
-        // Hash the transaction data to create a digest
-        let mut hasher = Sha256::new();
-        hasher.update(transaction_data);
-        let digest = hasher.finalize();
-    
-        // Create a message object from the digest
-        let msg = Message::from_slice(&digest).expect("32 bytes, within curve order");
-    
-        // Sign the message with the secret key
-        let sig = secp.sign(&msg, secret_key);
-        sig
-    }
-    pub fn sign_message(&self, message_bytes: &[u8], private_key: &SecretKey) -> Result<secp256k1::Signature, secp256k1::Error> {
-        let secp = Secp256k1::new();
-        let message = Message::from_slice(message_bytes)?;
-    
-        Ok(secp.sign(&message, private_key))
-    } 
-    pub fn verify_transaction(transaction_data: &[u8], signature: &Signature, public_key: &PublicKey) -> bool {
-        let secp = Secp256k1::new();
-    
-        // Hash the transaction data to create a digest
-        let mut hasher = Sha256::new();
-        hasher.update(transaction_data);
-        let digest = hasher.finalize();
-    
-        // Create a message object from the digest
-        let msg = Message::from_slice(&digest).expect("32 bytes, within curve order");
-    
-        // Verify the message with the public key
-        secp.verify(&msg, signature, public_key).is_ok()
-    }
     pub fn set_status(&mut self, new_status: i64) {
         self.status = new_status;
     }
@@ -268,7 +233,18 @@ impl Txn {
                     signature: Vec::new(), // Placeholder
                     gas_cost, // Placeholder
                 };
-                Ok((txn_hash_hex, gas_cost, new_txn))
+                let serialized_txn: Result<String, serde_json::Error> = serde_json::to_string(&new_txn);
+                match serialized_txn {
+                    Ok(json_string) => {
+                        let transaction = rock_storage::put_to_db(&db_handle, txn_hash_hex.clone(),&json_string);
+                        Ok((txn_hash_hex, gas_cost, new_txn))
+                    },
+                    Err(e) => {
+                        // Handle the error, for example, by logging or panicking
+                        panic!("Failed to serialize transaction: {}", e);
+                        return Err(e.into());
+                    }
+                }
             }
         }
     }
@@ -283,34 +259,46 @@ impl Txn {
         // Open the database and handle the Result
         let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
 
-        let mut transaction = rock_storage::get_from_db(&db_handle, txn_hash_hex.clone())
+        let mut transaction_serialize_string = rock_storage::get_from_db(&db_handle, txn_hash_hex.clone())
         .ok_or("Transaction not found")?;  // Replace with an actual error message or error type
-    
-        // Sign the transaction
-        let signature = account::Account::sign_message(txn_hash_hex.as_bytes(), private_key)?
-        .serialize_compact().to_vec();
-
-        // Update the Verkle tree and prepare the transaction for broadcast
-        let mut verkle_tree = VerkleTree::new();
-        let serialized_data = serde_json::to_string(&transaction)?;
-        let hash_result = Sha256::digest(serialized_data.as_bytes());
-        verkle_tree.insert(txn_hash_hex.as_bytes().to_vec(), hash_result.to_vec());
-
-        let mut dictionary_data = HashMap::new();
-        dictionary_data.insert("key".to_string(), txn_hash_hex.clone());
-        dictionary_data.insert("value".to_string(), serialized_data.clone());
-        let serialised_txn = serde_json::to_vec(&dictionary_data)?;
-        let root_hash = verkle_tree.get_root_string();
-
-        let mut transactions = HashMap::new();
-        transactions.insert(txn_hash_hex, serialized_data);
-        let mut map = HashMap::new();
-        map.insert(root_hash.clone(), transactions);
-        let serialised_dictionary = serde_json::to_vec(&map)?;
-
-        println!("Broadcasting transactions");
-        if let Some(publisher) = Publisher::get(){
-            publisher.publish_block("txn_pbft_prepared".to_string(),serialised_dictionary)
+        println!("{}",transaction_serialize_string);
+        let deserialized_txn: Result<PublicTxn, serde_json::Error> = serde_json::from_str(&transaction_serialize_string);
+        match deserialized_txn {
+            Ok(txn) => {
+                println!("Hash Bytes {}",txn_hash_hex);
+                println!("Private Key {}",private_key);
+                let hash_bytes = hex::decode(txn_hash_hex.clone())?;
+                let hash_array: [u8; 32] = hash_bytes.try_into().map_err(|_| "Invalid hash length")?;
+                let signature = account::Account::sign_message(&hash_array, private_key)?
+                .serialize_compact().to_vec();
+                println!("Signature: {:?}", signature);
+                // Update the Verkle tree and prepare the transaction for broadcast
+                let mut verkle_tree = VerkleTree::new();
+                let serialized_data = serde_json::to_string(&txn)?;
+                let hash_result = Sha256::digest(serialized_data.as_bytes());
+                verkle_tree.insert(txn_hash_hex.as_bytes().to_vec(), hash_result.to_vec());
+        
+                let mut dictionary_data = HashMap::new();
+                dictionary_data.insert("key".to_string(), txn_hash_hex.clone());
+                dictionary_data.insert("value".to_string(), serialized_data.clone());
+                let serialised_txn = serde_json::to_vec(&dictionary_data)?;
+                let root_hash = verkle_tree.get_root_string();
+        
+                let mut transactions = HashMap::new();
+                transactions.insert(txn_hash_hex, serialized_data);
+                let mut map = HashMap::new();
+                map.insert(root_hash.clone(), transactions);
+                let serialised_dictionary = serde_json::to_vec(&map)?;
+        
+                println!("Broadcasting transactions");
+                if let Some(publisher) = Publisher::get(){
+                    publisher.publish_block("txn_pbft_prepared".to_string(),serialised_dictionary)
+                }
+            }
+            Err(e) => {
+                // Handle the error, for example, by logging or panicking
+                eprintln!("Failed to deserialize transaction: {}", e);
+            }
         }
         Ok(())
     }
