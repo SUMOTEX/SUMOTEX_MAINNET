@@ -126,20 +126,6 @@ pub fn open_db(db_path: &str) -> Result<DB, Error> {
     Ok(db)
 }
 
-// pub fn update_in_db<K: AsRef<[u8]>>(db: &DB, key: K, append_str: &str) {
-//     // Retrieve existing value
-//     let mut existing_value = match db.get(&key)? {
-//         Some(bytes) => str::from_utf8(&bytes).to_string()
-//         //None => return Err(Error::new("Key not found".to_string())),
-//     };
-
-//     // Modify the existing value
-//     existing_value.push_str(append_str);
-
-//     // Store the modified value back into the database
-//     db.put(key, existing_value.as_bytes());
-// }
-
 pub fn get_all_from_db(db: &DB) -> Vec<(String, String)> {
     // Create a new vector to hold our key-value pairs
     let mut results = Vec::new();
@@ -201,6 +187,7 @@ pub fn store_wasm_in_db(db: &DB, key: &str, wasm_filepath: &str) -> Result<(), B
 pub fn get_wasm_from_db(db: &DB, key: &str) -> Result<Option<Vec<u8>>, rocksdb::Error> {
     db.get(key)
 }
+
 struct Storage {
     data: Arc<RwLock<Vec<u8>>>,
 }

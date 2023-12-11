@@ -275,6 +275,32 @@ fn transfer_nft(post_data: Json<TransferTokenInfo>)-> Json<serde_json::Value> {
         }
     }
 }
+#[post("/complete-transaction", data = "<transaction_info>")]
+fn complete_transaction(transaction_info: Json<TransactionInfo>) -> Json<serde_json::Value> {
+    println!("Completing transaction");
+
+    // Extract transaction information
+    let txn_hash = &transaction_info.txn_hash;
+
+    // Implement logic to complete the transaction
+    // For example, updating its status in your database or any other required actions
+    match public_txn::Txn::complete_transaction(txn_hash,2) {
+        Ok(_) => {
+            Json(json!({
+                "jsonrpc": "2.0",
+                "result": "Transaction completed successfully"
+            }))
+        },
+        Err(e) => {
+            println!("Error completing transaction: {:?}", e);
+            Json(json!({
+                "jsonrpc": "2.0",
+                "error": "Transaction completion failed"
+            }))
+        }
+    }
+}
+
 #[get("/healthcheck")]
 fn healthcheck() -> Json<serde_json::Value> {
     // Perform any necessary health checks here. For simplicity, this example
@@ -325,6 +351,7 @@ pub async fn start_rpc() {
                             transfer_nft,
                             transfer_token,
                             get_balance,
+                            complete_transaction,
                             healthcheck])
         .launch()
         .await

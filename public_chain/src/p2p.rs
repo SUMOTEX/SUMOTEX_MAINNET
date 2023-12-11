@@ -198,28 +198,30 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     publisher.publish("txn_pbft_commit".to_string(), json_string.to_string());
                 }
             }
-            else if msg.topics[0]==Topic::new("txn_pbft_commit"){
+            else if msg.topics[0] == Topic::new("txn_pbft_commit") {
                 println!("Transaction PBFT Commit");
-                let received_serialized_data =msg.data;
-                let json_string = String::from_utf8(received_serialized_data).unwrap();
-                 // Deserialize the JSON string into a PublicTxn object
-                if let Ok(transaction) = serde_json::from_str::<PublicTxn>(&json_string) {
-                    // If you have access to the mempool here, add the transaction
-                    if let Some(mut mempool) = txn_pool::Mempool::get() { // Assuming you have a method to get the mempool
-                        mempool.add_transaction(transaction);
-                        println!("Transaction added to mempool");
+                if let Ok(json_string) = String::from_utf8(msg.data) {
+                    if let Ok(transaction) = serde_json::from_str::<PublicTxn>(&json_string) {
+                        match txn_pool::Mempool::get_instance().lock() {
+                            Ok(mut mempool) => {
+                                mempool.add_transaction(transaction);
+                                println!("Transaction added to mempool");
+                            },
+                            Err(_) => println!("Failed to acquire lock on mempool"),
+                        }
                     } else {
-                        // Handle the case where the mempool is not available
-                        println!("Mempool is not available");
+                        println!("Failed to deserialize transaction data");
                     }
                 } else {
-                    // Handle deserialization error
-                    println!("Failed to deserialize transaction data");
+                    println!("Received data is not valid UTF-8");
                 }
-                if let Some(publisher) = Publisher::get(){
-                    //Commit to mempool
+            
+                if let Some(publisher) = Publisher::get() {
+                    // Commit to mempool or additional actions with publisher
+                    // ...
                 }
             }
+            
             else if msg.topics[0]==Topic::new("block_pbft_prepared"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
