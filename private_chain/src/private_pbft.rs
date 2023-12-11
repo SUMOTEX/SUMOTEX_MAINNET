@@ -181,8 +181,8 @@ impl PrivatePBFTNode {
 
     pub fn get_txn(&mut self,id:String)->(String,Vec<String>){
         return(self.root_hash.clone(),self.txn.clone());
-
     }
+    
     pub fn get_hash_id(&self) -> String {
         self.verification_hash.clone()
     }

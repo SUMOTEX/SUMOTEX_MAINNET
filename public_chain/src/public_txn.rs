@@ -284,22 +284,24 @@ impl Txn {
                     // Update the Verkle tree and prepare the transaction for broadcast
                     let mut verkle_tree = VerkleTree::new();
                     let serialized_data = serde_json::to_string(&txn)?;
+                    // Hash the serialized PublicTxn
                     let hash_result = Sha256::digest(serialized_data.as_bytes());
                     verkle_tree.insert(txn_hash_hex.as_bytes().to_vec(), hash_result.to_vec());
-            
+
+                    // Create a dictionary for broadcasting
                     let mut dictionary_data = HashMap::new();
                     dictionary_data.insert("key".to_string(), txn_hash_hex.clone());
-                    dictionary_data.insert("value".to_string(), serialized_data.clone());
+                    dictionary_data.insert("value".to_string(), serialized_data.clone()); // Insert the serialized PublicTxn
+
                     let serialised_txn = serde_json::to_vec(&dictionary_data)?;
                     let root_hash = verkle_tree.get_root_string();
-            
+
                     let mut transactions = HashMap::new();
-                    transactions.insert(txn_hash_hex, serialized_data);
+                    transactions.insert(txn_hash_hex, serialized_data); // Use the serialized PublicTxn
                     let mut map = HashMap::new();
                     map.insert(root_hash.clone(), transactions);
                     let serialised_dictionary = serde_json::to_vec(&map)?;
-            
-                    println!("Broadcasting transactions");
+                    println!("Broadcast transactions");
                     if let Some(publisher) = Publisher::get(){
                         publisher.publish_block("txn_pbft_prepared".to_string(),serialised_dictionary)
                     }

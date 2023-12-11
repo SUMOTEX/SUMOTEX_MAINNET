@@ -13,6 +13,7 @@ use log::{error, info};
 use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
+use serde_json::{Result, Value};
 use crate::public_app::App;
 use crate::pbft::PBFTNode;
 use crate::public_block::Block;
@@ -200,31 +201,49 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
             }
             else if msg.topics[0] == Topic::new("txn_pbft_commit") {
                 println!("Transaction PBFT Commit");
-                match String::from_utf8(msg.data) {
-                    Ok(json_string) => {
-                        match serde_json::from_str::<PublicTxn>(&json_string) {
-                            Ok(transaction) => {
-                                match txn_pool::Mempool::get_instance().lock() {
-                                    Ok(mut mempool) => {
-                                        mempool.add_transaction(transaction);
-                                        println!("Transaction added to mempool");
-                                    },
-                                    Err(_) => println!("Failed to acquire lock on mempool"),
-                                }
-                            },
-                            Err(e) => {
-                                // Enhanced error handling
-                                eprintln!("Failed to deserialize transaction data: {}", e);
-                                // Return or propagate error, or implement a fallback mechanism
-                            }
-                        }
-                    },
+                let received_serialized_data =msg.data;
+                let json_string = String::from_utf8(received_serialized_data).unwrap();
+                //let v: Value = serde_json::from_str(data).expect("Failed to deserialize JSON");
+                let json_result: Result<Value> = serde_json::from_str(&json_string);
+                match json_result {
+                    Ok(json) => {
+                        println!("JSON: {:?}",json);
+                        // Successfully parsed JSON
+                    }
                     Err(e) => {
-                        // Handle invalid UTF-8 data error
-                        eprintln!("Received data is not valid UTF-8: {}", e);
-                        // Return or propagate error, or implement a fallback mechanism
+                        // Handle the error if parsing fails
+                        eprintln!("Failed to parse JSON: {}", e);
                     }
                 }
+                // match serde_json::from_str::<PublicTxn>(&json_string) {
+                //     Ok(data) => println!("Name: {:?}", data),
+                //     Err(e) => eprintln!("Failed to parse JSON: {}", e),
+                // }
+                // match String::from_utf8(msg.data) {
+                //     Ok(json_string) => {
+                //         match serde_json::from_str::<PublicTxn>(&json_string) {
+                //             Ok(transaction) => {
+                //                 match txn_pool::Mempool::get_instance().lock() {
+                //                     Ok(mut mempool) => {
+                //                         mempool.add_transaction(transaction);
+                //                         println!("Transaction added to mempool");
+                //                     },
+                //                     Err(_) => println!("Failed to acquire lock on mempool"),
+                //                 }
+                //             },
+                //             Err(e) => {
+                //                 // Enhanced error handling
+                //                 eprintln!("Failed to deserialize transaction data: {}", e);
+                //                 // Return or propagate error, or implement a fallback mechanism
+                //             }
+                //         }
+                //     },
+                //     Err(e) => {
+                //         // Handle invalid UTF-8 data error
+                //         eprintln!("Received data is not valid UTF-8: {}", e);
+                //         // Return or propagate error, or implement a fallback mechanism
+                //     }
+                // }
             }
             
             else if msg.topics[0]==Topic::new("block_pbft_prepared"){
