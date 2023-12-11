@@ -101,6 +101,7 @@ impl ValueHandler for Vec<u8> {
         self.clone()
     }
 }
+
 pub fn put_to_db<K: AsRef<[u8]>, V: ValueHandler>(db: &DB, key: K, value: &V) -> Result<(), Error> {
     db.put(key, value.to_bytes())
 }

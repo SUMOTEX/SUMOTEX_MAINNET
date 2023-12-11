@@ -30,6 +30,7 @@ mod account;
 mod smart_contract;
 mod rpc_connector;
 mod gas_calculator;
+mod txn_pool;
 use bridge::accept_loop;
 use crate::public_app::App;
 use std::sync::{RwLock, Arc};
@@ -113,6 +114,7 @@ async fn main() {
         "/ip4/0.0.0.0/tcp/8087",
         "/ip4/0.0.0.0/tcp/8089",
         "/ip4/0.0.0.0/tcp/8090",
+        "/ip4/0.0.0.0/tcp/8091",
         // ... other addresses
         ];
 
@@ -126,12 +128,8 @@ async fn main() {
         "127.0.0.1:8095",
         "127.0.0.1:8096",
         "127.0.0.1:8097",
+        "127.0.0.1:8098",
         ];
-    //sample generate public key
-    let (public_key,private_key) = account::generate_keypair();
-    println!("Generated public key: {:?}", public_key);
-    println!("Generated private key: {:?}", private_key);
-
     //create storage
     remove_lock_file();
     let the_storage = create_pub_storage().expect("Failed to create storage");
@@ -143,11 +141,11 @@ async fn main() {
     let app = App::new();
     public_swarm::create_public_swarm(app.clone(),the_storage).await;
     // Lock the swarm and access it
-    println!("Before starting RPC server");
+    println!("Before RPC server");
     let rpc_runner = tokio::spawn(async{
         rpc_connector::start_rpc().await
     });
-    println!("After starting RPC server");
+    println!("After RPC server");
     let swarm_mutex = public_swarm::get_global_swarm_public_net();
 
     let mut stdin = BufReader::new(stdin()).lines();
@@ -256,18 +254,6 @@ async fn main() {
                     },
                     publish_block = publish_bytes_receiver.recv()=>{
                         let (title, message) = publish_block.clone().expect("Publish Block exists");
-                        // match publish_block {
-                        //     Some((title, message)) => {
-                        //         //println!("{:?} {:?}",title,message);
-                        //         // If recv is successful, title and message are available here
-                        //         let event = p2p::EventType::PublishBlock(title, message.into());
-                        //         public_evt = Some(event);
-                        //     },
-                        //     None => {
-                        //         // Handle the error case if the channel receive fails
-                        //         println!("Failed to receive publish block message");
-                        //     }
-                        // }
                         Some(p2p::EventType::PublishBlock(title, message.into()))
                     }
                 };
@@ -306,8 +292,7 @@ async fn main() {
                             let message_json = serde_json::to_string(&message).expect("can jsonify message");
                             let peers = p2p::get_list_peers(&swarm_public_net);
                             let pbft_node_views = pbft::get_total_pbft_view(&swarm_public_net);
-                           
-                            // println!("Number of NODES: {:?}",peers.len());
+                            // println!("Number of: {:?}",peers.len());
                             // println!("PBFT Node number of views for consensus {:?}",pbft_node_views);
                             swarm_public_net.behaviour_mut().floodsub.publish(topic,message_json.as_bytes())
                         }

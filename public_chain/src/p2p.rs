@@ -21,6 +21,8 @@ use crate::rock_storage::StoragePath;
 use crate::public_block;
 use crate::pbft;
 use crate::rock_storage;
+use crate::txn_pool;
+use crate::public_txn::PublicTxn;
 use crate::public_block::handle_create_block_pbft;
 
 // main.rs
@@ -197,9 +199,23 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 }
             }
             else if msg.topics[0]==Topic::new("txn_pbft_commit"){
-                println!("Transactions received");
+                println!("Transaction PBFT Commit");
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
+                 // Deserialize the JSON string into a PublicTxn object
+                if let Ok(transaction) = serde_json::from_str::<PublicTxn>(&json_string) {
+                    // If you have access to the mempool here, add the transaction
+                    if let Some(mut mempool) = txn_pool::Mempool::get() { // Assuming you have a method to get the mempool
+                        mempool.add_transaction(transaction);
+                        println!("Transaction added to mempool");
+                    } else {
+                        // Handle the case where the mempool is not available
+                        println!("Mempool is not available");
+                    }
+                } else {
+                    // Handle deserialization error
+                    println!("Failed to deserialize transaction data");
+                }
                 if let Some(publisher) = Publisher::get(){
                     //Commit to mempool
                 }
@@ -207,7 +223,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
             else if msg.topics[0]==Topic::new("block_pbft_prepared"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
-                info!("RECEIVED PBFT PREPARED: {:?}",json_string);
+                info!("RECEIVED BLOCK PBFT PREPARED: {:?}",json_string);
                 if let Some(publisher) = Publisher::get(){
                     publisher.publish("block_pbft_commit".to_string(), json_string.to_string());
                 }
@@ -237,7 +253,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 let block_db = self.storage_path.get_blocks();
                 let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
                 self.app.blocks.push(created_block);
-                println!("Genesis Private Block {:?}",self.app.blocks);
                 publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
                 }
 
@@ -251,7 +266,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     let block_db = self.storage_path.get_blocks();
                     let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
                     self.app.blocks.push(created_block);
-                    println!("Private Block Transactions {:?}",self.app.blocks);
                     publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
                 }
             }
@@ -266,7 +280,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     let block_db = self.storage_path.get_blocks();
                     let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
                     self.app.blocks.push(created_block);
-                    println!("Contract creation Transactions {:?}",self.app.blocks);
                     publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
                 }
             }

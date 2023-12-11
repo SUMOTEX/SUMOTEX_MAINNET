@@ -9,7 +9,6 @@ use crate::gas_calculator;
 use crate::rock_storage;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
-use std::io::{Error, ErrorKind};
 use secp256k1::{Secp256k1, PublicKey, SecretKey, Message, Signature};
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -93,6 +92,9 @@ impl PublicTxn {
     
         // Verify the message with the public key
         secp.verify(&msg, signature, public_key).is_ok()
+    }
+    pub fn set_status(&mut self, new_status: i64) {
+        self.status = new_status;
     }
 }
 
@@ -330,7 +332,7 @@ impl Txn {
         transaction.set_status(new_status);
 
         // Serialize and save the updated transaction
-        rock_storage::put_into_db(&db_handle, txn_hash.to_string(), serde_json::to_string(&transaction)?)?;
+        rock_storage::put_to_db(&db_handle, txn_hash.to_string(), &serde_json::to_string(&transaction)?)?;
 
         Ok(())
     }
