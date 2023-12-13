@@ -137,19 +137,18 @@ impl NetworkBehaviourEventProcess<MyProtocolEvent> for AppBehaviour {
         }
     }
 }
-pub fn calculate_root_hash(json: &serde_json::Value) -> String {
-    // Serialize the JSON object to a string
-    let json_str = serde_json::to_string(json).expect("Failed to serialize JSON to string");
-
-    // Calculate the SHA-256 hash of the JSON string
-    let mut hasher = Sha256::new();
-    hasher.update(json_str.as_bytes());
-    let hash_bytes = hasher.finalize();
-
-    // Convert the hash bytes to a hexadecimal string
-    let hash_hex = format!("{:x}", hash_bytes);
-
-    hash_hex
+fn extract_key_and_value(json_str: &str) -> Option<(String, String)> {
+    // Parse the JSON string into a serde_json::Value
+    if let Ok(parsed_json) = serde_json::from_str::<Value>(json_str) {
+        // Access the "key" and "value" fields
+        if let (Some(key), Some(value)) = (
+            parsed_json["key"].as_str(),
+            parsed_json["value"].as_str(),
+        ) {
+            return Some((key.to_string(), value.to_string()));
+        }
+    }
+    None
 }
 // incoming event handler
 impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
@@ -209,32 +208,71 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
             }
             else if msg.topics[0]==Topic::new("txn_pbft_prepared"){
                 let received_serialized_data =msg.data;
-                let json_string = String::from_utf8(received_serialized_data).unwrap();
-                info!("Transactions prepared: {:?}",json_string);
-                if let Some(publisher) = Publisher::get(){
-                    publisher.publish("txn_pbft_commit".to_string(), json_string.to_string());
-                }
+                // let json_string = String::from_utf8(received_serialized_data).unwrap();
+                // info!("Transactions prepared: {:?}",json_string);
+                match String::from_utf8(received_serialized_data.to_vec()) {
+                    Ok(json_string) => {
+                        println!("{:?}", json_string);
+                        // Attempt to parse the string as JSON
+                        match serde_json::from_str::<Value>(&json_string) {
+                            Ok(outer_json) => {
+                                // Extract the values associated with "key" and "value"
+                                if let Some(value) = outer_json["value"].as_str() {
+                                    // Unescape the inner JSON string
+                                    let unescaped_value = value.replace("\\\"", "\"");
+                                    match serde_json::from_str::<Value>(&unescaped_value) {
+                                        Ok(nested_json) => {
+                                            let serialized_nested_json = serde_json::to_string(&nested_json).unwrap();
+
+                                            // Hash the serialized string
+                                            let mut hasher = Sha256::new();
+                                            hasher.update(serialized_nested_json.as_bytes());
+                                            let result_hash = hasher.finalize();
+            
+                                            // Convert hash to a hexadecimal string
+                                            let hash_hex = format!("{:x}", result_hash);
+            
+                                            // Compare the hash with the key from outer JSON
+                                            if let Some(key) = outer_json["key"].as_str() {
+                                                if key == hash_hex {
+                                                    println!("Hash matches the key.");
+                                                } else {
+                                                    println!("Hash does not match the key.");
+                                                }
+                                            } else {
+                                                println!("Key not found in outer JSON.");
+                                            }
+                                            println!("Nested JSON: {:?}", nested_json);
+                                            if let Some(publisher) = Publisher::get() {
+                                                publisher.publish("txn_pbft_commit".to_string(), json_string);
+                                            }
+            
+                                        },
+                                        Err(e) => {
+                                            println!("Failed to parse nested JSON: {}", e);
+                                        }
+                                    }
+                                } else {
+                                    println!("Key and/or Value not found in JSON.");
+                                }
+                            },
+                            Err(e) => {
+                                println!("Failed to parse JSON: {}", e);
+                            }
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("Failed to convert bytes to string: {}", e);
+                    }
+                }; 
+                // if let Some(publisher) = Publisher::get(){
+                //     publisher.publish("txn_pbft_commit".to_string(), json_string);
+                // }
             }
             else if msg.topics[0] == Topic::new("txn_pbft_commit") {
                 println!("Transaction PBFT Commit");
                 let received_serialized_data = msg.data;
-                let json_string = match String::from_utf8(received_serialized_data) {
-                    Ok(s) => s,
-                    Err(e) => {
-                        eprintln!("Failed to convert bytes to string: {}", e);
-                        return; // or any other error handling strategy
-                    }
-                };
-                // Parse the commit message
-                let outer_json_result: Result<serde_json::Value, serde_json::Error> = serde_json::from_str(&json_string);
-                match outer_json_result {
-                    Ok(outer_json) => {
-                        println!("{:?}",outer_json);
-                    }
-                    Err(e) => {
-                        eprintln!("Failed to parse outer JSON: {}", e);
-                    }
-                }
+                    // Attempt to convert received data to a UTF-8 string
                 
             }
                        

@@ -266,8 +266,6 @@ impl Txn {
         let deserialized_txn: Result<PublicTxn, serde_json::Error> = serde_json::from_str(&transaction_serialize_string);
         match deserialized_txn {
             Ok(txn) => {
-                println!("Hash Bytes {}",txn_hash_hex);
-                println!("Private Key {}",private_key);
                 let hash_bytes = hex::decode(txn_hash_hex.clone())?;
                 let hash_array: [u8; 32] = hash_bytes.try_into().map_err(|_| "Invalid hash length")?;
                 let signature_bytes = account::Account::sign_message(&hash_array, private_key)?
@@ -292,8 +290,10 @@ impl Txn {
                     // Create a dictionary for broadcasting
                     let mut dictionary_data = HashMap::new();
                     dictionary_data.insert("key".to_string(), txn_hash_hex.to_string());
-                    dictionary_data.insert("value".to_string(), serialized_data.clone());
-                    
+                    let value_json = serde_json::json!(txn);
+                    // Insert the JSON object into the dictionary
+                    dictionary_data.insert("value".to_string(), value_json.to_string());
+
                     // Serialize the dictionary to JSON
                     let serialised_dictionary_json = serde_json::json!(dictionary_data).to_string();
                     
