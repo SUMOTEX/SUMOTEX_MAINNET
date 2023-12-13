@@ -282,32 +282,27 @@ impl Txn {
                 let verified_signature =  account::Account::verify_signature(&public_key,&hash_array,&signature);
                 if verified_signature.is_ok() && verified_signature.unwrap() {
                     let serialized_data = serde_json::to_string(&txn)?;
-                    
+    
                     // Hash the serialized transaction data using SHA-256
                     let hash_result = Sha256::digest(serialized_data.as_bytes());
-
+                    
                     // Calculate the transaction hash as a hexadecimal string
                     let transaction_hash = hex::encode(hash_result);
-
+                    
                     // Create a dictionary for broadcasting
                     let mut dictionary_data = HashMap::new();
                     dictionary_data.insert("key".to_string(), txn_hash_hex.to_string());
                     dictionary_data.insert("value".to_string(), serialized_data.clone());
-
-                    // Create a map for broadcasting
-                    let mut transactions = HashMap::new();
-                    transactions.insert(txn_hash_hex.to_string(), json!(dictionary_data).to_string());
-
-                    // Create the final JSON object with the transaction hash as the root
-                    let mut map = HashMap::new();
-                    map.insert(transaction_hash.clone(), transactions);
-                    let serialised_dictionary = serde_json::to_string(&map)?;
+                    
+                    // Serialize the dictionary to JSON
+                    let serialised_dictionary_json = serde_json::json!(dictionary_data).to_string();
                     
                     println!("Broadcast transactions");
                     if let Some(publisher) = Publisher::get(){
-                        let serialised_dictionary_bytes = serialised_dictionary.as_bytes().to_vec();
-                        publisher.publish_block("txn_pbft_prepared".to_string(),serialised_dictionary_bytes)
+                        let serialised_dictionary_bytes = serialised_dictionary_json.as_bytes().to_vec();
+                        publisher.publish_block("txn_pbft_prepared".to_string(), serialised_dictionary_bytes);
                     }
+                    
                 } else {
                     // If the signature verification fails, handle the error accordingly
                     eprintln!("Signature verification failed");

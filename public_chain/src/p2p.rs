@@ -229,35 +229,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 let outer_json_result: Result<serde_json::Value, serde_json::Error> = serde_json::from_str(&json_string);
                 match outer_json_result {
                     Ok(outer_json) => {
-                        if let Value::Object(outer_object) = outer_json {
-                            if let Some(inner_json_str) = outer_object.get("value") {
-                                // Parse the inner JSON
-                                match serde_json::from_str::<Value>(inner_json_str.as_str().unwrap_or_default()) {
-                                    Ok(inner_json) => {
-                                        // Calculate the root hash of the inner JSON
-                                        let inner_root_hash = calculate_root_hash(&inner_json); // You need to implement this function
-                
-                                        // Calculate or fetch the transaction_root_hash
-                                        let transaction_root_hash = calculate_or_fetch_transaction_root_hash(); // You need to implement this function
-                
-                                        // Compare the root hashes
-                                        if inner_root_hash == transaction_root_hash {
-                                            // Root hashes match, you can now broadcast the transaction to the mempool
-                                            println!("Root hashes match. Broadcasting the transaction.");
-                                        } else {
-                                            eprintln!("Root hashes do not match. Rejecting the transaction.");
-                                        }
-                                    }
-                                    Err(e) => {
-                                        eprintln!("Failed to parse inner JSON: {}", e);
-                                    }
-                                }
-                            } else {
-                                eprintln!("'value' key not found in the outer JSON");
-                            }
-                        } else {
-                            eprintln!("Outer JSON is not an object");
-                        }
+                        println!("{:?}",outer_json);
                     }
                     Err(e) => {
                         eprintln!("Failed to parse outer JSON: {}", e);
