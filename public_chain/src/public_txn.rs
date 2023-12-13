@@ -281,32 +281,26 @@ impl Txn {
                 };
                 let verified_signature =  account::Account::verify_signature(&public_key,&hash_array,&signature);
                 if verified_signature.is_ok() && verified_signature.unwrap() {
-                    // Update the Verkle tree and prepare the transaction for broadcast
-                    let mut verkle_tree = VerkleTree::new();
                     let serialized_data = serde_json::to_string(&txn)?;
                     
-                    // Hash the serialized PublicTxn
+                    // Hash the serialized transaction data using SHA-256
                     let hash_result = Sha256::digest(serialized_data.as_bytes());
-                    verkle_tree.insert(txn_hash_hex.as_bytes().to_vec(), hash_result.to_vec());
-                    
+
+                    // Calculate the transaction hash as a hexadecimal string
+                    let transaction_hash = hex::encode(hash_result);
+
                     // Create a dictionary for broadcasting
                     let mut dictionary_data = HashMap::new();
-                    dictionary_data.insert("key".to_string(), txn_hash_hex.clone());
+                    dictionary_data.insert("key".to_string(), txn_hash_hex.to_string());
                     dictionary_data.insert("value".to_string(), serialized_data.clone());
-                    
-                    // Get the root hash from the Verkle tree
-                    let root_hash = verkle_tree.get_root_string(); // Define and assign root_hash here
-                    
-                    // Serialize the dictionary
-                    let serialised_txn = serde_json::to_string(&dictionary_data)?;
-                    
+
                     // Create a map for broadcasting
                     let mut transactions = HashMap::new();
-                    transactions.insert(txn_hash_hex.clone(), serialised_txn);
-                    
-                    // Create the final JSON object
+                    transactions.insert(txn_hash_hex.to_string(), json!(dictionary_data).to_string());
+
+                    // Create the final JSON object with the transaction hash as the root
                     let mut map = HashMap::new();
-                    map.insert(root_hash.clone(), transactions);
+                    map.insert(transaction_hash.clone(), transactions);
                     let serialised_dictionary = serde_json::to_string(&map)?;
                     
                     println!("Broadcast transactions");

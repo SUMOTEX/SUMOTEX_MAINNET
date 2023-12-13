@@ -137,6 +137,20 @@ impl NetworkBehaviourEventProcess<MyProtocolEvent> for AppBehaviour {
         }
     }
 }
+pub fn calculate_root_hash(json: &serde_json::Value) -> String {
+    // Serialize the JSON object to a string
+    let json_str = serde_json::to_string(json).expect("Failed to serialize JSON to string");
+
+    // Calculate the SHA-256 hash of the JSON string
+    let mut hasher = Sha256::new();
+    hasher.update(json_str.as_bytes());
+    let hash_bytes = hasher.finalize();
+
+    // Convert the hash bytes to a hexadecimal string
+    let hash_hex = format!("{:x}", hash_bytes);
+
+    hash_hex
+}
 // incoming event handler
 impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
     fn inject_event(&mut self, event: FloodsubEvent) {
@@ -211,19 +225,35 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         return; // or any other error handling strategy
                     }
                 };
-            
+                // Parse the commit message
                 let outer_json_result: Result<serde_json::Value, serde_json::Error> = serde_json::from_str(&json_string);
                 match outer_json_result {
                     Ok(outer_json) => {
-                        if let serde_json::Value::Object(outer_object) = outer_json {
-                            for (key, value) in outer_object.iter() {
-                                if let serde_json::Value::Object(inner_object) = value {
-                                    // Now `inner_object` contains the inner JSON object
-                                    // You can work with it here
-                                    println!("Inner JSON for key {}: {:?}", key, inner_object);
-                                } else {
-                                    eprintln!("Value for key {} is not a JSON object", key);
+                        if let Value::Object(outer_object) = outer_json {
+                            if let Some(inner_json_str) = outer_object.get("value") {
+                                // Parse the inner JSON
+                                match serde_json::from_str::<Value>(inner_json_str.as_str().unwrap_or_default()) {
+                                    Ok(inner_json) => {
+                                        // Calculate the root hash of the inner JSON
+                                        let inner_root_hash = calculate_root_hash(&inner_json); // You need to implement this function
+                
+                                        // Calculate or fetch the transaction_root_hash
+                                        let transaction_root_hash = calculate_or_fetch_transaction_root_hash(); // You need to implement this function
+                
+                                        // Compare the root hashes
+                                        if inner_root_hash == transaction_root_hash {
+                                            // Root hashes match, you can now broadcast the transaction to the mempool
+                                            println!("Root hashes match. Broadcasting the transaction.");
+                                        } else {
+                                            eprintln!("Root hashes do not match. Rejecting the transaction.");
+                                        }
+                                    }
+                                    Err(e) => {
+                                        eprintln!("Failed to parse inner JSON: {}", e);
+                                    }
                                 }
+                            } else {
+                                eprintln!("'value' key not found in the outer JSON");
                             }
                         } else {
                             eprintln!("Outer JSON is not an object");
@@ -231,9 +261,9 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                     Err(e) => {
                         eprintln!("Failed to parse outer JSON: {}", e);
-                        return; // or any other error handling strategy
                     }
                 }
+                
             }
                        
             else if msg.topics[0]==Topic::new("block_pbft_prepared"){
