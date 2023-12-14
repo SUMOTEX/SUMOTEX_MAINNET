@@ -223,7 +223,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     match serde_json::from_str::<Value>(&unescaped_value) {
                                         Ok(nested_json) => {
                                             let serialized_nested_json = serde_json::to_string(&nested_json).unwrap();
-
+                                            println!("Serialized Nested JSON: {}", serialized_nested_json);                                          
                                             // Hash the serialized string
                                             let mut hasher = Sha256::new();
                                             hasher.update(serialized_nested_json.as_bytes());
@@ -231,7 +231,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
             
                                             // Convert hash to a hexadecimal string
                                             let hash_hex = format!("{:x}", result_hash);
-            
+                                            println!("Calculated Hash: {}", hash_hex);
                                             // Compare the hash with the key from outer JSON
                                             if let Some(key) = outer_json["key"].as_str() {
                                                 if key == hash_hex {

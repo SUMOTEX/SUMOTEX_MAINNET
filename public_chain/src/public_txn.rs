@@ -280,7 +280,7 @@ impl Txn {
                 let verified_signature =  account::Account::verify_signature(&public_key,&hash_array,&signature);
                 if verified_signature.is_ok() && verified_signature.unwrap() {
                     let serialized_data = serde_json::to_string(&txn)?;
-    
+                    println!("Serialized Transaction Data: {}", serialized_data);  
                     // Hash the serialized transaction data using SHA-256
                     let hash_result = Sha256::digest(serialized_data.as_bytes());
                     
