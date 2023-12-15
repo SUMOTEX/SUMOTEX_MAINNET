@@ -150,6 +150,7 @@ fn extract_key_and_value(json_str: &str) -> Option<(String, String)> {
     }
     None
 }
+
 // incoming event handler
 impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
     fn inject_event(&mut self, event: FloodsubEvent) {
@@ -216,40 +217,27 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         // Attempt to parse the string as JSON
                         match serde_json::from_str::<Value>(&json_string) {
                             Ok(outer_json) => {
-                                // Extract the values associated with "key" and "value"
                                 if let Some(value) = outer_json["value"].as_str() {
-                                    // Unescape the inner JSON string
                                     let unescaped_value = value.replace("\\\"", "\"");
-                                    match serde_json::from_str::<Value>(&unescaped_value) {
-                                        Ok(nested_json) => {
-                                            let serialized_nested_json = serde_json::to_string(&nested_json).unwrap();
-                                            println!("Serialized Nested JSON: {}", serialized_nested_json);                                          
-                                            // Hash the serialized string
-                                            let mut hasher = Sha256::new();
-                                            hasher.update(serialized_nested_json.as_bytes());
-                                            let result_hash = hasher.finalize();
-            
-                                            // Convert hash to a hexadecimal string
-                                            let hash_hex = format!("{:x}", result_hash);
-                                            println!("Calculated Hash: {}", hash_hex);
-                                            // Compare the hash with the key from outer JSON
-                                            if let Some(key) = outer_json["key"].as_str() {
-                                                if key == hash_hex {
-                                                    println!("Hash matches the key.");
-                                                } else {
-                                                    println!("Hash does not match the key.");
-                                                }
-                                            } else {
-                                                println!("Key not found in outer JSON.");
-                                            }
-                                            println!("Nested JSON: {:?}", nested_json);
+                                    match serde_json::from_str::<PublicTxn>(&unescaped_value) {
+                                        Ok(txn) => {
+                                            let serialized_txn_from_msg = serde_json::to_string(&txn).unwrap();
+                                            println!("Serialized from Message: {}", serialized_txn_from_msg);
+                
+                                            let msg_hash_result = Sha256::digest(serialized_txn_from_msg.as_bytes());
+                                            let msg_transaction_hash = hex::encode(msg_hash_result);
+                                            println!("Hash from Message: {}", msg_transaction_hash);
+                
+                                            // Further processing with `txn`...
+                                            // ...
+                
                                             if let Some(publisher) = Publisher::get() {
                                                 publisher.publish("txn_pbft_commit".to_string(), json_string);
                                             }
-            
                                         },
                                         Err(e) => {
-                                            println!("Failed to parse nested JSON: {}", e);
+                                            eprintln!("Failed to parse PublicTxn: {}", e);
+                                            // Handle error appropriately
                                         }
                                     }
                                 } else {

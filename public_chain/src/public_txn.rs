@@ -11,6 +11,39 @@ use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use secp256k1::{Signature, SecretKey};
 
+
+fn deserialize_string_to_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct StringOrU64Visitor;
+
+    impl<'de> serde::de::Visitor<'de> for StringOrU64Visitor {
+        type Value = u64;
+
+        fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+            formatter.write_str("a string or an integer")
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            Ok(value)
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: serde::de::Error,
+        {
+            value.parse::<u64>().map_err(serde::de::Error::custom)
+        }
+    }
+
+    deserializer.deserialize_any(StringOrU64Visitor)
+}
+
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Txn{
     pub transactions: Vec<String>,
@@ -28,8 +61,10 @@ pub enum TransactionType {
 pub struct PublicTxn{
     pub txn_hash: String,
     pub txn_type: TransactionType,  // Added field for transaction type
+    #[serde(deserialize_with = "deserialize_string_to_u64")]
     pub nonce:u64,
     pub value: u64,
+    #[serde(deserialize_with = "deserialize_string_to_u64")]
     pub gas_cost: u64, 
     pub caller_address:String,
     pub to_address:String,
