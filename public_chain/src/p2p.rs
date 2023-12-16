@@ -223,13 +223,23 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                         Ok(txn) => {
                                             let serialized_txn_from_msg = serde_json::to_string(&txn).unwrap();
                                             println!("Serialized from Message: {}", serialized_txn_from_msg);
-                
+                                            
                                             let msg_hash_result = Sha256::digest(serialized_txn_from_msg.as_bytes());
                                             let msg_transaction_hash = hex::encode(msg_hash_result);
                                             println!("Hash from Message: {}", msg_transaction_hash);
-                
+                                            
                                             // Further processing with `txn`...
                                             // ...
+                                             // Retrieve the expected hash (key) from outer_json
+                                            let expected_hash = outer_json["key"].as_str().unwrap_or_default();
+                                            println!("Hashes {:?} NEXT: {:?}",expected_hash,msg_transaction_hash);
+                                            if msg_transaction_hash == expected_hash {
+                                                println!("Hashes match.");
+                                                // Perform actions for a match
+                                            } else {
+                                                println!("Hashes do not match.");
+                                                // Perform actions for a mismatch
+                                            }
                 
                                             if let Some(publisher) = Publisher::get() {
                                                 publisher.publish("txn_pbft_commit".to_string(), json_string);

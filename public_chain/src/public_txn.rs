@@ -324,7 +324,7 @@ impl Txn {
                     
                     // Create a dictionary for broadcasting
                     let mut dictionary_data = HashMap::new();
-                    dictionary_data.insert("key".to_string(), txn_hash_hex.to_string());
+                    dictionary_data.insert("key".to_string(), transaction_hash.to_string());
                     let value_json = serde_json::json!(txn);
                     // Insert the JSON object into the dictionary
                     dictionary_data.insert("value".to_string(), value_json.to_string());
