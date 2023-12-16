@@ -227,9 +227,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                             let msg_hash_result = Sha256::digest(serialized_txn_from_msg.as_bytes());
                                             let msg_transaction_hash = hex::encode(msg_hash_result);
                                             println!("Hash from Message: {}", msg_transaction_hash);
-                                            
-                                            // Further processing with `txn`...
-                                            // ...
                                              // Retrieve the expected hash (key) from outer_json
                                             let expected_hash = outer_json["key"].as_str().unwrap_or_default();
                                             println!("Hashes {:?} NEXT: {:?}",expected_hash,msg_transaction_hash);
@@ -240,7 +237,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                                 println!("Hashes do not match.");
                                                 // Perform actions for a mismatch
                                             }
-                
                                             if let Some(publisher) = Publisher::get() {
                                                 publisher.publish("txn_pbft_commit".to_string(), json_string);
                                             }
@@ -270,10 +266,46 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
             else if msg.topics[0] == Topic::new("txn_pbft_commit") {
                 println!("Transaction PBFT Commit");
                 let received_serialized_data = msg.data;
-                    // Attempt to convert received data to a UTF-8 string
+                match String::from_utf8(received_serialized_data.to_vec()) {
+                    Ok(json_string) => {
+                        // First unescape: Remove extra backslashes and outer quotes
+                        let unescaped_json_string = json_string.trim_matches('\"').replace("\\\\", "\\").replace("\\\"", "\"");
+                        println!("Unescaped JSON String: {:?}", unescaped_json_string);
                 
-            }
-                       
+                        match serde_json::from_str::<Value>(&unescaped_json_string) {
+                            Ok(outer_json) => {
+                                // Process outer_json as before...
+                                if let Some(encoded_value) = outer_json["value"].as_str() {
+                                    // The value field is already a valid JSON string
+                                    println!("Inner JSON String: {:?}", encoded_value);
+                
+                                    match serde_json::from_str::<PublicTxn>(&encoded_value) {
+                                        Ok(txn) => {
+                                            let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
+                                            mempool.add_transaction(txn);
+                                            println!("Transaction added to Mempool.");
+            
+                                            // ... rest of your logic to handle txn ...
+                                        },
+                                        Err(e) => {
+                                            eprintln!("Failed to parse PublicTxn: {}", e);
+                                        }
+                                    }
+                                } else {
+                                    println!("'value' field not found in JSON.");
+                                }
+                            },
+                            Err(e) => {
+                                eprintln!("Failed to parse Unescaped JSON: {}", e);
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        eprintln!("Failed to convert bytes to string: {}", e);
+                    }
+                };
+                 
+            }      
             else if msg.topics[0]==Topic::new("block_pbft_prepared"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
