@@ -11,7 +11,10 @@ use once_cell::sync::Lazy;
 use crate::p2p::AppBehaviour;
 use crate::public_app::App;
 use crate::rock_storage;
+use crate::txn_pool;
+
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
+pub static BLOCK_PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_pre_prepared"));
 
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -69,6 +72,43 @@ pub fn mine_block(id: u64, timestamp: i64, previous_hash: &str) -> (u64, String)
         nonce += 1;
     }
 }
+
+pub fn pbft_pre_message_block_creator(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
+        let behaviour =swarm.behaviour_mut();
+        let mut i: i64 =0;
+        let mut verkle_tree = VerkleTree::new();
+        let mut transactions: HashMap<String, String>= HashMap::new();
+            // Fetch transactions from the mempool
+        let mempool_transactions = Mempool::get_instance()
+        .lock()
+        .unwrap()
+        .get_transactions(); // Assuming this method exists and returns a list of transactions
+
+        for txn in mempool_transactions {
+            // Process each transaction
+            let serialized_data = serde_json::to_string(&txn).expect("can jsonify request");
+            let mut hasher = Sha256::new();
+            hasher.update(&serialized_data);
+            let hash_result = hasher.finalize();
+            let hash_hex_string = format!("{:x}", hash_result);
+
+            // Insert transaction into verkle tree and prepare for broadcast
+            verkle_tree.insert(txn.txn_hash.as_bytes().to_vec(), hash_result.to_vec());
+            let mut dictionary_data = std::collections::HashMap::new();
+            dictionary_data.insert("key".to_string(), txn.txn_hash.clone());
+            dictionary_data.insert("value".to_string(), serialized_data);
+            transactions.insert(txn.txn_hash, serialized_data);
+        }
+        let root_hash = verkle_tree.get_root_string();
+        let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
+        map.insert(root_hash.clone(), transactions);
+        let serialised_dictionary = serde_json::to_vec(&map).unwrap();
+        println!("Broadcasting Transactions to nodes");
+    
+        behaviour
+            .floodsub
+            .publish(BLOCK_PBFT_PREPREPARED_TOPIC.clone(), serialised_dictionary);
+    }
 pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
     if let Some(data) = cmd.strip_prefix("create b") {
         let behaviour = swarm.behaviour_mut();

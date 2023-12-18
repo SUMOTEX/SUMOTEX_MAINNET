@@ -105,7 +105,6 @@ pub fn pbft_pre_message_handler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
             .floodsub
             .publish(BLOCK_PBFT_PREPREPARED_TOPIC.clone(), serialised_dictionary);
     }
-
 }
 
 impl PBFTNode {
