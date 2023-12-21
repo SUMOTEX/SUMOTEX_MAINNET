@@ -14,7 +14,7 @@ use std::collections::HashMap;
 use crate::verkle_tree::VerkleTree;
 use crate::rock_storage;
 use crate::txn_pool;
-
+use crate::publisher::Publisher;
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
 pub static BLOCK_PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_pre_prepared"));
 
@@ -74,7 +74,7 @@ pub fn mine_block(id: u64, timestamp: i64, previous_hash: &str) -> (u64, String)
     }
 }
 
-pub fn pbft_pre_message_block_create_scheduler(cmd:&str,swarm:  &mut Swarm<AppBehaviour>) {
+pub fn pbft_pre_message_block_create_scheduler() {
         let mut verkle_tree = VerkleTree::new();
         let mut transactions: HashMap<String, String>= HashMap::new();
         // Fetch transactions from the mempool
@@ -100,9 +100,9 @@ pub fn pbft_pre_message_block_create_scheduler(cmd:&str,swarm:  &mut Swarm<AppBe
         let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
         map.insert(root_hash.clone(), transactions);
         let serialised_dictionary = serde_json::to_vec(&map).unwrap();
-        println!("Broadcasting Transactions to nodes");
+        println!("Broadcasting pbft blocks...");
         if let Some(publisher) = Publisher::get(){
-            let serialised_dictionary_bytes = serialised_dictionary.as_bytes().to_vec();
+            let serialised_dictionary_bytes = serialised_dictionary.to_vec();
             publisher.publish_block("block_pbft_pre_prepared".to_string(), serialised_dictionary_bytes);
         }
     }
