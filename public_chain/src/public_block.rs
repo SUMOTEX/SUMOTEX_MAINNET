@@ -80,7 +80,7 @@ pub fn pbft_pre_message_block_create_scheduler() {
         // Fetch transactions from the mempool
         let mempool_lock = txn_pool::Mempool::get_instance().lock().unwrap();
         let mempool_transactions = mempool_lock.get_transactions(5); // Assuming this method exists and returns a list of transactions
-        
+        println!("Transactions: {:?}",mempool_transactions);
         for txn in mempool_transactions {
             // Process each transaction
             let serialized_data = serde_json::to_string(&txn).expect("can jsonify request");
@@ -95,7 +95,9 @@ pub fn pbft_pre_message_block_create_scheduler() {
             dictionary_data.insert("key".to_string(), txn.txn_hash.clone());
             dictionary_data.insert("value".to_string(), serialized_data.clone());
             transactions.insert(txn.txn_hash.clone(), serialized_data);
+            println!("{:?}",txn);
         }
+
         let root_hash = verkle_tree.get_root_string();
         let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
         map.insert(root_hash.clone(), transactions);

@@ -12,6 +12,7 @@ use crate::smart_contract;
 use crate::public_swarm;
 use crate::account;
 use crate::public_txn;
+use crate::public_block;
 use crate::public_txn::TransactionType;
 use lazy_static::lazy_static;
 use secp256k1::SecretKey;
@@ -222,8 +223,8 @@ fn create_wallet()-> Json<serde_json::Value> {
             Json(json!({"jsonrpc": "1.0", "result": "error"}))
         }
     }
-
 }
+
 // Get balance
 #[post("/get-wallet-balance",data="<post_data>")]
 fn get_balance(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
@@ -299,6 +300,14 @@ fn complete_transaction(transaction_info: Json<TransactionSignedInfo>) -> Json<s
     }
 }
 
+#[post("/create-block")]
+fn create_block() -> Json<serde_json::Value> {
+    //Create blocks
+    let response_body = json!({});
+    public_block::pbft_pre_message_block_create_scheduler();
+    Json(json!({"jsonrpc": "1.0", "result": response_body}))
+}
+
 #[get("/healthcheck")]
 fn healthcheck() -> Json<serde_json::Value> {
     // Perform any necessary health checks here. For simplicity, this example
@@ -350,6 +359,7 @@ pub async fn start_rpc() {
                             transfer_token,
                             get_balance,
                             complete_transaction,
+                            create_block,
                             healthcheck])
         .launch()
         .await
