@@ -89,7 +89,6 @@ fn create_transaction(transaction_data: Json<TransactionInfo>) -> Json<serde_jso
         "ContractInteraction" => TransactionType::ContractInteraction,
         _ => return Json(json!({"jsonrpc": "2.0", "error": "Invalid transaction type"}))
     };
-
     match public_txn::Txn::create_and_prepare_transaction(
         transaction_type,
         caller_address.to_string(),
