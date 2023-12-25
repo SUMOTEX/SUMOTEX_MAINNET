@@ -16,7 +16,6 @@ use crate::rock_storage;
 use crate::txn_pool;
 use crate::publisher::Publisher;
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
-pub static BLOCK_PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_pre_prepared"));
 
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -75,12 +74,12 @@ pub fn mine_block(id: u64, timestamp: i64, previous_hash: &str) -> (u64, String)
 }
 
 pub fn pbft_pre_message_block_create_scheduler() {
+        println!("Call PBFT");
         let mut verkle_tree = VerkleTree::new();
         let mut transactions: HashMap<String, String>= HashMap::new();
         // Fetch transactions from the mempool
         let mempool_lock = txn_pool::Mempool::get_instance().lock().unwrap();
         let mempool_transactions = mempool_lock.get_transactions(5); // Assuming this method exists and returns a list of transactions
-        println!("Transactions: {:?}",mempool_transactions);
         for txn in mempool_transactions {
             // Process each transaction
             let serialized_data = serde_json::to_string(&txn).expect("can jsonify request");
@@ -88,20 +87,21 @@ pub fn pbft_pre_message_block_create_scheduler() {
             hasher.update(&serialized_data);
             let hash_result = hasher.finalize();
             let hash_hex_string = format!("{:x}", hash_result);
-
             // Insert transaction into verkle tree and prepare for broadcast
             verkle_tree.insert(txn.txn_hash.as_bytes().to_vec(), hash_result.to_vec());
             let mut dictionary_data = std::collections::HashMap::new();
             dictionary_data.insert("key".to_string(), txn.txn_hash.clone());
             dictionary_data.insert("value".to_string(), serialized_data.clone());
             transactions.insert(txn.txn_hash.clone(), serialized_data);
-            println!("{:?}",txn);
+            println!("Transactions: {:?}",txn);
         }
 
         let root_hash = verkle_tree.get_root_string();
         let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
-        map.insert(root_hash.clone(), transactions);
+        map.insert(root_hash.clone(), transactions.clone());
         let serialised_dictionary = serde_json::to_vec(&map).unwrap();
+        println!("root_hash: {:?}",root_hash);
+        println!("Txn: {:?}",transactions.clone());
         println!("Broadcasting pbft blocks...");
         if let Some(publisher) = Publisher::get(){
             let serialised_dictionary_bytes = serialised_dictionary.to_vec();

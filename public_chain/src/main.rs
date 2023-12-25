@@ -288,7 +288,6 @@ async fn main() {
                             let topic = libp2p::floodsub::Topic::new(topic_str);
                             let message_json = serde_json::to_string(&message).expect("can jsonify message");
                             let peers = p2p::get_list_peers(&swarm_public_net);
-                            let pbft_node_views = pbft::get_total_pbft_view(&swarm_public_net);
                             // println!("Number of: {:?}",peers.len());
                             // println!("PBFT Node number of views for consensus {:?}",pbft_node_views);
                             swarm_public_net.behaviour_mut().floodsub.publish(topic,message_json.as_bytes())
@@ -297,7 +296,6 @@ async fn main() {
                             let title_json = serde_json::to_string(&title).expect("can jsonify title");
                             let topic_str = title_json.trim_matches('"');
                             let topic = libp2p::floodsub::Topic::new(topic_str);
-                            
                             let message_json = serde_json::to_string(&message).expect("can jsonify message");
                             swarm_public_net.behaviour_mut().floodsub.publish(topic,message)
                         }
@@ -307,7 +305,7 @@ async fn main() {
                             cmd if cmd.starts_with("ls t") => p2p::handle_print_txn(&swarm_public_net),
                             cmd if cmd.starts_with("ls rt") => p2p::handle_print_raw_txn(&swarm_public_net),
                             cmd if cmd.starts_with("create b") => public_block::handle_create_block(cmd, swarm_public_net),
-                            cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, swarm_public_net),
+                            // cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, swarm_public_net),
                             //cmd if cmd.starts_with("create acc")=> account::create_account(cmd, swarm_public_net),
                             //cmd if cmd.starts_with("acc d")=> account::get_account(cmd, swarm_public_net),
                             cmd if cmd.starts_with("contract c")=> {

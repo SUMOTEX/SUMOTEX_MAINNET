@@ -48,7 +48,7 @@ Create a new file .cargo/config.toml
 [target.x86_64-unknown-linux-gnu]
 rustflags = ["-C", "link-arg=-Wl,--allow-multiple-definition"]
 
-sudo lsof -i -n | grep LISTEN
+lsof -i -n | grep LISTEN
 kill -9 PID
 
 server {

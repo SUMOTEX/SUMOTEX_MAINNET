@@ -37,6 +37,7 @@ pub static TXN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("transactions"));
 pub static PRIVATE_BLOCK_GENESIS_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("private_blocks_genesis_creation"));
 pub static HYBRID_BLOCK_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("hybrid_block_creation"));
 //For blocks
+pub static BLOCK_PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_pre_prepared"));
 pub static BLOCK_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_prepared"));
 pub static BLOCK_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_commit"));
 
@@ -109,7 +110,7 @@ impl AppBehaviour {
         behaviour.floodsub.subscribe(CHAIN_TOPIC.clone());
         behaviour.floodsub.subscribe(public_block::BLOCK_TOPIC.clone());
         behaviour.floodsub.subscribe(TXN_TOPIC.clone());
-        behaviour.floodsub.subscribe(pbft::BLOCK_PBFT_PREPREPARED_TOPIC.clone());
+        behaviour.floodsub.subscribe(BLOCK_PBFT_PREPREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_PBFT_PREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_PBFT_COMMIT_TOPIC.clone());
         behaviour.floodsub.subscribe(TXN_PBFT_PREPARED_TOPIC.clone());
@@ -150,6 +151,20 @@ fn extract_key_and_value(json_str: &str) -> Option<(String, String)> {
     }
     None
 }
+fn extract_block_hash(json_str: &str) -> Option<String> {
+    // Parse the JSON string into a serde_json::Value
+    if let Ok(parsed_json) = serde_json::from_str::<serde_json::Value>(json_str) {
+        // Extract the block hash from the JSON object
+        // Adjust the key as per your JSON structure
+        println!("{:?}",parsed_json.to_string());
+        if let Some(hash) = parsed_json["block_hash"].as_str() {
+            return Some(hash.to_string());
+        }
+    }
+    None
+}
+const REQUIRED_VERIFICATIONS: usize = 3; // Example value, adjust as needed
+
 
 // incoming event handler
 impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
@@ -186,24 +201,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                             msg.source.to_string(),
                             err
                         );
-                    }
-                }
-            } else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
-                println!("Block Received");
-                let received_serialized_data =msg.data;
-                let deserialized_data: HashMap<String, HashMap<String, String>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
-                let the_pbft_hash = self.pbft.get_hash_id();
-                println!("The Node: {:?}",the_pbft_hash);
-                for (key, inner_map) in deserialized_data.iter() {
-                    //TODO ADD the hash to database.
-                    let (valid_txn,txn_hashes) = self.txn.is_txn_valid(key.to_string(),inner_map.clone());
-                    if valid_txn {
-                        println!("Transactions Valid: {:?}",valid_txn);
-                        let created_block=self.pbft.pre_prepare(key.to_string(),txn_hashes.clone());
-                        if let Some(publisher) = Publisher::get(){
-                            publisher.publish("block_pbft_prepared".to_string(), the_pbft_hash.to_string());
-                            self.pbft.prepare("PBFT Valid and prepare".to_string());
-                        }
                     }
                 }
             }
@@ -304,20 +301,42 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         eprintln!("Failed to convert bytes to string: {}", e);
                     }
                 };
-                 
-            }      
+            }  else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
+                println!("Block Received");
+                let received_serialized_data =msg.data;
+                let deserialized_data: HashMap<String, HashMap<String, String>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
+                let the_pbft_hash = self.pbft.get_hash_id();
+                println!("The Node: {:?}",the_pbft_hash);
+                for (key, inner_map) in deserialized_data.iter() {
+                    //TODO ADD verifications of blocks
+                    let (valid_txn,txn_hashes) = self.txn.is_txn_valid(key.to_string(),inner_map.clone());
+                    if valid_txn {
+                        let created_block=self.pbft.pre_prepare(key.to_string(),txn_hashes.clone());
+                        println!("Created Block: {:?}",created_block);
+                        if let Some(publisher) = Publisher::get(){
+                            publisher.publish("block_pbft_prepared".to_string(), the_pbft_hash.to_string());
+                            self.pbft.prepare("PBFT Valid and prepare".to_string());
+                        }
+                    }
+                }
+            }    
             else if msg.topics[0]==Topic::new("block_pbft_prepared"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
-                info!("RECEIVED BLOCK PBFT PREPARED: {:?}",json_string);
-                if let Some(publisher) = Publisher::get(){
-                    publisher.publish("block_pbft_commit".to_string(), json_string.to_string());
+                info!("RECEIVED BLOCK PBFT PREPARED: {:?}", json_string);
+                // Example block hash extraction from JSON, adjust as per your actual data structure
+                // Now block_hash is a String and can be borrowed as &str
+                self.pbft.increment_verification(&json_string);
+                // Check if the block has been verified the required number of times
+                if self.pbft.is_verified(&json_string, REQUIRED_VERIFICATIONS) {
+                    // The block has been verified enough times, proceed to commit
+                    if let Some(publisher) = Publisher::get() {
+                        publisher.publish("block_pbft_commit".to_string(), json_string.to_string());
+                    }
                 }
-
             }else if msg.topics[0]==Topic::new("block_pbft_commit"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
-                self.pbft.commit("COMMIT READY".to_string());
                 if let Some(publisher) = Publisher::get(){
                     let (root,txn) = self.pbft.get_txn(json_string);
                     let created_block=handle_create_block_pbft(self.app.clone(),root,txn);
@@ -328,11 +347,11 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     self.app.blocks.push(created_block.clone());
                     let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
                     for txn in created_block.transactions.clone() {
-                        println!("{:?}",txn)
+                        println!("{:?}",txn);
                         let txn_id = txn.clone(); // Assuming txn.id is the field that stores the transaction ID as a String
                         for txn_id in txn.iter() {
                             // No need to clone if remove_transaction_by_id takes a reference
-                            mempool.remove_transaction_by_id(txn_id.clone());
+                            mempool.remove_transaction_by_id(txn_id.to_string());
                         }
                     }
                     publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
