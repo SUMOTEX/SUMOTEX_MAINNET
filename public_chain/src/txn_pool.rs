@@ -26,6 +26,13 @@ impl Mempool {
     pub fn remove_transactions(&mut self, count: usize) {
         self.transactions.drain(0..std::cmp::min(count, self.transactions.len()));
     }
+    pub fn remove_transaction_by_id(&mut self, id: u64) -> Option<PublicTxn> {
+        if let Some(pos) = self.transactions.iter().position(|txn| txn.id == id) {
+            Some(self.transactions.remove(pos))
+        } else {
+            None
+        }
+    }
     // Singleton access method
     pub fn get_instance() -> &'static Mutex<Mempool> {
         lazy_static! {
