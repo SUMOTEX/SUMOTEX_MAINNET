@@ -141,6 +141,17 @@ impl Txn {
     pub fn generate_fake_signature() -> Vec<u8> {
         vec![0u8; 64] // Assuming a 64-byte signature for illustrative purposes.
     }
+    pub fn get_transaction_by_id(txn_hash: &str) -> Result<PublicTxn, Box<dyn std::error::Error>> {
+        let db_path = "./transactions/db";
+        let db_handle = rock_storage::open_db(db_path)?;
+
+        let txn_data = rock_storage::get_from_db(&db_handle, txn_hash.to_string())
+            .ok_or("Transaction not found")?; // Handle missing transactions appropriately
+
+        let transaction: PublicTxn = serde_json::from_str(&txn_data)?;
+
+        Ok(transaction)
+    }
     pub fn create_transactions(
         transaction_type: TransactionType, 
         caller_address:String,
