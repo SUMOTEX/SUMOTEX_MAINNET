@@ -65,7 +65,10 @@ pub struct TransferTokenInfo {
     to_address:String,
     amount:f64
 }
-
+#[derive(serde::Deserialize, Debug)]
+pub struct TxnIdInfo {
+    txn_id: String,
+}
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct SignedTransaction {
     transaction_hash: String,
@@ -307,6 +310,29 @@ fn create_block() -> Json<serde_json::Value> {
     Json(json!({"jsonrpc": "1.0", "result": response_body}))
 }
 
+#[post("/read-transaction", data = "<txn_id_info>")]
+fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
+    let txn_id = &txn_id_info.txn_id;
+
+    // Assuming a function `get_transaction_by_id` that fetches the transaction from storage
+    match public_txn::Txn::get_transaction_by_id(txn_id) {
+        Ok(transaction) => {
+            // Assuming `transaction` is serializable with `serde`
+            Json(json!({
+                "jsonrpc": "2.0",
+                "result": transaction
+            }))
+        },
+        Err(e) => {
+            println!("Error reading transaction: {:?}", e);
+            Json(json!({
+                "jsonrpc": "2.0", 
+                "error": "Transaction read failed"
+            }))
+        }
+    }
+}
+
 #[get("/healthcheck")]
 fn healthcheck() -> Json<serde_json::Value> {
     // Perform any necessary health checks here. For simplicity, this example
@@ -358,6 +384,7 @@ pub async fn start_rpc() {
                             transfer_token,
                             get_balance,
                             complete_transaction,
+                            read_transaction,
                             create_block,
                             healthcheck])
         .launch()

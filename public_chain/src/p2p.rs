@@ -325,7 +325,16 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
                     let block_db = self.storage_path.get_blocks();
                     let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
-                    self.app.blocks.push(created_block);
+                    self.app.blocks.push(created_block.clone());
+                    let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
+                    for txn in created_block.transactions.clone() {
+                        println!("{:?}",txn)
+                        let txn_id = txn.clone(); // Assuming txn.id is the field that stores the transaction ID as a String
+                        for txn_id in txn.iter() {
+                            // No need to clone if remove_transaction_by_id takes a reference
+                            mempool.remove_transaction_by_id(txn_id.clone());
+                        }
+                    }
                     publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
                 }
             }
