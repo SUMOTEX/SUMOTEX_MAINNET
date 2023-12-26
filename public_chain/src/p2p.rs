@@ -33,7 +33,6 @@ use crate::publisher::Publisher;
 pub static KEYS: Lazy<identity::Keypair> = Lazy::new(identity::Keypair::generate_ed25519);
 pub static PEER_ID: Lazy<PeerId> = Lazy::new(|| PeerId::from(KEYS.public()));
 pub static CHAIN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("chains"));
-pub static TXN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("transactions"));
 pub static PRIVATE_BLOCK_GENESIS_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("private_blocks_genesis_creation"));
 pub static HYBRID_BLOCK_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("hybrid_block_creation"));
 //For blocks
@@ -109,7 +108,6 @@ impl AppBehaviour {
         };
         behaviour.floodsub.subscribe(CHAIN_TOPIC.clone());
         behaviour.floodsub.subscribe(public_block::BLOCK_TOPIC.clone());
-        behaviour.floodsub.subscribe(TXN_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_PBFT_PREPREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_PBFT_PREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_PBFT_COMMIT_TOPIC.clone());
@@ -171,10 +169,10 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
     fn inject_event(&mut self, event: FloodsubEvent) {
         if let FloodsubEvent::Message(msg) = event {
             // if msg.topics[0]
-            info!("Response from {:?}:", msg);
+            //info!("Response from {:?}:", msg);
             if let Ok(resp) = serde_json::from_slice::<ChainResponse>(&msg.data) {
                 if resp.receiver == PEER_ID.to_string() {
-                    info!("Response from {}:", msg.source);
+                    //info!("Response from {}:", msg.source);
                     resp.blocks.iter().for_each(|r| info!("{:?}", r));
                     self.app.blocks = self.app.choose_chain(self.app.blocks.clone(), resp.blocks);
                 }
@@ -301,59 +299,86 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         eprintln!("Failed to convert bytes to string: {}", e);
                     }
                 };
-            }  else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
-                println!("Block Received");
-                let received_serialized_data =msg.data;
+            }
+            //   else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
+            //     println!("Block Received");
+            //     if let Some(publisher) = Publisher::get() {
+            //         let serialised_dictionary_bytes = msg.data.to_vec();
+            //         match String::from_utf8(serialised_dictionary_bytes) {
+            //             Ok(serialized_string) => {
+            //                 publisher.publish("block_pbft_prepared".to_string(), serialized_string);
+            //             }
+            //             Err(e) => {
+            //                 println!("Failed to convert bytes to string: {}", e);
+            //             }
+            //         }
+            //     }
+            // }    
+            else if msg.topics[0]==Topic::new("block_pbft_pre_prepared"){
+                let received_serialized_data = msg.data;
                 let deserialized_data: HashMap<String, HashMap<String, String>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
-                println!("The Node: {:?}",the_pbft_hash);
+                println!("The Node: {:?}", the_pbft_hash);
+                println!("Deserialized data: {:?}", deserialized_data);
+            
+                let mut all_valid_txn_hashes = Vec::new();
+                let mut all_transactions_valid = true;
+            
                 for (key, inner_map) in deserialized_data.iter() {
-                    //TODO ADD verifications of blocks
-                    let (valid_txn,txn_hashes) = self.txn.is_txn_valid(key.to_string(),inner_map.clone());
+                    let (valid_txn, txn_hashes) = self.txn.is_txn_valid(key.to_string(), inner_map.clone());
                     if valid_txn {
-                        let created_block=self.pbft.pre_prepare(key.to_string(),txn_hashes.clone());
-                        println!("Created Block: {:?}",created_block);
-                        if let Some(publisher) = Publisher::get(){
-                            publisher.publish("block_pbft_prepared".to_string(), the_pbft_hash.to_string());
-                            self.pbft.prepare("PBFT Valid and prepare".to_string());
-                        }
+                        println!("Valid transactions for root hash: {:?}", key);
+                        println!("Transaction Hashes: {:?}", txn_hashes);
+                        all_valid_txn_hashes.extend(txn_hashes);
+                    } else {
+                        println!("Invalid transactions detected for root hash: {:?}", key);
+                        all_transactions_valid = false;
+                        break; // Exit the loop if any invalid transaction is found
                     }
                 }
-            }    
-            else if msg.topics[0]==Topic::new("block_pbft_prepared"){
-                let received_serialized_data =msg.data;
-                let json_string = String::from_utf8(received_serialized_data).unwrap();
-                info!("RECEIVED BLOCK PBFT PREPARED: {:?}", json_string);
-                // Example block hash extraction from JSON, adjust as per your actual data structure
-                // Now block_hash is a String and can be borrowed as &str
-                self.pbft.increment_verification(&json_string);
-                // Check if the block has been verified the required number of times
-                if self.pbft.is_verified(&json_string, REQUIRED_VERIFICATIONS) {
-                    // The block has been verified enough times, proceed to commit
+            
+                if all_transactions_valid && !all_valid_txn_hashes.is_empty() {
+                    println!("All transactions are valid, proceeding with PBFT actions");
+                    // Here, use `all_valid_txn_hashes` as needed
+                    self.pbft.increment_verification(&the_pbft_hash);
                     if let Some(publisher) = Publisher::get() {
-                        publisher.publish("block_pbft_commit".to_string(), json_string.to_string());
+                        // Serialize the list of valid transaction hashes and publish it
+                        let serialized_hashes = serde_json::to_string(&all_valid_txn_hashes).unwrap_or_default();
+                        publisher.publish("block_pbft_commit".to_string(), serialized_hashes);
                     }
+                } else {
+                    println!("Not all transactions are valid, PBFT process will not proceed.");
                 }
+                // Check if the block has been verified the required number of times
+                // if self.pbft.is_verified(&json_string, REQUIRED_VERIFICATIONS) {
+                //     // The block has been verified enough times, proceed to commit
+                // }
             }else if msg.topics[0]==Topic::new("block_pbft_commit"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
                 if let Some(publisher) = Publisher::get(){
-                    let (root,txn) = self.pbft.get_txn(json_string);
-                    let created_block=handle_create_block_pbft(self.app.clone(),root,txn);
-                    println!("Created Block After Validity: {:?}",created_block);
+                    let (root, txn_hashes) = self.pbft.get_txn(json_string);
+
+                    // Deserialize transactions based on txn_hashes
+                    let mut transactions = Vec::new();
+                    for txn_hash in &txn_hashes {
+                        transactions.push(txn_hash.to_string()); 
+                    }
+            
+                    let created_block = handle_create_block_pbft(self.app.clone(), transactions);
+                    println!("Created Block After Validity: {:?}", created_block);
+            
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
                     let block_db = self.storage_path.get_blocks();
-                    let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
+                    let _ = rock_storage::put_to_db(block_db, created_block.public_hash.clone(), &json);
                     self.app.blocks.push(created_block.clone());
+            
                     let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
-                    for txn in created_block.transactions.clone() {
-                        println!("{:?}",txn);
-                        let txn_id = txn.clone(); // Assuming txn.id is the field that stores the transaction ID as a String
-                        for txn_id in txn.iter() {
-                            // No need to clone if remove_transaction_by_id takes a reference
-                            mempool.remove_transaction_by_id(txn_id.to_string());
-                        }
+                    for txn_hash in txn_hashes {
+                        println!("Removing transaction {}", txn_hash);
+                        mempool.remove_transaction_by_id(txn_hash);
                     }
+            
                     publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
                 }
             }
@@ -383,20 +408,20 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
                 }
             }
-            else if msg.topics[0]==Topic::new("transactions")  {
-                let received_serialized_data =msg.data;
-                let json_string = String::from_utf8(received_serialized_data).unwrap();
-                println!("Contract creation Transactions: {:?}",json_string);
-                if let Some(publisher) = Publisher::get(){
-                    let (root,txn) = self.pbft.get_txn(json_string);
-                    let created_block = public_block::handle_create_block_pbft(self.app.clone(),root,txn);
-                    let json = serde_json::to_string(&created_block).expect("can jsonify request");
-                    let block_db = self.storage_path.get_blocks();
-                    let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
-                    self.app.blocks.push(created_block);
-                    publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
-                }
-            }
+            // else if msg.topics[0]==Topic::new("transactions")  {
+            //     let received_serialized_data =msg.data;
+            //     let json_string = String::from_utf8(received_serialized_data).unwrap();
+            //     println!("Contract creation Transactions: {:?}",json_string);
+            //     if let Some(publisher) = Publisher::get(){
+            //         let (root,txn) = self.pbft.get_txn(json_string);
+            //         let created_block = public_block::handle_create_block_pbft(self.app.clone(),root,txn);
+            //         let json = serde_json::to_string(&created_block).expect("can jsonify request");
+            //         let block_db = self.storage_path.get_blocks();
+            //         let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
+            //         self.app.blocks.push(created_block);
+            //         publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
+            //     }
+            // }
         }
     }
 }

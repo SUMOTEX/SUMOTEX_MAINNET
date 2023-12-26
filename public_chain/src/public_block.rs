@@ -95,7 +95,6 @@ pub fn pbft_pre_message_block_create_scheduler() {
             transactions.insert(txn.txn_hash.clone(), serialized_data);
             println!("Transactions: {:?}",txn);
         }
-
         let root_hash = verkle_tree.get_root_string();
         let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
         map.insert(root_hash.clone(), transactions.clone());
@@ -152,13 +151,13 @@ pub fn handle_finalised_block(swarm: &mut Swarm<AppBehaviour>, block:Block){
         .publish(BLOCK_TOPIC.clone(), json.as_bytes());
 }
 
-pub fn handle_create_block_pbft(app:App,root_hash:String,txn:Vec<String>)-> Block{
+pub fn handle_create_block_pbft(app: App, transactions: Vec<String>) -> Block {
     let app = app.blocks.last().expect("There should be at least one block");
     let latest_block = app;
     let block = Block::new(
-        latest_block.id +1,
+        latest_block.id + 1,
         latest_block.public_hash.clone(),
-        txn,
+        transactions,
         None,
         None
     );
