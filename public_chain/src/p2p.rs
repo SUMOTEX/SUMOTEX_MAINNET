@@ -323,13 +323,19 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
             
                 let mut all_valid_txn_hashes = Vec::new();
                 let mut all_transactions_valid = true;
-            
+                let mut txn_hashes_for_root = Vec::new();
+
                 for (key, inner_map) in deserialized_data.iter() {
                     let (valid_txn, txn_hashes) = self.txn.is_txn_valid(key.to_string(), inner_map.clone());
                     if valid_txn {
                         println!("Valid transactions for root hash: {:?}", key);
-                        println!("Transaction Hashes: {:?}", txn_hashes);
+                       
                         all_valid_txn_hashes.extend(txn_hashes);
+
+                        for (txn_hash, _) in inner_map.iter() {
+                            println!("Transaction Hashes: {:?}", txn_hash);
+                            txn_hashes_for_root.push(txn_hash);
+                        }
                     } else {
                         println!("Invalid transactions detected for root hash: {:?}", key);
                         all_transactions_valid = false;
@@ -343,7 +349,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     self.pbft.increment_verification(&the_pbft_hash);
                     if let Some(publisher) = Publisher::get() {
                         // Serialize the list of valid transaction hashes and publish it
-                        let serialized_hashes = serde_json::to_string(&all_valid_txn_hashes).unwrap_or_default();
+                        let serialized_hashes = serde_json::to_string(&txn_hashes_for_root).unwrap_or_default();
                         println!("Serialize Hashes: {:?}", serialized_hashes);
                         publisher.publish("block_pbft_commit".to_string(), serialized_hashes);
                     }
