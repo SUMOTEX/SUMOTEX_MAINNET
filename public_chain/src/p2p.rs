@@ -344,6 +344,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     if let Some(publisher) = Publisher::get() {
                         // Serialize the list of valid transaction hashes and publish it
                         let serialized_hashes = serde_json::to_string(&all_valid_txn_hashes).unwrap_or_default();
+                        println!("Serialize Hashes: {:?}", serialized_hashes);
                         publisher.publish("block_pbft_commit".to_string(), serialized_hashes);
                     }
                 } else {
