@@ -130,8 +130,6 @@ impl Txn {
             }
             let the_root = verkle_tree.get_root_string();
             if root_hash==the_root{
-                //let mut swarm_guard = p2p::lock_swarm().unwrap();
-                //p2p::prepared_message_handler();
                 return (true,array_of_txn);
             }else{
                 return (false, Vec::new());

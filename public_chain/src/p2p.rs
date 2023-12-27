@@ -320,18 +320,13 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 let the_pbft_hash = self.pbft.get_hash_id();
                 println!("The Node: {:?}", the_pbft_hash);
                 println!("Deserialized data: {:?}", deserialized_data);
-            
-                let mut all_valid_txn_hashes = Vec::new();
                 let mut all_transactions_valid = true;
                 let mut txn_hashes_for_root = Vec::new();
-
                 for (key, inner_map) in deserialized_data.iter() {
+                    
                     let (valid_txn, txn_hashes) = self.txn.is_txn_valid(key.to_string(), inner_map.clone());
                     if valid_txn {
                         println!("Valid transactions for root hash: {:?}", key);
-                       
-                        all_valid_txn_hashes.extend(txn_hashes);
-
                         for (txn_hash, _) in inner_map.iter() {
                             println!("Transaction Hashes: {:?}", txn_hash);
                             txn_hashes_for_root.push(txn_hash);
@@ -342,8 +337,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         break; // Exit the loop if any invalid transaction is found
                     }
                 }
-            
-                if all_transactions_valid && !all_valid_txn_hashes.is_empty() {
+                if all_transactions_valid {
                     println!("All transactions are valid, proceeding with PBFT actions");
                     // Here, use `all_valid_txn_hashes` as needed
                     self.pbft.increment_verification(&the_pbft_hash);
@@ -364,29 +358,44 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
                 if let Some(publisher) = Publisher::get(){
-                    let (root, txn_hashes) = self.pbft.get_txn(json_string);
-
+                    //TODO: Add transactions security
                     // Deserialize transactions based on txn_hashes
-                    let mut transactions = Vec::new();
-                    for txn_hash in &txn_hashes {
-                        transactions.push(txn_hash.to_string()); 
+                    match serde_json::from_str::<String>(&json_string) {
+                    Ok(inner_json_string) => {
+                        match serde_json::from_str::<Vec<String>>(&inner_json_string) {
+                       
+                            Ok(txn_hashes) => {
+                                let mut transactions = Vec::new();
+                                for txn_hash in &txn_hashes {
+                                    transactions.push(txn_hash.to_string()); 
+                                }
+                                let created_block = handle_create_block_pbft(self.app.clone(), transactions);
+                                println!("Created Block After Validity: {:?}", created_block);
+                        
+                                let json = serde_json::to_string(&created_block).expect("can jsonify request");
+                                let block_db = self.storage_path.get_blocks();
+                                let _ = rock_storage::put_to_db(block_db, created_block.public_hash.clone(), &json);
+                                self.app.blocks.push(created_block.clone());
+                        
+                                let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
+                                for txn_hash in txn_hashes {
+                                    println!("Removing transaction {}", txn_hash);
+                                    mempool.remove_transaction_by_id(txn_hash);
+                                }
+                        
+                                publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
+                            },
+                            Err(e) => {
+                                // Handle the error if the JSON string could not be parsed
+                                println!("Failed to parse transaction hashes: {:?}", e);
+                            }
+                        }
+                    },
+                    Err(e) => {
+                        // Handle the error if the outer JSON string could not be parsed
+                        println!("Failed to parse outer transaction hashes: {:?}", e);
                     }
-            
-                    let created_block = handle_create_block_pbft(self.app.clone(), transactions);
-                    println!("Created Block After Validity: {:?}", created_block);
-            
-                    let json = serde_json::to_string(&created_block).expect("can jsonify request");
-                    let block_db = self.storage_path.get_blocks();
-                    let _ = rock_storage::put_to_db(block_db, created_block.public_hash.clone(), &json);
-                    self.app.blocks.push(created_block.clone());
-            
-                    let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
-                    for txn_hash in txn_hashes {
-                        println!("Removing transaction {}", txn_hash);
-                        mempool.remove_transaction_by_id(txn_hash);
-                    }
-            
-                    publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
+                }
                 }
             }
             else if msg.topics[0]==Topic::new("private_blocks_genesis_creation"){
