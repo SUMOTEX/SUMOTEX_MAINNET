@@ -324,7 +324,12 @@ impl Txn {
                 let verified_signature =  account::Account::verify_signature(&public_key,&hash_array,&signature);
                 if verified_signature.is_ok() && verified_signature.unwrap() {
                     let serialized_data = serde_json::to_string(&txn)?;
-                    Self::update_transaction_status(&txn_hash_hex, 1)?;
+
+                    // Update the transaction status
+                    let mut updated_txn = txn.clone();
+                    updated_txn.set_status(1);
+                    rock_storage::put_to_db(&db_handle, txn.txn_hash.to_string(), &serde_json::to_string(&updated_txn)?)?;
+
                     println!("Serialized Transaction Data: {}", serialized_data);  
                     // Hash the serialized transaction data using SHA-256
                     let hash_result = Sha256::digest(serialized_data.as_bytes());
