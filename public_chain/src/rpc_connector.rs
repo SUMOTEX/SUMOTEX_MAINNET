@@ -323,7 +323,7 @@ fn create_block() -> Json<serde_json::Value> {
 #[post("/get-block")]
 fn get_block()->Json<>{
     let local_blocks = APP_BLOCKS.lock().unwrap();
-    Json(json!({"jsonrpc": "1.0", "result": response_body}))
+    Json(json!({"jsonrpc": "1.0", "result": local_blocks}))
 }
 #[post("/read-transaction", data = "<txn_id_info>")]
 fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
