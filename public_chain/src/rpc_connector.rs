@@ -401,6 +401,7 @@ pub async fn start_rpc() {
                             complete_transaction,
                             read_transaction,
                             create_block,
+                            get_block,
                             healthcheck])
         .launch()
         .await
