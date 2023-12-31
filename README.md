@@ -1,6 +1,5 @@
 RUST_LOG=info cargo run
 
-
 Update to this if you are getting error for libp2p-noise on v0.39
  pub fn from_ed25519(ed25519_sk: &ed25519::SecretKey) -> Self { 
      // An Ed25519 public key is derived off the left half of the SHA512 of the 

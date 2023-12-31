@@ -76,6 +76,16 @@ pub struct SignedTransaction {
     // ... other fields as needed ...
 }
 
+#[derive(Debug,Clone)]
+pub struct AppBlocks {
+    pub blocks: Vec<Block>,
+}
+// Global shared state
+lazy_static::lazy_static! {
+    static ref APP_BLOCKS: Arc<Mutex<AppBlocks>> = Arc::new(Mutex::new(
+        AppBlocks { 
+            blocks: vec![] }));
+}
 
 // Route to handle RPC requests for transaction creation
 #[post("/create-transaction", data = "<transaction_data>")]
@@ -310,6 +320,11 @@ fn create_block() -> Json<serde_json::Value> {
     Json(json!({"jsonrpc": "1.0", "result": response_body}))
 }
 
+#[post("/get-block")]
+fn get_block()->Json<>{
+    let local_blocks = APP_BLOCKS.lock().unwrap();
+    Json(json!({"jsonrpc": "1.0", "result": response_body}))
+}
 #[post("/read-transaction", data = "<txn_id_info>")]
 fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
     let txn_id = &txn_id_info.txn_id;
