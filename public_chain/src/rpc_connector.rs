@@ -331,11 +331,11 @@ fn create_block() -> Json<serde_json::Value> {
     Json(json!({"jsonrpc": "1.0", "result": response_body}))
 }
 
-#[post("/get-block")]
-fn get_block()->Json<serde_json::Value>{
+#[get("/get-block")]
+fn get_block() -> Json<serde_json::Value>{
     let local_blocks = APP_BLOCKS.lock().unwrap();
     let data = (*local_blocks).clone();
-    let json_value = serde_json::to_value(data).unwrap(); // Convert to JSON
+    let json_value = serde_json::to_value(data).unwrap(); 
     Json(json!({"jsonrpc": "1.0", "result": json_value}))
 }
 #[post("/read-transaction", data = "<txn_id_info>")]
