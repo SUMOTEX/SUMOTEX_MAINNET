@@ -323,7 +323,7 @@ fn complete_transaction(transaction_info: Json<TransactionSignedInfo>) -> Json<s
     }
 }
 
-#[post("/create-block")]
+#[get("/create-block")]
 fn create_block() -> Json<serde_json::Value> {
     //Create blocks
     let response_body = json!({});
