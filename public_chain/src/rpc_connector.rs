@@ -6,6 +6,7 @@ use rocket::serde::json::Json;
 use serde_json::json;
 use rocket::http::Header;
 use rocket::{ Response};
+use std::sync::{Arc, Mutex};
 use rocket::fairing::{Fairing, Info, Kind};
 use log::error;
 use crate::smart_contract;
