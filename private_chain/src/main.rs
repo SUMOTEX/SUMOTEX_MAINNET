@@ -45,6 +45,7 @@ mod private_app;
 mod private_swarm;
 mod bridge;
 mod api;
+mod rpc_connector;
 use bridge::accept_loop;
 use tokio::net::TcpListener;
 use publisher::Publisher;
@@ -251,7 +252,7 @@ async fn main() {
                 // }
                 event = swarm_private_net.select_next_some() => {
                     let api_app =swarm_private_net.behaviour_mut().app.clone();
-                    api::add_api_blocks(api_app.clone());
+                    rpc_connector::add_api_blocks(api_app.clone());
                     let api_task = tokio::task::spawn_blocking(move || {
                         api::private_api(); // Assuming this is a blocking function
                     });

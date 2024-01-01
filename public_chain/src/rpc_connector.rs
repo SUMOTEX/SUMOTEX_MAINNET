@@ -16,6 +16,7 @@ use crate::public_txn;
 use crate::public_block;
 use crate::public_block::Block;
 use crate::public_txn::TransactionType;
+use crate::public_app::App as PubApp;
 use lazy_static::lazy_static;
 use secp256k1::SecretKey;
 
@@ -87,6 +88,14 @@ lazy_static::lazy_static! {
     static ref APP_BLOCKS: Arc<Mutex<AppBlocks>> = Arc::new(Mutex::new(
         AppBlocks { 
             blocks: vec![] }));
+}
+
+pub fn add_api_blocks(app: PubApp) ->  Json<serde_json::Value>  {
+    let new_blocks = app.get_blocks();
+    let mut app_blocks = APP_BLOCKS.lock().unwrap();
+    app_blocks.blocks = new_blocks.clone();
+    let json_response = json!(new_blocks);
+    Json(json!({"jsonrpc": "1.0", "result": json_response}))
 }
 
 // Route to handle RPC requests for transaction creation
