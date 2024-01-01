@@ -14,6 +14,7 @@ use crate::public_swarm;
 use crate::account;
 use crate::public_txn;
 use crate::public_block;
+use crate::public_block::Block;
 use crate::public_txn::TransactionType;
 use lazy_static::lazy_static;
 use secp256k1::SecretKey;
@@ -77,7 +78,7 @@ pub struct SignedTransaction {
     // ... other fields as needed ...
 }
 
-#[derive(Debug,Clone)]
+#[derive( serde::Serialize, serde::Deserialize,Debug,Clone)]
 pub struct AppBlocks {
     pub blocks: Vec<Block>,
 }
@@ -324,7 +325,9 @@ fn create_block() -> Json<serde_json::Value> {
 #[post("/get-block")]
 fn get_block()->Json<serde_json::Value>{
     let local_blocks = APP_BLOCKS.lock().unwrap();
-    Json(json!({"jsonrpc": "1.0", "result": local_blocks}))
+    let data = (*local_blocks).clone();
+    let json_value = serde_json::to_value(data).unwrap(); // Convert to JSON
+    Json(json!({"jsonrpc": "1.0", "result": json_value}))
 }
 #[post("/read-transaction", data = "<txn_id_info>")]
 fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
