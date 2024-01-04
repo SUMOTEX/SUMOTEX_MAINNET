@@ -141,21 +141,32 @@ pub fn get_all_from_db(db: &DB) -> Vec<(String, String)> {
 
     results
 }
-
-pub fn create_storage(path: &str)-> Result<DB, Error>{
-    let mut opts = Options::default();
-    opts.create_if_missing(true);
-    match DB::open(&opts, path) {
-        Ok(db) => Ok(db),
-        Err(e) => {
-            eprintln!("Failed to open database: {:?}", e);
-            Err(e.into())
-            // Handle the error, possibly by creating the missing file or directory, 
-            // or by taking other appropriate actions.
-            // ...
-        }
+pub fn create_storage(path: &str) -> Result<DB, Error> {
+    if path_exists(path) {
+        // Open the existing database
+        open_db(path)
+    } else {
+        // Create a new database
+        let mut opts = Options::default();
+        opts.create_if_missing(true);
+        DB::open(&opts, path)
     }
 }
+
+// pub fn create_storage(path: &str)-> Result<DB, Error>{
+//     let mut opts = Options::default();
+//     opts.create_if_missing(true);
+//     match DB::open(&opts, path) {
+//         Ok(db) => Ok(db),
+//         Err(e) => {
+//             eprintln!("Failed to open database: {:?}", e);
+//             Err(e.into())
+//             // Handle the error, possibly by creating the missing file or directory, 
+//             // or by taking other appropriate actions.
+//             // ...
+//         }
+//     }
+// }
 pub fn open_storage(path: &str) -> Result<DB, Box<Error>> {
     // Create an instance of Options, used to configure the database
     let mut opts = Options::default();
