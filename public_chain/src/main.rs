@@ -31,6 +31,7 @@ mod smart_contract;
 mod rpc_connector;
 mod gas_calculator;
 mod txn_pool;
+mod token;
 use bridge::accept_loop;
 use crate::public_app::App;
 use std::sync::{RwLock, Arc};
@@ -150,6 +151,7 @@ async fn main() {
 
     let mut stdin = BufReader::new(stdin()).lines();
     let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    
+    let mut gas_token = token::SMTXToken::new("SUMOTEX".to_string(), "SMTX".to_string(), 18, 1000000000000000000);
     if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
         //rpc_connector::set_global_swarm_public_net(swarm_public_net);
         loop {
@@ -324,18 +326,6 @@ async fn main() {
                                 match smart_contract::get_token_owner(cmd,  swarm_public_net) {
                                     Ok(_) => {} // Do nothing on success
                                     Err(e) => eprintln!("Error getting token id: {:?}", e), // Print the error
-                                }
-                            },
-                            cmd if cmd.starts_with("contract key")=> {
-                                match smart_contract::get_erc20_supply(cmd,  swarm_public_net) {
-                                    Ok(_) => {} // Do nothing on success
-                                    Err(e) => eprintln!("Error creating ERC20 contract: {:?}", e), // Print the error
-                                }
-                            },
-                            cmd if cmd.starts_with("supply 721")=> {
-                                match smart_contract::get_erc721_supply(cmd,  swarm_public_net) {
-                                    Ok(_) => {} // Do nothing on success
-                                    Err(e) => eprintln!("Error getting ERC721 supply: {:?}", e), // Print the error
                                 }
                             },
                             _ => error!("unknown command"),  
