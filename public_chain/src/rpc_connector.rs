@@ -1,11 +1,9 @@
-use rocket::Request;
-use rocket::post;
-use rocket::get;
+use rocket::{post,get,options};
 use rocket::routes;
 use rocket::serde::json::Json;
 use serde_json::json;
-use rocket::http::Header;
-use rocket::{ Response};
+use rocket::http::{Header, ContentType, Method};
+use rocket::{Request, Response};
 use rocket::fairing::AdHoc;
 use std::sync::{Arc, Mutex};
 use rocket::fairing::{Fairing, Info, Kind};
@@ -378,8 +376,14 @@ fn healthcheck() -> Json<serde_json::Value> {
     Json(json!({"status":"Okay"}))
 }
 
+/// Catches all OPTION requests in order to get the CORS related Fairing triggered.
+#[options("/<_..>")]
+fn all_options() {
+    /* Intentionally left empty */
+}
 
 pub struct CORS;
+
 #[rocket::async_trait]
 impl Fairing for CORS {
     fn info(&self) -> Info {
@@ -388,9 +392,10 @@ impl Fairing for CORS {
             kind: Kind::Response
         }
     }
+    
     async fn on_response<'r>(&self, _request: &'r Request<'_>, response: &mut Response<'r>) {
         response.set_header(Header::new("Access-Control-Allow-Origin", "*"));
-        response.set_header(Header::new("Access-Control-Allow-Methods", "POST, GET, PATCH, OPTIONS"));
+        response.set_header(Header::new("Access-Control-Allow-Methods", "POST, PATCH, PUT, DELETE, HEAD, OPTIONS, GET"));
         response.set_header(Header::new("Access-Control-Allow-Headers", "*"));
         response.set_header(Header::new("Access-Control-Allow-Credentials", "true"));
     }
@@ -423,8 +428,6 @@ pub async fn start_rpc() {
                             create_block,
                             get_block,
                             healthcheck])
-        //.mount("/my_resource", routes_with_openapi![my_controller])
-        //.mount("/swagger", make_swagger_ui(&get_docs()))
         .launch()
         .await
         .expect("Failed to start Rocket server");
