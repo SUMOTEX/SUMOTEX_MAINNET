@@ -143,13 +143,12 @@ async fn main() {
     public_swarm::create_public_swarm(app.clone(),the_storage).await;
     // Lock the swarm and access it
     println!("Before RPC server");
-    // let rpc_runner = tokio::spawn(async{
-    //     rpc_connector::start_rpc().await
-    // });
-    let rpc_runner = tokio::task::spawn_local(async {
+    let rpc_runner = tokio::spawn(async{
         rpc_connector::start_rpc().await
     });
-    
+    // let rpc_runner = tokio::task::spawn_local(async {
+    //     rpc_connector::start_rpc().await
+    // });    
     println!("After RPC server");
     let swarm_mutex = public_swarm::get_global_swarm_public_net();
 

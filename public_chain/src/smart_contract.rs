@@ -1174,6 +1174,7 @@ pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<i32, Box<dy
             return Err("Account not found".into());
         }
         let result = contract.mint_token(contract_path, &contract_info,account_key,&contract_pub_key.to_string(),"TEST_IPFS");
+        public_txn::Txn::create_and_prepare_transaction(TransactionType::ContractInteraction,call_address.to_string(),public_key.to_string(),1000);
         match result {
             Ok(token_id) => {
                 println!("Mint: {}", token_id);
