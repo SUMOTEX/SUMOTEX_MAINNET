@@ -19,6 +19,9 @@ use crate::public_txn::TransactionType;
 use crate::public_app::App as PubApp;
 use lazy_static::lazy_static;
 use secp256k1::SecretKey;
+use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
+use rocket_okapi::OpenApiGenerator;
+
 
 
 #[derive(Debug,serde::Serialize, serde::Deserialize)]
@@ -361,6 +364,7 @@ fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
     }
 }
 
+
 #[get("/healthcheck")]
 fn healthcheck() -> Json<serde_json::Value> {
     // Perform any necessary health checks here. For simplicity, this example
@@ -372,6 +376,18 @@ fn healthcheck() -> Json<serde_json::Value> {
     });
     Json(json!({"status":"Okay"}))
 }
+fn make_swagger_ui_config() -> SwaggerUIConfig {
+    SwaggerUIConfig {
+        url: "/openapi.json".to_string(),
+        ..Default::default()
+    }
+}
+#[openapi]
+#[get("/openapi.json")]
+fn openapi() -> Json<serde_json::Value> {
+    Json(OpenApiGenerator::new().generate_for_rocket())
+}
+
 pub struct CORS;
 #[rocket::async_trait]
 impl Fairing for CORS {
@@ -394,6 +410,7 @@ pub async fn start_rpc() {
     println!("Starting RPC server...");
     rocket::build()
         .attach(CORS)
+        
         //.manage(swarm) // Add the swarm to the application state
         .configure(rocket::Config {
             address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
@@ -416,6 +433,7 @@ pub async fn start_rpc() {
                             create_block,
                             get_block,
                             healthcheck])
+        .mount("/swagger", make_swagger_ui(&make_swagger_ui_config())) // Mount Swagger UI
         .launch()
         .await
         .expect("Failed to start Rocket server");
