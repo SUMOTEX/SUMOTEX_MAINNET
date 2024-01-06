@@ -305,7 +305,7 @@ impl Txn {
         let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
 
         let mut transaction_serialize_string = rock_storage::get_from_db(&db_handle, txn_hash_hex.clone())
-        .ok_or("Transaction not found")?;  // Replace with an actual error message or error type
+        .ok_or("Transaction not found")?;  // Replace with an
         println!("{}",transaction_serialize_string);
         let deserialized_txn: Result<PublicTxn, serde_json::Error> = serde_json::from_str(&transaction_serialize_string);
         match deserialized_txn {
@@ -384,7 +384,6 @@ impl Txn {
 
         // Serialize and save the updated transaction
         rock_storage::put_to_db(&db_handle, txn_hash.to_string(), &serde_json::to_string(&transaction)?)?;
-
         Ok(())
     }
 

@@ -25,6 +25,7 @@ use crate::public_txn;
 use crate::rock_storage::StoragePath;
 use crate::public_swarm;
 use crate::public_txn::TransactionType;
+use crate::public_txn::PublicTxn;
 
 #[derive(Serialize, Deserialize)]
 pub struct ERC721Token {
@@ -971,7 +972,7 @@ pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, 
 
     Ok(())
 }
-pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contract_name:&str,contract_symbol:&str)->Result<String, Box<dyn std::error::Error>>{
+pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contract_name:&str,contract_symbol:&str)->Result<(String,String,u64, PublicTxn), Box<dyn std::error::Error>>{
     let (public_key,private_key) = generate_keypair(); 
     let path = "./contract/db";
     let contract_path = rock_storage::open_db(path);
@@ -983,9 +984,6 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
             };
             gas_calculator::calculate_gas_for_contract_creation("./sample721.wasm");
             let mut contract = WasmContract::new("./sample721.wasm")?;
-
-            println!("Contract successfully created.");
-        
             let functions = contract.exported_functions();
         
             let the_memory = create_memory(contract.get_store())?;
@@ -1006,10 +1004,28 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
             let mut contract = WasmContract::new("./sample721.wasm")?;
             contract.call_721(&contract_db,&contract_info, &wasm_params)?;
             let the_item = rock_storage::get_from_db(&contract_db,public_key.to_string());
-            public_txn::Txn::create_and_prepare_transaction(TransactionType::ContractCreation,call_address.to_string(),public_key.to_string(),1000);
+            let result = public_txn::Txn::create_and_prepare_transaction(
+                TransactionType::ContractCreation,
+                call_address.to_string(),
+                public_key.to_string(),
+                1000);
             println!("Contract Public Key: {:?}",public_key.to_string());
             println!("The Key Item: {:?}",the_item);
-            Ok(public_key.to_string())
+            // Check the result
+            match result {
+                Ok((txn_hash_hex, gas_cost, new_txn)) => {
+                    // Do something with the values if needed
+                    // ...
+
+                    // Return the values from your function
+                    Ok((public_key.to_string(),txn_hash_hex, gas_cost, new_txn))
+                }
+                Err(err) => {
+                    // Handle the error if necessary
+                    Err(err)
+                }
+            }
+
             // Process the_item as needed
         }
         Err(e) => {
