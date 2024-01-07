@@ -428,7 +428,18 @@ impl Txn {
             signature: Vec::new(), // Placeholder
             gas_cost,
         };
-    
+        let serialized_txn: Result<String, serde_json::Error> = serde_json::to_string(&new_txn);
+        match serialized_txn {
+            Ok(json_string) => {
+                let transaction = rock_storage::put_to_db(&db_handle, txn_hash_hex.clone(),&json_string);
+                Ok((txn_hash_hex, gas_cost, new_txn))
+            },
+            Err(e) => {
+                // Handle the error, for example, by logging or panicking
+                panic!("Failed to serialize transaction: {}", e);
+                return Err(e.into());
+            }
+        }
         Ok((txn_hash_hex, gas_cost, new_txn))
     }
     pub fn get_transactions_by_caller(
