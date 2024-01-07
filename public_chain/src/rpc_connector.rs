@@ -185,7 +185,6 @@ fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> 
     let contract_symbol = &post_data.contract_symbol;
     match smart_contract::create_erc721_contract_official(&call_address, &private_key,contract_name,contract_symbol) {
         Ok((contract_address,txn_hash,gas_cost,body)) => {
-            println!("Contract successfully created: {:?}", contract_address);
             let response_body = json!({"contract_address": contract_address,
                                         "txn_hash":txn_hash,
                                         "gas_cost":gas_cost,

@@ -115,7 +115,7 @@ fn calculate_gas_by_opcode(opcodes: &HashSet<String>)->u64 {
 
         if let Some(&gas) = gas_map.get(base_opcode) {
             total_gas += gas;
-            println!("Opcode: {:?}, Gas cost: {}", base_opcode, gas);
+            //println!("Opcode: {:?}, Gas cost: {}", base_opcode, gas);
         } else {
             println!("No gas cost found for base opcode {}", base_opcode);
         }

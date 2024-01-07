@@ -289,7 +289,7 @@ impl WasmContract {
         let initialise_func = link.get_typed_func::<(i32, i32, i32, i32),()>(&mut store, &wasm_params.name)?;
 
         let result = initialise_func.call(&mut store,  args_tuple)?;
-        println!("Initialize: {:?}",result);
+        //println!("Initialize: {:?}",result);
         let updated_data = wasm_memory.data(&mut store);
         let updated_byte_vector: Vec<u8> = updated_data.to_vec();
         rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
