@@ -440,7 +440,7 @@ impl Txn {
                 return Err(e.into());
             }
         }
-        Ok((txn_hash_hex, gas_cost, new_txn))
+
     }
     pub fn get_transactions_by_caller(
         caller_address: &str,
