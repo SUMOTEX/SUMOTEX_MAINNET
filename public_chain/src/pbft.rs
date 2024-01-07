@@ -1,4 +1,4 @@
-use sha2::{Sha256,Digest};
+use sha2::{Sha256};
 use serde::{Deserialize, Serialize};
 use libp2p::{
     floodsub::{Topic},
