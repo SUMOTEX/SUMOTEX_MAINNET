@@ -1010,7 +1010,6 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
                 public_key.to_string(),
                 1000);
             println!("Contract Public Key: {:?}",public_key.to_string());
-            println!("The Key Item: {:?}",the_item);
             // Check the result
             match result {
                 Ok((txn_hash_hex, gas_cost, new_txn)) => {
@@ -1215,7 +1214,7 @@ pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<i32, Box<dy
 pub fn mint_token_official(contract_address:&String,
                             account_key:&String,
                             private_key:&String,
-                            ipfs:&String)->Result<i32, Box<dyn std::error::Error>>{
+                            ipfs:&String)->Result<(i32,String, u64), Box<dyn std::error::Error>>{
         let c_path = "./contract/db";
         let a_path = "./account/db";
         let contract_path = match rock_storage::open_db(c_path) {
@@ -1245,24 +1244,48 @@ pub fn mint_token_official(contract_address:&String,
         // if account_data.is_none() {
         //     return Err("Account not found".into());
         // }
-        let result = contract.mint_token(&contract_path, &contract_info,account_key,&contract_address.to_string(),ipfs);
-        public_txn::Txn::create_and_prepare_transaction(TransactionType::ContractInteraction,account_key.to_string(),contract_address.to_string(),1000);
-        match result {
-            Ok(token_id) => {
-                println!("Mint: {}", token_id);
-                // let read_result = contract.read_owner_token(contract_path, &contract_info,&contract_address.to_string(),token_id);
-                // if let Err(e) = read_result {
-                //     println!("Error after minting, could not read token owner: {}", e);
-                //     return Err(e);
-                // }
-                Ok(token_id)
+        let txn = public_txn::Txn::create_and_prepare_transaction(TransactionType::ContractInteraction,account_key.to_string(),contract_address.to_string(),1000);
+        match txn {
+            Ok((txn_hash,gas_cost,new_txn)) => {
+                let private_key_bytes = match hex::decode(&private_key) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        panic!("Failed to decode private key: {:?}", e);
+                    }
+                };
+                // Attempt to create a SecretKey from the decoded bytes
+                let the_official_private_key = match SecretKey::from_slice(&private_key_bytes) {
+                    Ok(key) => key,
+                    Err(e) => {
+                        panic!("Failed to create SecretKey: {:?}", e);
+                    }
+                };
+                public_txn::Txn::sign_and_submit_transaction(account_key,txn_hash.clone(),&the_official_private_key);
+                let result = contract.mint_token(&contract_path, &contract_info,account_key,&contract_address.to_string(),ipfs);
+                match result {
+                    Ok(token_id) => {
+                        println!("Mint: {}", token_id);
+                        return Ok((token_id, txn_hash.clone(), gas_cost));
+                    }
+                    Err(e) => {
+                        println!("Error minting token: {}", e);
+                        Err(e)
+                    }
+                }
             }
-            Err(e) => {
-                println!("Error minting token: {}", e);
-                Err(e)
+            Err(txn_err) => {
+                println!("Error creating transaction: {}", txn_err);
+                // Handle the error case for transaction creation.
+                // You might want to perform cleanup or other actions.
+                Err(txn_err.into())
             }
         }
-}
+        // let read_result = contract.read_owner_token(contract_path, &contract_info,&contract_address.to_string(),token_id);
+        // if let Err(e) = read_result {
+        //     println!("Error after minting, could not read token owner: {}", e);
+        //     return Err(e);
+        // }    
+    }
 pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<(String,String), Box<dyn std::error::Error>>{
     let c_path = "./contract/db";
     let a_path = "./account/db";
