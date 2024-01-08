@@ -286,6 +286,22 @@ fn get_wallet_transactions(post_data: Json<ReadAccountInfo>)-> Json<serde_json::
         }
     }
 }
+#[post("/get-receiver-transactions",data="<post_data>")]
+fn get_receiver_transactions(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
+    let pub_add = &post_data.pub_address;
+    match public_txn::Txn::get_transactions_by_sender(pub_add) {
+        Ok(txns) => {
+            let response_body = json!({
+                "transactions": txns, // Be cautious with private key handling
+            });
+            Json(json!({"jsonrpc": "1.0", "result": response_body}))
+        },
+        Err(e) => {
+            error!("Error getting wallet: {:?}", e);
+            Json(json!({"jsonrpc": "1.0", "result": "error"}))
+        }
+    }
+}
 #[post("/transfer-token",data="<post_data>")]
 fn transfer_token(post_data: Json<TransferTokenInfo>)-> Json<serde_json::Value> {
     let from_address = &post_data.from_address;
@@ -449,6 +465,7 @@ pub async fn start_rpc() {
                             get_wallet_transactions,
                             complete_transaction,
                             read_transaction,
+                            get_receiver_transactions,
                             create_block,
                             get_block,
                             healthcheck])

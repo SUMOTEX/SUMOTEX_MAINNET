@@ -484,5 +484,47 @@ impl Txn {
         }
         
     }
+    pub fn get_transactions_by_sender(
+        sender_address: &str,
+    ) -> Result<Vec<PublicTxn>, Box<dyn std::error::Error>> {
+        // Open the database handle
+        let path = "./transactions/db";
+        let transaction_path = rock_storage::open_db(path);
+        match transaction_path {
+            Ok(db_handle) => {
+                // Retrieve the vector of tuples
+                let result_tuples = rock_storage::get_all_from_db(&db_handle);
+            
+                // Iterate through the database to find transactions with the specified caller_address
+                let mut transactions = Vec::new();
+                for result in result_tuples {
+                    // Handle the error at each iteration
+                    match result {
+                        (txn_hash, _) => {
+                            if let Some(txn_data) = rock_storage::get_from_db(&db_handle, txn_hash.clone()) {
+                                if let Ok(transaction) = serde_json::from_str::<PublicTxn>(&txn_data) {
+                                    // Check if the caller_address matches
+                                    if transaction.to_address == sender_address {
+                                        transactions.push(transaction);
+                                    }
+                                } else {
+                                    // Handle deserialization error
+                                    error!("Error deserializing transaction data for hash: {:?}", txn_hash);
+                                }
+                            } else {
+                                // Handle missing transaction data
+                                error!("Transaction data not found for hash: {:?}", txn_hash);
+                            }
+                        }
+                    }
+                }
+                Ok(transactions) 
+            }
+            Err(e) => {
+                return Err(e.into());
+            }
+        }
+        
+    }
 
 }
