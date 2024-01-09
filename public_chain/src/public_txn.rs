@@ -147,7 +147,7 @@ impl Txn {
 
         let txn_data = rock_storage::get_from_db(&db_handle, txn_hash.to_string())
             .ok_or("Transaction not found")?; // Handle missing transactions appropriately
-
+ 
         let transaction: PublicTxn = serde_json::from_str(&txn_data)?;
 
         Ok(transaction)

@@ -73,7 +73,7 @@ pub struct TransferTokenInfo {
 }
 #[derive(serde::Deserialize, Debug)]
 pub struct TxnIdInfo {
-    txn_id: String,
+    txn_hash: String,
 }
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct SignedTransaction {
@@ -417,7 +417,7 @@ fn get_latest_block() -> Json<serde_json::Value>{
 
 #[post("/read-transaction", data = "<txn_id_info>")]
 fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
-    let txn_id = &txn_id_info.txn_id;
+    let txn_id = &txn_id_info.txn_hash;
 
     // Assuming a function `get_transaction_by_id` that fetches the transaction from storage
     match public_txn::Txn::get_transaction_by_id(txn_id) {
