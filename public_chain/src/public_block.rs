@@ -185,6 +185,23 @@ pub fn handle_create_block_private_chain(app:App,private_hash:Option<String>,txn
 
     block
 }
+pub fn get_latest_block_hash()-> Result<Block, Box<dyn std::error::Error>>{
+    let path = "./public_blockchain/db";
+    let block_path = rock_storage::open_db(path);
+
+    match block_path {
+        Ok(db_handle) => {
+            match rock_storage::get_from_db(&db_handle, "epoch") {
+                Some(data) => {
+                    let block: Block = serde_json::from_str(&data)?;
+                    Ok(block)
+                }
+                None => Err("Epoch not found".to_string().into()),
+            }
+        }
+        Err(e) => Err(e.to_string().into()),
+    }
+}
 
 impl Block {
     pub fn new(id: u64, previous_hash: String, txn:Vec<String>, private_hash: Option<String>,root:Option<String>) -> Self {

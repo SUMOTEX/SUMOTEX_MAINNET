@@ -375,7 +375,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                 let json = serde_json::to_string(&created_block).expect("can jsonify request");
                                 let block_db = self.storage_path.get_blocks();
                                 let _ = rock_storage::put_to_db(block_db, created_block.public_hash.clone(), &json);
-                                let _ = rock_storage::put_to_db(block_db,"epoch", &created_block.public_hash.clone());
+                                let _ = rock_storage::put_to_db(block_db,"epoch", &json);
                                 self.app.blocks.push(created_block.clone());
                         
                                 let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();

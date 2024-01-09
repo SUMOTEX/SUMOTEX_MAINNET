@@ -394,6 +394,27 @@ fn get_block() -> Json<serde_json::Value>{
     let json_value = serde_json::to_value(data).unwrap(); 
     Json(json!({"jsonrpc": "1.0", "result": json_value}))
 }
+
+#[get("/latest-block")]
+fn get_latest_block() -> Json<serde_json::Value>{
+    let data = public_block::get_latest_block_hash();
+    match data {
+        Ok(result) => Json(json!({"jsonrpc": "1.0", "result": result})),
+        Err(err) => {
+            let serialized_error = serde_json::to_string(&(err.to_string()))
+                .expect("Serialization failed");
+            Json(json!({
+                "jsonrpc": "1.0",
+                "error": {
+                    "code": 500,
+                    "message": "Internal Server Error",
+                    "data": serialized_error
+                }
+            }))
+        }
+    }
+}
+
 #[post("/read-transaction", data = "<txn_id_info>")]
 fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
     let txn_id = &txn_id_info.txn_id;
@@ -490,6 +511,7 @@ pub async fn start_rpc() {
                             get_receiver_transactions,
                             create_block,
                             get_block,
+                            get_latest_block,
                             healthcheck])
         .launch()
         .await
