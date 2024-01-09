@@ -74,7 +74,6 @@ pub fn mine_block(id: u64, timestamp: i64, previous_hash: &str) -> (u64, String)
 }
 
 pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error::Error>> {
-        println!("Call PBFT");
         let mut verkle_tree = VerkleTree::new();
         let mut transactions: HashMap<String, String>= HashMap::new();
         // Fetch transactions from the mempool
