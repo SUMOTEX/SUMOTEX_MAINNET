@@ -59,16 +59,24 @@ pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::er
 
     for path in &paths {
         if !Path::new(path).exists() {
-            rock_storage::create_storage(path)?;
+            fs::create_dir_all(path)?;
+            println!("Directory {:?} created.", path);
         } else {
             eprintln!("Directory {:?} already exists.", path);
         }
     }
+    // for path in &paths {
+    //     if !Path::new(path).exists() {
+    //         rock_storage::create_storage(path)?;
+    //     } else {
+    //         eprintln!("Directory {:?} already exists.", path);
+    //     }
+    // }
 
-    let db_public_block = rock_storage::open_storage("./public_blockchain")?;
-    let db_account = rock_storage::open_storage("./account")?;
-    let db_transactions = rock_storage::open_storage("./transactions")?;
-    let db_contract = rock_storage::open_storage("./contract")?;
+    let db_public_block =open_or_create_storage("./public_blockchain")?;
+    let db_account = open_or_create_storage("./account")?;
+    let db_transactions =open_or_create_storage("./transactions")?;
+    let db_contract = open_or_create_storage("./contract")?;
 
     let the_storage = rock_storage::StoragePath {
         blocks: db_public_block,
@@ -80,6 +88,16 @@ pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::er
     println!("Storage initialized for blocks, accounts, contracts, and transactions");
     Ok(the_storage)
 
+}
+
+fn open_or_create_storage(path: &str) -> Result<DBWithThreadMode<SingleThreaded>, Box<dyn std::error::Error>> {
+    if !Path::new(path).exists() {
+        rock_storage::create_storage(path)?;
+        println!("Database at path {:?} created.", path);
+    } else {
+        eprintln!("Database at path {:?} already exists.", path);
+    }
+    rock_storage::open_storage(path)
 }
 fn db_extract(db: Arc<RwLock<DBWithThreadMode<SingleThreaded>>>) -> DBWithThreadMode<SingleThreaded> {
     Arc::try_unwrap(db).unwrap().into_inner().unwrap()
