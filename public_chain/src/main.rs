@@ -97,7 +97,7 @@ fn open_or_create_storage(path: &str) -> Result<DBWithThreadMode<SingleThreaded>
     } else {
         eprintln!("Database at path {:?} already exists.", path);
     }
-    Ok(rock_storage::open_storage(path)?);
+    Ok(rock_storage::open_storage(path)?)
 }
 fn db_extract(db: Arc<RwLock<DBWithThreadMode<SingleThreaded>>>) -> DBWithThreadMode<SingleThreaded> {
     Arc::try_unwrap(db).unwrap().into_inner().unwrap()
