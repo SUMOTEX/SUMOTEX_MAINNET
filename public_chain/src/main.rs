@@ -60,6 +60,8 @@ pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::er
     for path in &paths {
         if !Path::new(path).exists() {
             rock_storage::create_storage(path)?;
+        } else {
+            eprintln!("Directory {:?} already exists.", path);
         }
     }
 

@@ -155,6 +155,7 @@ pub fn handle_finalised_block(swarm: &mut Swarm<AppBehaviour>, block:Block){
         .publish(BLOCK_TOPIC.clone(), json.as_bytes());
 }
 
+
 pub fn handle_create_block_pbft(app: App, transactions: Vec<String>) -> Block {
     let app = app.blocks.last().expect("There should be at least one block");
     let latest_block = app;
