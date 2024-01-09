@@ -100,7 +100,15 @@ pub fn remove_lock_file() {
         eprintln!("Error removing lock file: {:?}", e);
     }
 }
+async fn block_producer() {
+    loop {
+        // Your periodic function logic goes here
+        public_block::pbft_pre_message_block_create_scheduler();
 
+        // Sleep for the specified interval
+        sleep(Duration::from_secs(5)).await; // Adjust the interval as needed
+    }
+}
 
 #[tokio::main]
 async fn main() {
@@ -116,6 +124,12 @@ async fn main() {
         "/ip4/0.0.0.0/tcp/8089",
         "/ip4/0.0.0.0/tcp/8090",
         "/ip4/0.0.0.0/tcp/8091",
+        "/ip4/0.0.0.0/tcp/8092",
+        "/ip4/0.0.0.0/tcp/8093",
+        "/ip4/0.0.0.0/tcp/8094",
+        "/ip4/0.0.0.0/tcp/8095",
+        "/ip4/0.0.0.0/tcp/8096",
+        "/ip4/0.0.0.0/tcp/8097",
         // ... other addresses
         ];
 
@@ -130,6 +144,9 @@ async fn main() {
         "127.0.0.1:8096",
         "127.0.0.1:8097",
         "127.0.0.1:8098",
+        "127.0.0.1:8099",
+        "127.0.0.1:8100",
+        "127.0.0.1:8101",
         ];
     //create storage
     remove_lock_file();
@@ -146,6 +163,7 @@ async fn main() {
     let rpc_runner = tokio::spawn(async{
         rpc_connector::start_rpc().await
     });
+    tokio::spawn(block_producer());
     // let rpc_runner = tokio::task::spawn_local(async {
     //     rpc_connector::start_rpc().await
     // });    

@@ -73,13 +73,18 @@ pub fn mine_block(id: u64, timestamp: i64, previous_hash: &str) -> (u64, String)
     }
 }
 
-pub fn pbft_pre_message_block_create_scheduler() {
+pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error::Error>> {
         println!("Call PBFT");
         let mut verkle_tree = VerkleTree::new();
         let mut transactions: HashMap<String, String>= HashMap::new();
         // Fetch transactions from the mempool
         let mempool_lock = txn_pool::Mempool::get_instance().lock().unwrap();
         let mempool_transactions = mempool_lock.get_transactions(5); // Assuming this method exists and returns a list of transactions
+
+        if mempool_transactions.is_empty() {
+            println!("No transactions in the mempool. Skipping PBFT block creation.");
+            return Ok(());
+        }
         for txn in mempool_transactions {
             // Process each transaction
             let serialized_data = serde_json::to_string(&txn).expect("can jsonify request");
@@ -106,6 +111,7 @@ pub fn pbft_pre_message_block_create_scheduler() {
             let serialised_dictionary_bytes = serialised_dictionary.to_vec();
             publisher.publish_block("block_pbft_pre_prepared".to_string(), serialised_dictionary_bytes);
         }
+        Ok(())
     }
 pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
     if let Some(data) = cmd.strip_prefix("create b") {
