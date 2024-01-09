@@ -82,7 +82,6 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
         let mempool_transactions = mempool_lock.get_transactions(5); // Assuming this method exists and returns a list of transactions
 
         if mempool_transactions.is_empty() {
-            println!("No transactions in the mempool. Skipping PBFT block creation.");
             return Ok(());
         }
         for txn in mempool_transactions {
