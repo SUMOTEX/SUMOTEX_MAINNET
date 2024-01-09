@@ -181,7 +181,15 @@ pub fn get_account_no_swarm(account_key: &str) -> Option<Account> {
     }
 }
 
+pub fn account_exists(account_key: &str) -> Result<bool, Box<dyn std::error::Error>> {
+    let path = "./account/db";
+    let account_path = rock_storage::open_db(path)?;
 
+    match rock_storage::get_from_db(&account_path, account_key.to_string()) {
+        Some(_) => Ok(true),  // Account found
+        None => Ok(false),    // Account not found
+    }
+}
 fn save_account(account: &Account, db_handle: &DB) -> Result<(), &'static str> {
     let serialized_data = serde_json::to_string(account).map_err(|_| "Failed to serialize account")?;
     rock_storage::put_to_db(db_handle, account.public_address.clone(), &serialized_data)

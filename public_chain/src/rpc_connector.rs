@@ -237,6 +237,7 @@ fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value>
         }
     }
 }
+
 // Route to handle RPC requests.
 #[post("/create-wallet")]
 fn create_wallet()-> Json<serde_json::Value> {
@@ -254,7 +255,23 @@ fn create_wallet()-> Json<serde_json::Value> {
         }
     }
 }
+//All wallet related
+#[post("/check-account",data="<post_data>")]
+fn get_account(post_data: Json<ReadAccountInfo>)->Json<serde_json::Value>{
+    let pub_add = &post_data.pub_address;
+    match account::account_exists(pub_add) {
+        Ok(true) =>{
+            Json(json!({"jsonrpc": "1.0", "result": true}))
+        },
+        Ok(false) => {
+            Json(json!({"jsonrpc": "1.0", "result": false}))
+        },
+        Err(e) => {
+            Json(json!({"jsonrpc": "1.0", "result": "error"}))
+        }
+    }
 
+}
 // Get balance
 #[post("/get-wallet-balance",data="<post_data>")]
 fn get_balance(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
@@ -272,6 +289,7 @@ fn get_balance(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
         }
     }
 }
+
 #[post("/get-wallet-transactions",data="<post_data>")]
 fn get_wallet_transactions(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
     let pub_add = &post_data.pub_address;
@@ -461,10 +479,12 @@ pub async fn start_rpc() {
                             sign_transaction,
                             create_wallet,
                             mint_token_contract,
+                            read_token_contract,
                             transfer_nft,
                             transfer_token,
                             get_balance,
                             get_wallet_transactions,
+                            get_account,
                             complete_transaction,
                             read_transaction,
                             get_receiver_transactions,
