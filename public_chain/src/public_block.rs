@@ -133,7 +133,6 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
         let block_db = behaviour.storage_path.get_blocks();
         rock_storage::put_to_db(block_db,latest_block.public_hash.clone(),&json);
         let the_item: Option<String> = rock_storage::get_from_db(block_db,latest_block.public_hash.clone());
-        //println!("Stored block {:?}",the_item);
         behaviour.app.blocks.push(block);
         info!("broadcasting new block");
         
