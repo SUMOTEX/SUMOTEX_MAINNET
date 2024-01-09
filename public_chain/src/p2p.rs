@@ -187,7 +187,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         error!("error sending response via channel, {}", e);
                     }
                 }
-            } else if msg.topics[0]==Topic::new("blocks"){
+            } else if msg.topics[0]==Topic::new("create_blocks"){
                 match serde_json::from_slice::<Block>(&msg.data) {
                     Ok(block) => {
                         info!("Received new block from {}", msg.source.to_string());
@@ -363,7 +363,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     match serde_json::from_str::<String>(&json_string) {
                     Ok(inner_json_string) => {
                         match serde_json::from_str::<Vec<String>>(&inner_json_string) {
-                       
                             Ok(txn_hashes) => {
                                 let mut transactions = Vec::new();
                                 for txn_hash in &txn_hashes {
@@ -384,7 +383,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     mempool.remove_transaction_by_id(txn_hash);
                                 }
                         
-                                publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
+                                publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                             },
                             Err(e) => {
                                 // Handle the error if the JSON string could not be parsed
@@ -409,7 +408,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 let block_db = self.storage_path.get_blocks();
                 let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
                 self.app.blocks.push(created_block);
-                publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
+                publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                 }
 
             } else if msg.topics[0]==Topic::new("hybrid_block_creation")  {
@@ -422,23 +421,9 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     let block_db = self.storage_path.get_blocks();
                     let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
                     self.app.blocks.push(created_block);
-                    publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
+                    publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                 }
             }
-            // else if msg.topics[0]==Topic::new("transactions")  {
-            //     let received_serialized_data =msg.data;
-            //     let json_string = String::from_utf8(received_serialized_data).unwrap();
-            //     println!("Contract creation Transactions: {:?}",json_string);
-            //     if let Some(publisher) = Publisher::get(){
-            //         let (root,txn) = self.pbft.get_txn(json_string);
-            //         let created_block = public_block::handle_create_block_pbft(self.app.clone(),root,txn);
-            //         let json = serde_json::to_string(&created_block).expect("can jsonify request");
-            //         let block_db = self.storage_path.get_blocks();
-            //         let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
-            //         self.app.blocks.push(created_block);
-            //         publisher.publish_block("blocks".to_string(),json.as_bytes().to_vec())
-            //     }
-            // }
         }
     }
 }

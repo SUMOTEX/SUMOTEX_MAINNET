@@ -15,7 +15,7 @@ use crate::verkle_tree::VerkleTree;
 use crate::rock_storage;
 use crate::txn_pool;
 use crate::publisher::Publisher;
-pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("blocks"));
+pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("create_blocks"));
 
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
