@@ -284,7 +284,7 @@ async fn main() {
                     },
                     event = swarm_public_net.select_next_some() => {
                         let api_app =swarm_public_net.behaviour_mut().app.clone();
-                        add_api_blocks::add_api_blocks(api_app.clone());
+                        rpc_connector::add_api_blocks(api_app.clone());
                         let api_task = tokio::task::spawn_blocking(move || {
                             api::pub_api(); // Assuming this is a blocking function
                         });
