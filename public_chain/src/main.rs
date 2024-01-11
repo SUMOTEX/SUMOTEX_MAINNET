@@ -285,9 +285,6 @@ async fn main() {
                     event = swarm_public_net.select_next_some() => {
                         let api_app =swarm_public_net.behaviour_mut().app.clone();
                         rpc_connector::add_api_blocks(api_app.clone());
-                        let api_task = tokio::task::spawn_blocking(move || {
-                            api::pub_api(); // Assuming this is a blocking function
-                        });
                         None
                     }
                     publish = publish_receiver.recv() => {
@@ -297,6 +294,8 @@ async fn main() {
                     },
                     publish_block = publish_bytes_receiver.recv()=>{
                         let (title, message) = publish_block.clone().expect("Publish Block exists");
+                        let api_app =swarm_public_net.behaviour_mut().app.clone();
+                        rpc_connector::add_api_blocks(api_app.clone());
                         Some(p2p::EventType::PublishBlock(title, message.into()))
                     }
                 };
