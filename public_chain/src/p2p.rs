@@ -405,7 +405,10 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                             Ok(block) => {
                                 if let Some(publisher) = Publisher::get() {
                                     info!("Received new block from {}", msg.source.to_string());
- 
+                                    let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
+                                    for txn_hash in &block.transactions {
+                                        mempool.remove_transaction_by_id(txn_hash.clone());
+                                    }
                                     self.app.try_add_block(block.clone());
                                     let json = serde_json::to_string(&block).expect("can jsonify request");
                                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())

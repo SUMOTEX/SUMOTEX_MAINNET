@@ -105,7 +105,7 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
         let mut map_with_peer_id: HashMap<String, HashMap<String, HashMap<String,String>>> = HashMap::new();
         map_with_peer_id.insert(peer_id.to_string(), map);
         let serialised_dictionary = serde_json::to_vec(&map_with_peer_id).unwrap();
-        println!("Broadcasting pbft blocks...");
+        //println!("Broadcasting pbft blocks...");
         if let Some(publisher) = Publisher::get(){
             let serialised_dictionary_bytes = serialised_dictionary.to_vec();
             publisher.publish_block("block_pbft_pre_prepared".to_string(), serialised_dictionary_bytes);
