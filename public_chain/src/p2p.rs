@@ -201,7 +201,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         self.app.try_add_block(block.clone());
                         let block_db = self.storage_path.get_blocks();
                         let json = serde_json::to_string(&block).expect("can jsonify request");
-                        //let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &block);
+                        let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &json);
                         let _ = rock_storage::put_to_db(block_db,"epoch", &json);
                     },
                     Err(err) => {
@@ -412,6 +412,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                         } 
                                     }
                                     self.app.try_add_block(block.clone());
+                                    let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &json);
+                                    let _ = rock_storage::put_to_db(block_db,"epoch", &json);
                                     let json = serde_json::to_string(&block).expect("can jsonify request");
                                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                                 }
