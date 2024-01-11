@@ -31,28 +31,6 @@ lazy_static::lazy_static! {
             blocks: vec![] }));
 }
 
-// Endpoint to print peers
-// async fn print_peers() -> impl Responder {
-//     let swarm_public_net = "" // TODO: fetch or get access to your swarm
-//     p2p::handle_print_peers(&swarm_public_net);
-//     HttpResponse::Ok().finish()
-// }
-
-// // Endpoint to print the chain
-// async fn print_chain() -> impl Responder {
-//     let swarm_public_net = "" // TODO: fetch or get access to your swarm
-//     p2p::handle_print_chain(swarm_public_net);
-//     HttpResponse::Ok().finish()
-// }
-
-// // Endpoint to create a block
-// async fn create_block() -> impl Responder {
-//     let swarm_public_net = "" // TODO: fetch or get access to your swarm
-//     // Note: You might want to get more details to create a block via request parameters or body.
-//     public_block::handle_create_block("", swarm_public_net);
-//     HttpResponse::Ok().finish()
-// }
-
 
 pub fn add_api_blocks(app: PubApp) -> impl Responder {
     let new_blocks = app.get_blocks();
