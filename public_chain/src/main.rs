@@ -1,7 +1,7 @@
 use libp2p::{
     swarm::{Swarm},
 };
-use libp2p::PeerId;
+
 use log::{error, info};
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
@@ -43,11 +43,11 @@ use rocksdb::SingleThreaded;
 type MySwarm = Swarm<AppBehaviour>;
 
 
-enum CustomEvent {
-    ReceivedRequest(PeerId, Vec<u8>),
-    ReceivedResponse(PeerId, Vec<u8>),
-    // ... potentially other custom events specific to your application
-}
+// enum CustomEvent {
+//     ReceivedRequest(PeerId, Vec<u8>),
+//     ReceivedResponse(PeerId, Vec<u8>),
+//     // ... potentially other custom events specific to your application
+// }
 
 pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::error::Error>>{
     let paths = [
@@ -57,14 +57,14 @@ pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::er
         "./contract",
     ];
 
-    for path in &paths {
-        if !Path::new(path).exists() {
-            fs::create_dir_all(path)?;
-            println!("Directory {:?} created.", path);
-        } else {
-            eprintln!("Directory {:?} already exists.", path);
-        }
-    }
+    // for path in &paths {
+    //     if !Path::new(path).exists() {
+    //         fs::create_dir_all(path)?;
+    //         println!("Directory {:?} created.", path);
+    //     } else {
+    //         eprintln!("Directory {:?} already exists.", path);
+    //     }
+    // }
     // for path in &paths {
     //     if !Path::new(path).exists() {
     //         rock_storage::create_storage(path)?;
@@ -91,12 +91,13 @@ pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::er
 }
 
 fn open_or_create_storage(path: &str) -> Result<DBWithThreadMode<SingleThreaded>, Box<dyn std::error::Error>> {
-    if !Path::new(path).exists() {
-        rock_storage::create_storage(path)?;
-        println!("Database at path {:?} created.", path);
-    } else {
-        eprintln!("Database at path {:?} already exists.", path);
-    }
+    rock_storage::create_storage(path)?;
+    // if !Path::new(path).exists() {
+    //     rock_storage::create_storage(path)?;
+    //     println!("Database at path {:?} created.", path);
+    // } else {
+    //     eprintln!("Database at path {:?} already exists.", path);
+    // }
     Ok(rock_storage::open_storage(path)?)
 }
 fn db_extract(db: Arc<RwLock<DBWithThreadMode<SingleThreaded>>>) -> DBWithThreadMode<SingleThreaded> {
@@ -120,13 +121,15 @@ pub fn remove_lock_file() {
         eprintln!("Error removing lock file: {:?}", e);
     }
 }
+
+
 async fn block_producer() {
     loop {
         // Your periodic function logic goes here
         public_block::pbft_pre_message_block_create_scheduler();
 
         // Sleep for the specified interval
-        sleep(Duration::from_secs(5)).await; // Adjust the interval as needed
+        sleep(Duration::from_secs(10)).await; // Adjust the interval as needed
     }
 }
 

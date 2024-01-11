@@ -1,5 +1,4 @@
 use chrono::prelude::*;
-
 use libp2p::{
     floodsub::{Topic},
     swarm::{Swarm},
@@ -14,6 +13,7 @@ use std::collections::HashMap;
 use crate::verkle_tree::VerkleTree;
 use crate::rock_storage;
 use crate::txn_pool;
+use crate::p2p;
 use crate::publisher::Publisher;
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("create_blocks"));
 
@@ -96,14 +96,17 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
             dictionary_data.insert("key".to_string(), txn.txn_hash.clone());
             dictionary_data.insert("value".to_string(), serialized_data.clone());
             transactions.insert(txn.txn_hash.clone(), serialized_data);
-            println!("Transactions: {:?}",txn);
+            //println!("Transactions: {:?}",txn);
         }
+        let peer_id = p2p::get_peer_id();
         let root_hash = verkle_tree.get_root_string();
         let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
         map.insert(root_hash.clone(), transactions.clone());
-        let serialised_dictionary = serde_json::to_vec(&map).unwrap();
-        println!("root_hash: {:?}",root_hash);
-        println!("Txn: {:?}",transactions.clone());
+        let mut map_with_peer_id: HashMap<String, HashMap<String, HashMap<String,String>>> = HashMap::new();
+        map_with_peer_id.insert(peer_id.to_string(), map);
+        let serialised_dictionary = serde_json::to_vec(&map_with_peer_id).unwrap();
+        // println!("root_hash: {:?}",root_hash);
+        // println!("Txn: {:?}",transactions.clone());
         println!("Broadcasting pbft blocks...");
         if let Some(publisher) = Publisher::get(){
             let serialised_dictionary_bytes = serialised_dictionary.to_vec();

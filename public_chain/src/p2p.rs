@@ -161,7 +161,14 @@ fn extract_block_hash(json_str: &str) -> Option<String> {
     }
     None
 }
+// A fictional function to get the peer_id for a given key
+pub fn get_peer_id() -> String {
+    // Replace this with your actual logic to obtain the peer_id
+    // For now, let's just concatenate "peer_id_" with the key
+    format!("{}", PEER_ID.clone())
+}
 const REQUIRED_VERIFICATIONS: usize = 3; // Example value, adjust as needed
+static mut LEADER: Option<String> = None;
 
 
 // incoming event handler
@@ -316,87 +323,134 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
             // }    
             else if msg.topics[0]==Topic::new("block_pbft_pre_prepared"){
                 let received_serialized_data = msg.data;
-                let deserialized_data: HashMap<String, HashMap<String, String>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
+                let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
-                println!("The Node: {:?}", the_pbft_hash);
-                println!("Deserialized data: {:?}", deserialized_data);
                 let mut all_transactions_valid = true;
                 let mut txn_hashes_for_root = Vec::new();
-                for (key, inner_map) in deserialized_data.iter() {
-                    
-                    let (valid_txn, txn_hashes) = self.txn.is_txn_valid(key.to_string(), inner_map.clone());
-                    if valid_txn {
-                        println!("Valid transactions for root hash: {:?}", key);
-                        for (txn_hash, _) in inner_map.iter() {
-                            println!("Transaction Hashes: {:?}", txn_hash);
-                            txn_hashes_for_root.push(txn_hash);
+                 // Determine the leader based on some criteria (e.g., peer with the highest ID)
+                let new_leader =get_peer_id();
+
+                // Set the leader (unsafe, but simplified for demonstration purposes)
+                unsafe {
+                    LEADER = Some(new_leader)
+                }
+                if let Some((first_key, inner_value)) = deserialized_data.iter().next() {
+                    for (peer_id, inner_value) in deserialized_data.iter() {
+                        for (key, inner_map) in inner_value.iter() {
+                            let (valid_txn, txn_hashes) = self.txn.is_txn_valid(key.to_string(), inner_map.clone());
+                            if valid_txn {
+                                for (txn_hash, _) in inner_map.iter() {
+                                    println!("Transaction Hashes: {:?}", txn_hash);
+                                    txn_hashes_for_root.push(txn_hash);
+                                }
+                            } else {
+                                println!("Invalid transactions detected for root hash: {:?}", key);
+                                all_transactions_valid = false;
+                                break; // Exit the loop if any invalid transaction is found
+                            }
                         }
-                    } else {
-                        println!("Invalid transactions detected for root hash: {:?}", key);
-                        all_transactions_valid = false;
-                        break; // Exit the loop if any invalid transaction is found
                     }
-                }
-                if all_transactions_valid {
-                    println!("All transactions are valid, proceeding with PBFT actions");
-                    // Here, use `all_valid_txn_hashes` as needed
-                    self.pbft.increment_verification(&the_pbft_hash);
-                    if let Some(publisher) = Publisher::get() {
-                        // Serialize the list of valid transaction hashes and publish it
-                        let serialized_hashes = serde_json::to_string(&txn_hashes_for_root).unwrap_or_default();
-                        println!("Serialize Hashes: {:?}", serialized_hashes);
-                        publisher.publish("block_pbft_commit".to_string(), serialized_hashes);
-                    }
-                } else {
-                    println!("Not all transactions are valid, PBFT process will not proceed.");
-                }
-                // Check if the block has been verified the required number of times
-                // if self.pbft.is_verified(&json_string, REQUIRED_VERIFICATIONS) {
-                //     // The block has been verified enough times, proceed to commit
-                // }
-            }else if msg.topics[0]==Topic::new("block_pbft_commit"){
-                let received_serialized_data =msg.data;
-                let json_string = String::from_utf8(received_serialized_data).unwrap();
-                if let Some(publisher) = Publisher::get(){
-                    //TODO: Add transactions security
-                    // Deserialize transactions based on txn_hashes
-                    match serde_json::from_str::<String>(&json_string) {
-                    Ok(inner_json_string) => {
-                        match serde_json::from_str::<Vec<String>>(&inner_json_string) {
-                            Ok(txn_hashes) => {
+                    if all_transactions_valid {
+                        println!("All transactions are valid, proceeding with PBFT actions");
+                        // Here, use `all_valid_txn_hashes` as needed
+                        self.pbft.increment_verification(&the_pbft_hash);
+                        if let Some(publisher) = Publisher::get() {
+                                let separator = "_xx_";
+                                let serialized_txn = serde_json::to_string(&txn_hashes_for_root).unwrap_or_default();
+                                println!("{:?}",txn_hashes_for_root);
+                                // Serialize the list of valid transaction hashes and publish it
+                                let serialized_hashes = format!(
+                                    "{}_xx_{}",
+                                    first_key,
+                                    txn_hashes_for_root
+                                        .iter()
+                                        .map(|s| s.to_string())
+                                        .collect::<Vec<String>>()
+                                        .join(separator)
+                                );
                                 let mut transactions = Vec::new();
-                                for txn_hash in &txn_hashes {
+                                for txn_hash in &txn_hashes_for_root {
                                     transactions.push(txn_hash.to_string()); 
                                 }
                                 let created_block = handle_create_block_pbft(self.app.clone(), transactions);
-                                println!("Created Block After Validity: {:?}", created_block);
-                        
                                 let json = serde_json::to_string(&created_block).expect("can jsonify request");
-                                let block_db = self.storage_path.get_blocks();
-                                let _ = rock_storage::put_to_db(block_db, created_block.public_hash.clone(), &json);
-                                let _ = rock_storage::put_to_db(block_db,"epoch", &json);
-                                self.app.blocks.push(created_block.clone());
-                        
                                 let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
-                                for txn_hash in txn_hashes {
+                                for txn_hash in &txn_hashes_for_root {
                                     println!("Removing transaction {}", txn_hash);
-                                    mempool.remove_transaction_by_id(txn_hash);
+                                    mempool.remove_transaction_by_id(txn_hash.to_string());
                                 }
-                        
-                                publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
+                                publisher.publish_block("block_pbft_commit".to_string(), json.as_bytes().to_vec());
+                        }
+                    } else {
+                        println!("Not all transactions are valid, PBFT process will not proceed.");
+                    }
+                } else {
+                    println!("The outer HashMap is empty");
+                }
+            }else if msg.topics[0]==Topic::new("block_pbft_commit"){
+                let local_peer_id = get_peer_id();
+                let is_leader = unsafe { LEADER.as_ref() == Some(&local_peer_id) };
+                    if is_leader {
+                        match serde_json::from_slice::<Block>(&msg.data) {
+                            Ok(block) => {
+                                info!("Received new block from {}", msg.source.to_string());
+                                let block_db = self.storage_path.get_blocks();
+                                // let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &block);
+                                // let _ = rock_storage::put_to_db(block_db,"epoch", &block);
+                                self.app.try_add_block(block);
                             },
-                            Err(e) => {
-                                // Handle the error if the JSON string could not be parsed
-                                println!("Failed to parse transaction hashes: {:?}", e);
+                            Err(err) => {
+                                error!(
+                                    "Error deserializing block from {}: {}",
+                                    msg.source.to_string(),
+                                    err
+                                );
                             }
                         }
-                    },
-                    Err(e) => {
-                        // Handle the error if the outer JSON string could not be parsed
-                        println!("Failed to parse outer transaction hashes: {:?}", e);
                     }
-                }
-                }
+       
+                // let received_serialized_data =msg.data;
+                // let json_string = String::from_utf8(received_serialized_data).unwrap();
+                // let mut raw_hashes: Vec<&str> = json_string.split("_xx_").collect();
+                // let split_hashes: Vec<String> = raw_hashes
+                // .into_iter()
+                // .map(|element| element.replace("\"", ""))
+                // .collect();
+                // let peer_id = &split_hashes[0];
+                // let peer_id_str = peer_id.to_string();
+                // let local_peer_id = get_peer_id();
+                // let txn_hashes_str = &split_hashes[1..];
+
+                // println!("Txn {:?}",txn_hashes_str);
+                // if let Some(publisher) = Publisher::get(){
+                //     println!("Peer ID {:?}",peer_id_str);
+                //     println!("Local Peer{:?}",local_peer_id);
+                //     // Check if the local peer is the leader
+                //     let is_leader = unsafe { LEADER.as_ref() == Some(&local_peer_id) };
+                //     if is_leader {
+                        
+                //         //TODO: Add transactions security
+                //         // let mut transactions = Vec::new();
+                //         // for txn_hash in txn_hashes_str {
+                //         //     transactions.push(txn_hash.to_string()); 
+                //         // }
+                //         // let created_block = handle_create_block_pbft(self.app.clone(), transactions);
+                //         println!("Created Block After Validity: {:?}", created_block);
+                
+                //         //let json = serde_json::to_string(&created_block).expect("can jsonify request");
+                //         // let block_db = self.storage_path.get_blocks();
+                //         // let _ = rock_storage::put_to_db(block_db, created_block.public_hash.clone(), &json);
+                //         // let _ = rock_storage::put_to_db(block_db,"epoch", &json);
+                //         //self.app.blocks.push(created_block.clone());
+                
+                //         // let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
+                //         // for txn_hash in txn_hashes_str {
+                //         //     println!("Removing transaction {}", txn_hash);
+                //         //     mempool.remove_transaction_by_id(txn_hash.to_string());
+                //         // }
+                //        //publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
+                //     }
+                // }
             }
             else if msg.topics[0]==Topic::new("private_blocks_genesis_creation"){
                 let received_serialized_data =msg.data;
