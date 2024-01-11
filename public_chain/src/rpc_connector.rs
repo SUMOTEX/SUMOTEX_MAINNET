@@ -93,12 +93,11 @@ lazy_static::lazy_static! {
             blocks: vec![] }));
 }
 
-pub fn add_api_blocks(app: PubApp) ->  Json<serde_json::Value>  {
+pub fn add_api_blocks(app: PubApp) {
     let new_blocks = app.get_blocks();
     let mut app_blocks = APP_BLOCKS.lock().unwrap();
     app_blocks.blocks = new_blocks.clone();
     let json_response = json!(new_blocks);
-    Json(json!({"jsonrpc": "1.0", "result": json_response}))
 }
 
 // Route to handle RPC requests for transaction creation
