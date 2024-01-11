@@ -5,9 +5,6 @@ use libp2p::{
 use serde::{Deserialize, Serialize};
 use once_cell::sync::Lazy;
 
-pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("create_blocks"));
-
-
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct AccountRoot {
     pub public_address: String,
