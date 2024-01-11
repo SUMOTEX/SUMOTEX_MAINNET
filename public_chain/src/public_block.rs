@@ -105,8 +105,6 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
         let mut map_with_peer_id: HashMap<String, HashMap<String, HashMap<String,String>>> = HashMap::new();
         map_with_peer_id.insert(peer_id.to_string(), map);
         let serialised_dictionary = serde_json::to_vec(&map_with_peer_id).unwrap();
-        // println!("root_hash: {:?}",root_hash);
-        // println!("Txn: {:?}",transactions.clone());
         println!("Broadcasting pbft blocks...");
         if let Some(publisher) = Publisher::get(){
             let serialised_dictionary_bytes = serialised_dictionary.to_vec();
@@ -143,20 +141,6 @@ pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
             .publish(BLOCK_TOPIC.clone(), json.as_bytes());
     }
 }
-
-pub fn handle_finalised_block(swarm: &mut Swarm<AppBehaviour>, block:Block){
-    let behaviour = swarm.behaviour_mut();
-    let json = serde_json::to_string(&block).expect("can jsonify request");
-    let block_db = behaviour.storage_path.get_blocks();
-    rock_storage::put_to_db(block_db,block.public_hash.clone(),&json);
-    let the_item: Option<String> = rock_storage::get_from_db(block_db,block.public_hash.clone());
-    behaviour.app.blocks.push(block);
-    info!("Broadcasting new block");
-    behaviour
-        .floodsub
-        .publish(BLOCK_TOPIC.clone(), json.as_bytes());
-}
-
 
 pub fn handle_create_block_pbft(app: App, transactions: Vec<String>) -> Block {
     let app = app.blocks.last().expect("There should be at least one block");

@@ -198,7 +198,11 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 match serde_json::from_slice::<Block>(&msg.data) {
                     Ok(block) => {
                         info!("Received new block from {}", msg.source.to_string());
-                        self.app.try_add_block(block);
+                        self.app.try_add_block(block.clone());
+                        let block_db = self.storage_path.get_blocks();
+                        let json = serde_json::to_string(&block).expect("can jsonify request");
+                        //let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &block);
+                        let _ = rock_storage::put_to_db(block_db,"epoch", &json);
                     },
                     Err(err) => {
                         error!(
@@ -307,34 +311,37 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                 };
             }
-            //   else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
-            //     println!("Block Received");
-            //     if let Some(publisher) = Publisher::get() {
-            //         let serialised_dictionary_bytes = msg.data.to_vec();
-            //         match String::from_utf8(serialised_dictionary_bytes) {
-            //             Ok(serialized_string) => {
-            //                 publisher.publish("block_pbft_prepared".to_string(), serialized_string);
-            //             }
-            //             Err(e) => {
-            //                 println!("Failed to convert bytes to string: {}", e);
-            //             }
-            //         }
-            //     }
-            // }    
-            else if msg.topics[0]==Topic::new("block_pbft_pre_prepared"){
+              else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
+                println!("Block Received");
+                let received_serialized_data = msg.data.clone();
+                let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
+                let the_pbft_hash = self.pbft.get_hash_id();
+                if let Some((first_key, inner_value)) = deserialized_data.iter().next() {
+                    unsafe {
+                        LEADER = Some(first_key.to_string())
+                    }
+                    let serialised_dictionary = serde_json::to_vec(&deserialized_data).unwrap();
+                    // Here, use `all_valid_txn_hashes` as needed
+                    self.pbft.increment_verification(&the_pbft_hash);
+                    if let Some(publisher) = Publisher::get() {
+                            let received_serialized_data = msg.data;
+                            publisher.publish_block("block_pbft_prepared".to_string(), received_serialized_data);
+                    }
+                } else {
+                    println!("The outer HashMap is empty");
+                }
+            }    
+            else if msg.topics[0]==Topic::new("block_pbft_prepared"){
                 let received_serialized_data = msg.data;
                 let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
                 let mut all_transactions_valid = true;
                 let mut txn_hashes_for_root = Vec::new();
-                 // Determine the leader based on some criteria (e.g., peer with the highest ID)
-                let new_leader =get_peer_id();
-
-                // Set the leader (unsafe, but simplified for demonstration purposes)
-                unsafe {
-                    LEADER = Some(new_leader)
-                }
                 if let Some((first_key, inner_value)) = deserialized_data.iter().next() {
+                    println!("Key {:?}",first_key);
+                    unsafe {
+                        LEADER = Some(first_key.to_string())
+                    }
                     for (peer_id, inner_value) in deserialized_data.iter() {
                         for (key, inner_map) in inner_value.iter() {
                             let (valid_txn, txn_hashes) = self.txn.is_txn_valid(key.to_string(), inner_map.clone());
@@ -359,15 +366,15 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                 let serialized_txn = serde_json::to_string(&txn_hashes_for_root).unwrap_or_default();
                                 println!("{:?}",txn_hashes_for_root);
                                 // Serialize the list of valid transaction hashes and publish it
-                                let serialized_hashes = format!(
-                                    "{}_xx_{}",
-                                    first_key,
-                                    txn_hashes_for_root
-                                        .iter()
-                                        .map(|s| s.to_string())
-                                        .collect::<Vec<String>>()
-                                        .join(separator)
-                                );
+                                // let serialized_hashes = format!(
+                                //     "{}_xx_{}",
+                                //     first_key,
+                                //     txn_hashes_for_root
+                                //         .iter()
+                                //         .map(|s| s.to_string())
+                                //         .collect::<Vec<String>>()
+                                //         .join(separator)
+                                // );
                                 let mut transactions = Vec::new();
                                 for txn_hash in &txn_hashes_for_root {
                                     transactions.push(txn_hash.to_string()); 
@@ -389,15 +396,21 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 }
             }else if msg.topics[0]==Topic::new("block_pbft_commit"){
                 let local_peer_id = get_peer_id();
-                let is_leader = unsafe { LEADER.as_ref() == Some(&local_peer_id) };
+                println!("Local Peer ID {:?} Leader: {:?}", local_peer_id, unsafe { LEADER.as_ref() });
+                //let is_leader = unsafe { LEADER.as_ref() == Some(&local_peer_id) };
+                let is_leader = unsafe { LEADER.as_ref() }.map(|leader| leader == &local_peer_id).unwrap_or(false);
                     if is_leader {
+                        println!("Leader is true");
                         match serde_json::from_slice::<Block>(&msg.data) {
                             Ok(block) => {
-                                info!("Received new block from {}", msg.source.to_string());
-                                let block_db = self.storage_path.get_blocks();
-                                // let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &block);
-                                // let _ = rock_storage::put_to_db(block_db,"epoch", &block);
-                                self.app.try_add_block(block);
+                                if let Some(publisher) = Publisher::get() {
+                                    info!("Received new block from {}", msg.source.to_string());
+ 
+                                    self.app.try_add_block(block.clone());
+                                    let json = serde_json::to_string(&block).expect("can jsonify request");
+                                    publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
+                                }
+
                             },
                             Err(err) => {
                                 error!(
