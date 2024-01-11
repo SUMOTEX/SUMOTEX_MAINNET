@@ -57,21 +57,21 @@ pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::er
         "./contract",
     ];
 
-    // for path in &paths {
-    //     if !Path::new(path).exists() {
-    //         fs::create_dir_all(path)?;
-    //         println!("Directory {:?} created.", path);
-    //     } else {
-    //         eprintln!("Directory {:?} already exists.", path);
-    //     }
-    // }
-    // for path in &paths {
-    //     if !Path::new(path).exists() {
-    //         rock_storage::create_storage(path)?;
-    //     } else {
-    //         eprintln!("Directory {:?} already exists.", path);
-    //     }
-    // }
+    for path in &paths {
+        if !Path::new(path).exists() {
+            fs::create_dir_all(path)?;
+            println!("Directory {:?} created.", path);
+        } else {
+            eprintln!("Directory {:?} already exists.", path);
+        }
+    }
+    for path in &paths {
+        if !Path::new(path).exists() {
+            rock_storage::create_storage(path)?;
+        } else {
+            eprintln!("Directory {:?} already exists.", path);
+        }
+    }
 
     let db_public_block =open_or_create_storage("./public_blockchain")?;
     let db_account = open_or_create_storage("./account")?;
@@ -92,12 +92,12 @@ pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::er
 
 fn open_or_create_storage(path: &str) -> Result<DBWithThreadMode<SingleThreaded>, Box<dyn std::error::Error>> {
     rock_storage::create_storage(path)?;
-    // if !Path::new(path).exists() {
-    //     rock_storage::create_storage(path)?;
-    //     println!("Database at path {:?} created.", path);
-    // } else {
-    //     eprintln!("Database at path {:?} already exists.", path);
-    // }
+    if !Path::new(path).exists() {
+        rock_storage::create_storage(path)?;
+        println!("Database at path {:?} created.", path);
+    } else {
+        eprintln!("Database at path {:?} already exists.", path);
+    }
     Ok(rock_storage::open_storage(path)?)
 }
 fn db_extract(db: Arc<RwLock<DBWithThreadMode<SingleThreaded>>>) -> DBWithThreadMode<SingleThreaded> {
