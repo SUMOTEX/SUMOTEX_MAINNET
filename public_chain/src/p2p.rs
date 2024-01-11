@@ -407,7 +407,9 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     info!("Received new block from {}", msg.source.to_string());
                                     let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
                                     for txn_hash in &block.transactions {
-                                        mempool.remove_transaction_by_id(txn_hash.clone());
+                                        if let Some(first_txn_id) = txn_hash.first().cloned() {
+                                            mempool.remove_transaction_by_id(first_txn_id);
+                                        } 
                                     }
                                     self.app.try_add_block(block.clone());
                                     let json = serde_json::to_string(&block).expect("can jsonify request");
