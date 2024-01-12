@@ -393,7 +393,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 println!("Local Peer ID {:?} Leader: {:?}", local_peer_id, unsafe { LEADER.as_ref() });
                 //let is_leader = unsafe { LEADER.as_ref() == Some(&local_peer_id) };
                 let is_leader = unsafe { LEADER.as_ref() }.map(|leader| leader == &local_peer_id).unwrap_or(false);
-                    if is_leader {
+                    //if is_leader {
                         println!("Leader is true");
                         match serde_json::from_slice::<Block>(&msg.data) {
                             Ok(block) => {
@@ -423,7 +423,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                 );
                             }
                         }
-                    }
+                    //}
        
                 // let received_serialized_data =msg.data;
                 // let json_string = String::from_utf8(received_serialized_data).unwrap();
