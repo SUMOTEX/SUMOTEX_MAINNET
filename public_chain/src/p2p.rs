@@ -317,9 +317,9 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
                 if let Some((first_key, inner_value)) = deserialized_data.iter().next() {
-                    // unsafe {
-                    //     LEADER = Some(first_key.to_string())
-                    // }
+                    unsafe {
+                        LEADER = Some(first_key.to_string())
+                    }
                     let serialised_dictionary = serde_json::to_vec(&deserialized_data).unwrap();
                     // Here, use `all_valid_txn_hashes` as needed
                     self.pbft.increment_verification(&the_pbft_hash);
@@ -362,19 +362,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         // Here, use `all_valid_txn_hashes` as needed
                         self.pbft.increment_verification(&the_pbft_hash);
                         if let Some(publisher) = Publisher::get() {
-                                let separator = "_xx_";
                                 let serialized_txn = serde_json::to_string(&txn_hashes_for_root).unwrap_or_default();
-                                println!("{:?}",txn_hashes_for_root);
-                                // Serialize the list of valid transaction hashes and publish it
-                                // let serialized_hashes = format!(
-                                //     "{}_xx_{}",
-                                //     first_key,
-                                //     txn_hashes_for_root
-                                //         .iter()
-                                //         .map(|s| s.to_string())
-                                //         .collect::<Vec<String>>()
-                                //         .join(separator)
-                                // );
+
                                 let mut transactions = Vec::new();
                                 for txn_hash in &txn_hashes_for_root {
                                     transactions.push(txn_hash.to_string()); 
