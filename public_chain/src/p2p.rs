@@ -338,10 +338,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 let mut all_transactions_valid = true;
                 let mut txn_hashes_for_root = Vec::new();
                 if let Some((first_key, inner_value)) = deserialized_data.iter().next() {
-                    println!("Key {:?}",first_key);
-                    unsafe {
-                        LEADER = Some(first_key.to_string())
-                    }
                     for (peer_id, inner_value) in deserialized_data.iter() {
                         for (key, inner_map) in inner_value.iter() {
                             let (valid_txn, txn_hashes) = self.txn.is_txn_valid(key.to_string(), inner_map.clone());
