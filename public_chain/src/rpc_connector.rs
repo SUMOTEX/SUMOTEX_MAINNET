@@ -389,8 +389,8 @@ fn create_block() -> Json<serde_json::Value> {
 #[get("/get-block")]
 fn get_block() -> Json<serde_json::Value>{
     let local_blocks = APP_BLOCKS.lock().unwrap();
-    let data = (*local_blocks).clone();
-    let json_value = serde_json::to_value(data).unwrap(); 
+    //let data = (*local_blocks.blocks);
+    let json_value = serde_json::to_value(&local_blocks.blocks).unwrap(); 
     Json(json!({"jsonrpc": "1.0", "result": json_value}))
 }
 
