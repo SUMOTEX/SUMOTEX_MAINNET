@@ -371,7 +371,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                 }
                                 let local_peer_id = get_peer_id();
                                 let is_leader = unsafe { LEADER.as_ref() }.map(|leader| leader == &local_peer_id).unwrap_or(false);
-                                //if is_leader{
+                                if is_leader{
                                     let created_block = handle_create_block_pbft(self.app.clone(), transactions);
                                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
                                     let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
@@ -379,8 +379,12 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                         println!("Removing transaction {}", txn_hash);
                                         mempool.remove_transaction_by_id(txn_hash.to_string());
                                     }
-                                    publisher.publish_block("block_pbft_commit".to_string(), json.as_bytes().to_vec());
-                                //}
+                                    self.app.try_add_block(created_block.clone());
+                                    let block_db = self.storage_path.get_blocks();
+                                    let _ = rock_storage::put_to_db(block_db, created_block.public_hash.clone(), &json);
+                                    let _ = rock_storage::put_to_db(block_db,"epoch", &json);
+                                    publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
+                                }
 
                         }
                     } else {
