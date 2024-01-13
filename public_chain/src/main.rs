@@ -129,7 +129,7 @@ async fn block_producer() {
         public_block::pbft_pre_message_block_create_scheduler();
 
         // Sleep for the specified interval
-        sleep(Duration::from_secs(25)).await; // Adjust the interval as needed
+        sleep(Duration::from_secs(20)).await; // Adjust the interval as needed
     }
 }
 

@@ -22,6 +22,7 @@ use crate::public_block::Block;
 use crate::public_txn::Txn;
 use crate::rock_storage::StoragePath;
 use crate::public_block;
+use crate::public_txn;
 use crate::pbft;
 use crate::rock_storage;
 use crate::txn_pool;
@@ -276,20 +277,17 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     Ok(json_string) => {
                         // First unescape: Remove extra backslashes and outer quotes
                         let unescaped_json_string = json_string.trim_matches('\"').replace("\\\\", "\\").replace("\\\"", "\"");
-                        println!("Unescaped JSON String: {:?}", unescaped_json_string);
-                
                         match serde_json::from_str::<Value>(&unescaped_json_string) {
                             Ok(outer_json) => {
                                 // Process outer_json as before...
                                 if let Some(encoded_value) = outer_json["value"].as_str() {
                                     // The value field is already a valid JSON string
-                                    println!("Inner JSON String: {:?}", encoded_value);
                 
                                     match serde_json::from_str::<PublicTxn>(&encoded_value) {
                                         Ok(txn) => {
                                             let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
-                                            mempool.add_transaction(txn);
-                                            println!("Transaction added to Mempool.");
+                                            mempool.add_transaction(txn.clone());
+                                            println!("Transaction added to Mempool: {:?}",txn.clone().txn_hash.to_string());
             
                                             // ... rest of your logic to handle txn ...
                                         },
@@ -311,28 +309,37 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                 };
             }
-              else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
-                println!("Block Received");
-                let received_serialized_data = msg.data.clone();
-                let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
-                let the_pbft_hash = self.pbft.get_hash_id();
-                if let Some((first_key, inner_value)) = deserialized_data.iter().next() {
-                    unsafe {
-                        LEADER = Some(first_key.to_string());
-                        println!("Leader set to: {:?}", LEADER);
-                    }
-                    let serialised_dictionary = serde_json::to_vec(&deserialized_data).unwrap();
-                    // Here, use `all_valid_txn_hashes` as needed
-                    self.pbft.increment_verification(&the_pbft_hash);
-                    if let Some(publisher) = Publisher::get() {
-                            let received_serialized_data = msg.data;
-                            publisher.publish_block("block_pbft_prepared".to_string(), received_serialized_data);
-                    }
-                } else {
-                    println!("The outer HashMap is empty");
-                }
-            }    
-            else if msg.topics[0]==Topic::new("block_pbft_prepared"){
+            //   else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
+            //     println!("Block Received");
+            //     let received_serialized_data = msg.data.clone();
+            //     let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
+            //     let the_pbft_hash = self.pbft.get_hash_id();
+            //     if let Some((first_key, inner_value)) = deserialized_data.iter().next() {
+            //         unsafe {
+            //             LEADER = Some(first_key.to_string());
+            //             println!("Leader set to: {:?}", LEADER);
+            //         }
+            //         let serialised_dictionary = serde_json::to_vec(&deserialized_data).unwrap();
+            //         // Here, use `all_valid_txn_hashes` as needed
+            //         self.pbft.increment_verification(&the_pbft_hash);
+            //         for (peer_id, inner_value) in deserialized_data.iter() {
+            //             for (key, inner_map) in inner_value.iter() {
+            //                 let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
+            //                 for (txn_hash, _) in inner_map.iter() {
+            //                     public_txn::Txn::update_transaction_status(&txn_hash,2);
+            //                     mempool.remove_transaction_by_id(txn_hash.to_string());
+            //                 }
+            //             }
+            //         }
+            //         if let Some(publisher) = Publisher::get() {
+            //                 let received_serialized_data = msg.data;
+            //                 publisher.publish_block("block_pbft_prepared".to_string(), received_serialized_data);
+            //         }
+            //     } else {
+            //         println!("The outer HashMap is empty");
+            //     }
+            // }
+            else if msg.topics[0]==Topic::new("block_pbft_pre_prepared"){
                 let received_serialized_data = msg.data;
                 let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
@@ -351,6 +358,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                 for (txn_hash, _) in inner_map.iter() {
                                     println!("Transaction Hashes: {:?}", txn_hash);
                                     txn_hashes_for_root.push(txn_hash);
+                                    Txn::update_transaction_status(&txn_hash,2);
                                 }
                             } else {
                                 println!("Invalid transactions detected for root hash: {:?}", key);
@@ -371,26 +379,20 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                 }
                                 let local_peer_id = get_peer_id();
                                 let is_leader = unsafe { LEADER.as_ref() }.map(|leader| leader == &local_peer_id).unwrap_or(false);
-                                if is_leader{
-                                    println!("Leader is true");
+                                //if is_leader{
+                                    println!("LEADER found");
                                     let created_block = handle_create_block_pbft(self.app.clone(), transactions);
                                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
-                                    let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
-                                    for txn_hash in &txn_hashes_for_root {
-                                        println!("Removing transaction {}", txn_hash);
-                                        mempool.remove_transaction_by_id(txn_hash.to_string());
-                                    }
                                     self.app.try_add_block(created_block.clone());
                                     let block_db = self.storage_path.get_blocks();
                                     let _ = rock_storage::put_to_db(block_db, created_block.public_hash.clone(), &json);
                                     let _ = rock_storage::put_to_db(block_db,"epoch", &json);
-                                    publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
-                                }
-
+                                    publisher.publish_block("block_pbft_commit".to_string(),json.as_bytes().to_vec())
+                                //}
                         }
                     } else {
-                        println!("Not all transactions are valid, PBFT process will not proceed.");
-                    }
+                        println!("Not all transactions are valid, Block creation process will not proceed.");
+                    }   
                 } else {
                     println!("The outer HashMap is empty");
                 }
@@ -400,22 +402,20 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 //let is_leader = unsafe { LEADER.as_ref() == Some(&local_peer_id) };
                 let is_leader = unsafe { LEADER.as_ref() }.map(|leader| leader == &local_peer_id).unwrap_or(false);
                     if is_leader {
-                        println!("Leader is true");
+                        println!("Leader found");
                         match serde_json::from_slice::<Block>(&msg.data) {
                             Ok(block) => {
                                 if let Some(publisher) = Publisher::get() {
                                     info!("Received new block from {}", msg.source.to_string());
                                     let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
+                                    self.app.try_add_block(block.clone());
+                                    let block_db = self.storage_path.get_blocks();
                                     for txn_hash in &block.transactions {
                                         if let Some(first_txn_id) = txn_hash.first().cloned() {
                                             mempool.remove_transaction_by_id(first_txn_id);
                                         } 
                                     }
-                                    self.app.try_add_block(block.clone());
-                                    let block_db = self.storage_path.get_blocks();
                                     let json = serde_json::to_string(&block).expect("can jsonify request");
-                                    let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &json);
-                                    let _ = rock_storage::put_to_db(block_db,"epoch", &json);
                                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                                 }
 

@@ -14,12 +14,30 @@ impl Mempool {
         }
     }
     pub fn add_transaction(&mut self, txn: PublicTxn) {
-        self.transactions.push(txn);
+        if !self.transactions.iter().any(|t| t.txn_hash == txn.txn_hash) {
+            self.transactions.push(txn);
+        }
     }
-
-    pub fn get_transactions(&self, count: usize) -> &[PublicTxn] {
-        let end = std::cmp::min(count, self.transactions.len());
-        &self.transactions[0..end]
+    pub fn update_transaction_status(&mut self, id: &str, new_status: i64)->bool {
+        for txn in &mut self.transactions {
+            if txn.txn_hash == id {
+                txn.status = new_status;
+                return true;
+            }else{
+                return false;
+            }
+        }
+        return false;
+    }
+    pub fn get_transactions_with_status(&self, count: usize, target_status: i64) -> Vec<&PublicTxn> {
+        let mut result = Vec::new();
+    
+        for txn in self.transactions.iter().take(count) {
+            if txn.status == target_status {
+                result.push(txn);
+            }
+        }
+        result
     }
 
     // Optionally, a method to remove transactions after they are processed

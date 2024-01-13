@@ -7,6 +7,7 @@ use crate::publisher::Publisher;
 use crate::account;
 use crate::gas_calculator;
 use crate::rock_storage;
+use crate::txn_pool;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use secp256k1::{Signature, SecretKey};
@@ -152,6 +153,20 @@ impl Txn {
 
         Ok(transaction)
     }
+    pub fn get_transaction_if_processing(txn_hash: &str) -> Result<bool, Box<dyn std::error::Error>> {
+        let db_path = "./transactions/db";
+        let db_handle = rock_storage::open_db(db_path)?;
+
+        let txn_data = rock_storage::get_from_db(&db_handle, txn_hash.to_string())
+            .ok_or("Transaction not found")?; // Handle missing transactions appropriately
+ 
+        let transaction: PublicTxn = serde_json::from_str(&txn_data)?;
+        if transaction.status==2 {
+            Ok(true)
+        }else{
+            Ok(false)
+        }
+    }
     // Stage 1: Create and Prepare Transaction
     pub fn create_and_prepare_transaction(
         transaction_type: TransactionType, 
@@ -243,12 +258,13 @@ impl Txn {
                 };
                 let verified_signature =  account::Account::verify_signature(&public_key,&hash_array,&signature);
                 if verified_signature.is_ok() && verified_signature.unwrap() {
-                    let serialized_data = serde_json::to_string(&txn)?;
 
                     // Update the transaction status
                     let mut updated_txn = txn.clone();
                     updated_txn.set_status(1);
+                    Self::update_transaction_status(&txn.txn_hash,1);
                     rock_storage::put_to_db(&db_handle, txn.txn_hash.to_string(), &serde_json::to_string(&updated_txn)?)?;
+                    let serialized_data = serde_json::to_string(&updated_txn)?;
 
                     println!("Serialized Transaction Data: {}", serialized_data);  
                     // Hash the serialized transaction data using SHA-256
@@ -260,7 +276,7 @@ impl Txn {
                     // Create a dictionary for broadcasting
                     let mut dictionary_data = HashMap::new();
                     dictionary_data.insert("key".to_string(), transaction_hash.to_string());
-                    let value_json = serde_json::json!(txn);
+                    let value_json = serde_json::json!(updated_txn);
                     // Insert the JSON object into the dictionary
                     dictionary_data.insert("value".to_string(), value_json.to_string());
 
@@ -287,6 +303,9 @@ impl Txn {
         Ok(())
     }
     // Method to update the status of a specific transaction
+    //Update 1 = txn signed
+    //Update 2 = processing
+    //Update 3 = block confirmed
     pub fn update_transaction_status(
         txn_hash: &str, 
         new_status: i64
@@ -413,7 +432,6 @@ impl Txn {
             Ok(db_handle) => {
                 // Retrieve the vector of tuples
                 let result_tuples = rock_storage::get_all_from_db(&db_handle);
-            
                 // Iterate through the database to find transactions with the specified caller_address
                 let mut transactions = Vec::new();
                 for result in result_tuples {

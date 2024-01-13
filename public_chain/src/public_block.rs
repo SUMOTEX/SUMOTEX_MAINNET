@@ -14,6 +14,7 @@ use crate::verkle_tree::VerkleTree;
 use crate::rock_storage;
 use crate::txn_pool;
 use crate::p2p;
+use crate::public_txn::Txn;
 use crate::publisher::Publisher;
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("create_blocks"));
 
@@ -30,6 +31,7 @@ pub struct Block {
 }
 
 const DIFFICULTY_PREFIX: &str = "00";
+static mut LEADER: Option<String> = None;
 
 pub fn hash_to_binary_representation(hash: &[u8]) -> String {
     let mut res: String = String::default();
@@ -77,38 +79,60 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
         let mut verkle_tree = VerkleTree::new();
         let mut transactions: HashMap<String, String>= HashMap::new();
         // Fetch transactions from the mempool
+        //println!("Block requested");
         let mempool_lock = txn_pool::Mempool::get_instance().lock().unwrap();
-        let mempool_transactions = mempool_lock.get_transactions(5); // Assuming this method exists and returns a list of transactions
-
-        if mempool_transactions.is_empty() {
-            return Ok(());
-        }
-        for txn in mempool_transactions {
-            // Process each transaction
-            let serialized_data = serde_json::to_string(&txn).expect("can jsonify request");
-            let mut hasher = Sha256::new();
-            hasher.update(&serialized_data);
-            let hash_result = hasher.finalize();
-            let hash_hex_string = format!("{:x}", hash_result);
-            // Insert transaction into verkle tree and prepare for broadcast
-            verkle_tree.insert(txn.txn_hash.as_bytes().to_vec(), hash_result.to_vec());
-            let mut dictionary_data = std::collections::HashMap::new();
-            dictionary_data.insert("key".to_string(), txn.txn_hash.clone());
-            dictionary_data.insert("value".to_string(), serialized_data.clone());
-            transactions.insert(txn.txn_hash.clone(), serialized_data);
-            //println!("Transactions: {:?}",txn);
-        }
-        let peer_id = p2p::get_peer_id();
-        let root_hash = verkle_tree.get_root_string();
-        let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
-        map.insert(root_hash.clone(), transactions.clone());
-        let mut map_with_peer_id: HashMap<String, HashMap<String, HashMap<String,String>>> = HashMap::new();
-        map_with_peer_id.insert(peer_id.to_string(), map);
-        let serialised_dictionary = serde_json::to_vec(&map_with_peer_id).unwrap();
-        //println!("Broadcasting pbft blocks...");
+        let mempool_transactions = mempool_lock.get_transactions_with_status(5,1); // Assuming this method exists and returns a list of transactions
         if let Some(publisher) = Publisher::get(){
-            let serialised_dictionary_bytes = serialised_dictionary.to_vec();
-            publisher.publish_block("block_pbft_pre_prepared".to_string(), serialised_dictionary_bytes);
+            if mempool_transactions.is_empty() {
+                return Ok(());
+            }else{
+                let mut processing_transactions = Vec::new();
+                let mut non_processing_transactions = Vec::new();        
+                for txn in mempool_transactions {
+                    match Txn::get_transaction_if_processing(&txn.txn_hash) {
+                        Ok(is_processing) => {
+                            if is_processing {
+                                processing_transactions.push(txn);
+                            } else {
+                                non_processing_transactions.push(txn);
+                            }
+                        }
+                        Err(err) => {
+                            // Handle the error, log it or return an error as appropriate
+                            return Err(err.into());
+                        }
+                    }
+                }
+                for txn in non_processing_transactions {
+                    println!("Transactions: {:?}",txn);
+                    // Process each transaction
+                    let serialized_data = serde_json::to_string(&txn).expect("can jsonify request");
+                    let mut hasher = Sha256::new();
+                    hasher.update(&serialized_data);
+                    let hash_result = hasher.finalize();
+                    let hash_hex_string = format!("{:x}", hash_result);
+                    // Insert transaction into verkle tree and prepare for broadcast
+                    verkle_tree.insert(txn.txn_hash.as_bytes().to_vec(), hash_result.to_vec());
+                    let mut dictionary_data = std::collections::HashMap::new();
+                    dictionary_data.insert("key".to_string(), txn.txn_hash.clone());
+                    dictionary_data.insert("value".to_string(), serialized_data.clone());
+                    transactions.insert(txn.txn_hash.clone(), serialized_data);
+                    Txn::update_transaction_status(&txn.txn_hash,2);
+    
+                }
+                let peer_id = p2p::get_peer_id();
+                let root_hash = verkle_tree.get_root_string();
+                let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
+                map.insert(root_hash.clone(), transactions.clone());
+                let mut map_with_peer_id: HashMap<String, HashMap<String, HashMap<String,String>>> = HashMap::new();
+                map_with_peer_id.insert(peer_id.to_string(), map);
+                let serialised_dictionary = serde_json::to_vec(&map_with_peer_id).unwrap();
+                println!("Broadcasting PBFT blocks...");
+    
+                let serialised_dictionary_bytes = serialised_dictionary.to_vec();
+                publisher.publish_block("block_pbft_pre_prepared".to_string(), serialised_dictionary_bytes);
+            }
+
         }
         Ok(())
     }
