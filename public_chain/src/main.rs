@@ -289,6 +289,8 @@ async fn main() {
                     }
                     publish = publish_receiver.recv() => {
                         let (title, message) = publish.clone().expect("Publish exists");
+                        let api_app =swarm_public_net.behaviour_mut().app.clone();
+                        rpc_connector::add_api_blocks(api_app.clone());
                         info!("Publish Swarm Event: {:?}", title);
                         Some(p2p::EventType::Publish(title, message))
                     },
