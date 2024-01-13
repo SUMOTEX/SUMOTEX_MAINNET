@@ -386,7 +386,7 @@ fn create_block() -> Json<serde_json::Value> {
     Json(json!({"jsonrpc": "1.0", "result": response_body}))
 }
 
-#[get("/get-block")]
+#[post("/get-blocks", data = "<txn_id_info>")]
 fn get_block() -> Json<serde_json::Value>{
     let local_blocks = APP_BLOCKS.lock().unwrap();
     //let data = (*local_blocks.blocks);
