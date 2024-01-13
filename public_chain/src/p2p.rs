@@ -372,6 +372,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                 let local_peer_id = get_peer_id();
                                 let is_leader = unsafe { LEADER.as_ref() }.map(|leader| leader == &local_peer_id).unwrap_or(false);
                                 if is_leader{
+                                    println!("Leader is true");
                                     let created_block = handle_create_block_pbft(self.app.clone(), transactions);
                                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
                                     let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
