@@ -103,34 +103,39 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
                         }
                     }
                 }
-                for txn in non_processing_transactions {
-                    println!("Transactions: {:?}",txn);
-                    // Process each transaction
-                    let serialized_data = serde_json::to_string(&txn).expect("can jsonify request");
-                    let mut hasher = Sha256::new();
-                    hasher.update(&serialized_data);
-                    let hash_result = hasher.finalize();
-                    let hash_hex_string = format!("{:x}", hash_result);
-                    // Insert transaction into verkle tree and prepare for broadcast
-                    verkle_tree.insert(txn.txn_hash.as_bytes().to_vec(), hash_result.to_vec());
-                    let mut dictionary_data = std::collections::HashMap::new();
-                    dictionary_data.insert("key".to_string(), txn.txn_hash.clone());
-                    dictionary_data.insert("value".to_string(), serialized_data.clone());
-                    transactions.insert(txn.txn_hash.clone(), serialized_data);
-                    Txn::update_transaction_status(&txn.txn_hash,2);
-    
+                if non_processing_transactions.is_empty(){
+                    return Ok(());
+                }else {
+                    for txn in non_processing_transactions {
+                        println!("Transactions: {:?}",txn);
+                        // Process each transaction
+                        let serialized_data = serde_json::to_string(&txn).expect("can jsonify request");
+                        let mut hasher = Sha256::new();
+                        hasher.update(&serialized_data);
+                        let hash_result = hasher.finalize();
+                        let hash_hex_string = format!("{:x}", hash_result);
+                        // Insert transaction into verkle tree and prepare for broadcast
+                        verkle_tree.insert(txn.txn_hash.as_bytes().to_vec(), hash_result.to_vec());
+                        let mut dictionary_data = std::collections::HashMap::new();
+                        dictionary_data.insert("key".to_string(), txn.txn_hash.clone());
+                        dictionary_data.insert("value".to_string(), serialized_data.clone());
+                        transactions.insert(txn.txn_hash.clone(), serialized_data);
+                        Txn::update_transaction_status(&txn.txn_hash,2);
+        
+                    }
+                    let peer_id = p2p::get_peer_id();
+                    let root_hash = verkle_tree.get_root_string();
+                    let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
+                    map.insert(root_hash.clone(), transactions.clone());
+                    let mut map_with_peer_id: HashMap<String, HashMap<String, HashMap<String,String>>> = HashMap::new();
+                    map_with_peer_id.insert(peer_id.to_string(), map);
+                    let serialised_dictionary = serde_json::to_vec(&map_with_peer_id).unwrap();
+                    println!("Broadcasting PBFT blocks...");
+        
+                    let serialised_dictionary_bytes = serialised_dictionary.to_vec();
+                    publisher.publish_block("block_pbft_pre_prepared".to_string(), serialised_dictionary_bytes);
                 }
-                let peer_id = p2p::get_peer_id();
-                let root_hash = verkle_tree.get_root_string();
-                let mut map: HashMap<String, HashMap<String, String>> = HashMap::new();
-                map.insert(root_hash.clone(), transactions.clone());
-                let mut map_with_peer_id: HashMap<String, HashMap<String, HashMap<String,String>>> = HashMap::new();
-                map_with_peer_id.insert(peer_id.to_string(), map);
-                let serialised_dictionary = serde_json::to_vec(&map_with_peer_id).unwrap();
-                println!("Broadcasting PBFT blocks...");
-    
-                let serialised_dictionary_bytes = serialised_dictionary.to_vec();
-                publisher.publish_block("block_pbft_pre_prepared".to_string(), serialised_dictionary_bytes);
+
             }
 
         }
