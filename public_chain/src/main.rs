@@ -183,7 +183,7 @@ async fn main() {
     public_swarm::create_public_swarm(app.clone(),the_storage).await;
     // Lock the swarm and access it
     println!("Before RPC server");
-    let rpc_runner = tokio::spawn(async{
+    let rpc_runner = tokio::spawn( async{
         rpc_connector::start_rpc().await
     });
     tokio::spawn(block_producer());

@@ -63,6 +63,10 @@ pub struct ReadTokenInfo {
 pub struct ReadAccountInfo {
     pub_address: String
 }
+#[derive(serde::Deserialize, Debug)]
+pub struct BlockInfo {
+    pub_address: String
+}
 
 #[derive(serde::Deserialize, Debug)]
 pub struct TransferTokenInfo {
@@ -113,7 +117,7 @@ fn create_transaction(transaction_data: Json<TransactionInfo>) -> Json<serde_jso
         "SimpleTransfer" => TransactionType::SimpleTransfer,
         "ContractCreation" => TransactionType::ContractCreation,
         "ContractInteraction" => TransactionType::ContractInteraction,
-        _ => return Json(json!({"jsonrpc": "2.0", "error": "Invalid transaction type"}))
+        _ => return Json(json!({"jsonrpc": "1.0", "error": "Invalid transaction type"}))
     };
     match public_txn::Txn::create_and_prepare_transaction(
         transaction_type,
@@ -124,7 +128,7 @@ fn create_transaction(transaction_data: Json<TransactionInfo>) -> Json<serde_jso
         Ok((txn_hash_hex,gas_cost, _)) => {
             println!("Transaction successfully prepared: {:?}", txn_hash_hex);
             Json(json!({
-                "jsonrpc": "2.0", 
+                "jsonrpc": "1.0", 
                 "result": {
                     "transaction_hash": txn_hash_hex,
                     "gas_cost": gas_cost
@@ -134,7 +138,7 @@ fn create_transaction(transaction_data: Json<TransactionInfo>) -> Json<serde_jso
         Err(e) => {
             println!("Error creating transaction: {:?}", e);
             Json(json!({
-                "jsonrpc": "2.0", 
+                "jsonrpc": "1.0", 
                 "error": "Transaction creation failed"
             }))
         }
@@ -160,7 +164,7 @@ fn sign_transaction(transaction_signed_data: Json<TransactionSignedInfo>) -> Jso
     match public_txn::Txn::sign_and_submit_transaction(caller_address,transaction_signed_data.txn_hash.clone(),&private_key){
         Ok(()) => {
             Json(json!({
-                "jsonrpc": "2.0", 
+                "jsonrpc": "1.0", 
                 "result": {
                 }
             }))
@@ -168,7 +172,7 @@ fn sign_transaction(transaction_signed_data: Json<TransactionSignedInfo>) -> Jso
         Err(e) => {
             println!("Error signing transaction: {:?}", e);
             Json(json!({
-                "jsonrpc": "2.0", 
+                "jsonrpc": "1.0", 
                 "error": "Transaction signed failed"
             }))
         }
@@ -365,13 +369,13 @@ fn complete_transaction(transaction_info: Json<TransactionSignedInfo>) -> Json<s
     match public_txn::Txn::update_transaction_status(txn_hash,2) {
         Ok(_) => {
             Json(json!({
-                "jsonrpc": "2.0",
+                "jsonrpc": "1.0",
                 "result": "Transaction completed successfully"
             }))
         },
         Err(e) => {
             Json(json!({
-                "jsonrpc": "2.0",
+                "jsonrpc": "1.0",
                 "error": "Transaction completion failed"
             }))
         }
@@ -386,8 +390,8 @@ fn create_block() -> Json<serde_json::Value> {
     Json(json!({"jsonrpc": "1.0", "result": response_body}))
 }
 
-#[post("/get-blocks", data = "<txn_id_info>")]
-fn get_block() -> Json<serde_json::Value>{
+#[post("/get-blocks", data = "<block_info>")]
+fn get_block(block_info:Json<BlockInfo>) -> Json<serde_json::Value>{
     let local_blocks = APP_BLOCKS.lock().unwrap();
     //let data = (*local_blocks.blocks);
     let json_value = serde_json::to_value(&local_blocks.blocks).unwrap(); 
@@ -423,14 +427,14 @@ fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
         Ok(transaction) => {
             // Assuming `transaction` is serializable with `serde`
             Json(json!({
-                "jsonrpc": "2.0",
+                "jsonrpc": "1.0",
                 "result": transaction
             }))
         },
         Err(e) => {
             println!("Error reading transaction: {:?}", e);
             Json(json!({
-                "jsonrpc": "2.0", 
+                "jsonrpc": "1.0", 
                 "error": "Transaction read failed"
             }))
         }
