@@ -57,7 +57,7 @@ pub async fn pub_api() -> std::io::Result<()> {
             .wrap(Logger::default())
             .route("/blocks", web::get().to(obtain_blocks))
     })
-    .bind("0.0.0.0:8000")?
+    .bind("0.0.0.0:8100")?
     .run()
     .await
 }
