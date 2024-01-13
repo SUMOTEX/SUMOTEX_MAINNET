@@ -317,9 +317,10 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
                 if let Some((first_key, inner_value)) = deserialized_data.iter().next() {
-                    // unsafe {
-                    //     LEADER = Some(first_key.to_string())
-                    // }
+                    unsafe {
+                        LEADER = Some(first_key.to_string());
+                        println!("Leader set to: {:?}", LEADER);
+                    }
                     let serialised_dictionary = serde_json::to_vec(&deserialized_data).unwrap();
                     // Here, use `all_valid_txn_hashes` as needed
                     self.pbft.increment_verification(&the_pbft_hash);
@@ -338,9 +339,10 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 let mut all_transactions_valid = true;
                 let mut txn_hashes_for_root = Vec::new();
                 if let Some((first_key, inner_value)) = deserialized_data.iter().next() {
-                    println!("Key {:?}",first_key);
+                    println!("The Stored Peer {:?}",first_key);
                     unsafe {
-                        LEADER = Some(first_key.to_string())
+                        LEADER = Some(first_key.to_string());
+                        println!("Leader set to: {:?}", LEADER);
                     }
                     for (peer_id, inner_value) in deserialized_data.iter() {
                         for (key, inner_map) in inner_value.iter() {
@@ -363,14 +365,13 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         self.pbft.increment_verification(&the_pbft_hash);
                         if let Some(publisher) = Publisher::get() {
                                 let serialized_txn = serde_json::to_string(&txn_hashes_for_root).unwrap_or_default();
-
                                 let mut transactions = Vec::new();
                                 for txn_hash in &txn_hashes_for_root {
                                     transactions.push(txn_hash.to_string()); 
                                 }
                                 let local_peer_id = get_peer_id();
                                 let is_leader = unsafe { LEADER.as_ref() }.map(|leader| leader == &local_peer_id).unwrap_or(false);
-                                if is_leader{
+                                //if is_leader{
                                     let created_block = handle_create_block_pbft(self.app.clone(), transactions);
                                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
                                     let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
@@ -379,7 +380,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                         mempool.remove_transaction_by_id(txn_hash.to_string());
                                     }
                                     publisher.publish_block("block_pbft_commit".to_string(), json.as_bytes().to_vec());
-                                }
+                                //}
 
                         }
                     } else {
@@ -410,7 +411,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     let json = serde_json::to_string(&block).expect("can jsonify request");
                                     let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &json);
                                     let _ = rock_storage::put_to_db(block_db,"epoch", &json);
-                                   
                                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                                 }
 
