@@ -24,6 +24,8 @@ impl App {
             transactions:Some(vec!["".to_string()].into()),
             nonce: 1,
             public_hash: "0000f816a87f806bb0073dcf026a64fb40c946b5abee2573702828694d5b4c43".to_string(),
+            node_verifier:Some(vec!["".to_string()].into()),
+
         };
 
         self.blocks.push(genesis_block);

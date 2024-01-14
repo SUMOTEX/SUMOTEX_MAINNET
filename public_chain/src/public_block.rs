@@ -28,6 +28,7 @@ pub struct Block {
     pub transactions:Option<Vec<String>>, // determine txn
     pub timestamp: i64,
     pub nonce: u64,
+    pub node_verifier: Option<Vec<String>>
 }
 
 const DIFFICULTY_PREFIX: &str = "00";
@@ -141,36 +142,6 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
         }
         Ok(())
     }
-pub fn handle_create_block(cmd: &str, swarm: &mut Swarm<AppBehaviour>) {
-    if let Some(data) = cmd.strip_prefix("create b") {
-        let behaviour = swarm.behaviour_mut();
-        let latest_block = behaviour
-            .app
-            .blocks
-            .last()
-            .expect("there is at least one block");
-        let block = Block::new(
-            latest_block.id + 1,
-            latest_block.public_hash.clone(),
-            //TODO txn
-            [" ".to_string()].to_vec(),
-            None,
-            None
-        );
-        let json = serde_json::to_string(&block).expect("can jsonify request");
-        let block_db = behaviour.storage_path.get_blocks();
-        rock_storage::put_to_db(block_db,latest_block.public_hash.clone(),&json);
-        let the_item: Option<String> = rock_storage::get_from_db(block_db,latest_block.public_hash.clone());
-        behaviour.app.blocks.push(block);
-        info!("broadcasting new block");
-        
-        //rock_storage::put_to_db(latest_block.id+1,);
-        behaviour
-            .floodsub
-            .publish(BLOCK_TOPIC.clone(), json.as_bytes());
-    }
-}
-
 pub fn handle_create_block_pbft(app: App, transactions: Vec<String>) -> Block {
     let app = app.blocks.last().expect("There should be at least one block");
     let latest_block = app;
@@ -179,7 +150,9 @@ pub fn handle_create_block_pbft(app: App, transactions: Vec<String>) -> Block {
         latest_block.public_hash.clone(),
         transactions,
         None,
-        None
+        None,
+        //TODO add verifier for block
+        [" ".to_string()].to_vec(),
     );
     block
 }
@@ -195,7 +168,8 @@ pub fn handle_create_block_private_chain(app:App,private_hash:Option<String>,txn
         latest_block.public_hash.clone(),
         transaction,
         Some(p_hash.clone()),
-        Some(root_acc)
+        Some(root_acc),
+        [" ".to_string()].to_vec(),
     );
     let json = serde_json::to_string(&block).expect("can jsonify request");
 
@@ -220,7 +194,7 @@ pub fn get_latest_block_hash()-> Result<Block, Box<dyn std::error::Error>>{
 }
 
 impl Block {
-    pub fn new(id: u64, previous_hash: String, txn:Vec<String>, private_hash: Option<String>,root:Option<String>) -> Self {
+    pub fn new(id: u64, previous_hash: String, txn:Vec<String>, private_hash: Option<String>,root:Option<String>,verified_node:Vec<String>) -> Self {
         let now = Utc::now();
         let txn_item = txn;
         let root_acc = root.unwrap_or_else(|| "".to_string()); // Use default if None
@@ -235,6 +209,7 @@ impl Block {
             transactions:Some(txn_item),
             timestamp: now.timestamp(),
             nonce,
+            node_verifier: Some(verified_node)
         }
     }
 

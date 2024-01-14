@@ -28,14 +28,14 @@ use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 struct TransactionInfo {
     caller_address: String,
     to_address: String,
-    computed_value: u64,
+    computed_value: u128,
     transaction_type: String
 }
 #[derive(Debug,serde::Serialize, serde::Deserialize)]
 struct TransactionSignedInfo {
     caller_address: String,
     txn_hash:String,
-    computed_value: u64,
+    computed_value: u128,
     transaction_type: String,
     private_key:String
 }
@@ -73,7 +73,7 @@ pub struct TransferTokenInfo {
     from_address: String,
     from_private_key:String,
     to_address:String,
-    amount:f64
+    amount:u128
 }
 #[derive(serde::Deserialize, Debug)]
 pub struct TxnIdInfo {

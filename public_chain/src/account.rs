@@ -17,7 +17,7 @@ pub fn generate_keypair()->(PublicKey,SecretKey) {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Account {
     public_address: String,
-    balance: f64,   
+    balance: u128,   
     nonce: u64,
     contract_address: Option<Vec<String>>,
     owned_tokens:  Option<HashMap<String, Vec<u64>>>, // Contract address to list of token IDs
@@ -50,12 +50,12 @@ impl Account {
     }
 
     // Deposit an amount into the account
-    fn deposit(&mut self, amount: f64) {
+    fn deposit(&mut self, amount: u128) {
         self.balance += amount;
     }
 
     // Withdraw an amount from the account, returns true if successful
-    fn withdraw(&mut self, amount: f64) -> bool {
+    fn withdraw(&mut self, amount: u128) -> bool {
         if self.balance >= amount {
             self.balance -= amount;
             true
@@ -97,7 +97,7 @@ impl Account {
         account_data.and_then(|data| serde_json::from_str(&data).ok())
     }
 
-    pub fn transfer(sender_key: &str, receiver_key: &str, amount: f64) -> Result<(), &'static str> {
+    pub fn transfer(sender_key: &str, receiver_key: &str, amount: u128) -> Result<(), &'static str> {
         let path = "./account/db";
         // Open the database and handle the Result
         let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
@@ -148,7 +148,7 @@ pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> 
 }
 
 
-pub fn get_balance(public_key: &str) -> Result<f64, Box<dyn std::error::Error>> {
+pub fn get_balance(public_key: &str) -> Result<u128, Box<dyn std::error::Error>> {
     let path = "./account/db";
     let account_path = rock_storage::open_db(path);
 

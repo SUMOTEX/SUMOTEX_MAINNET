@@ -351,7 +351,6 @@ async fn main() {
                             cmd if cmd.starts_with("ls b") => p2p::handle_print_chain(&swarm_public_net),
                             cmd if cmd.starts_with("ls t") => p2p::handle_print_txn(&swarm_public_net),
                             cmd if cmd.starts_with("ls rt") => p2p::handle_print_raw_txn(&swarm_public_net),
-                            cmd if cmd.starts_with("create b") => public_block::handle_create_block(cmd, swarm_public_net),
                             // cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, swarm_public_net),
                             //cmd if cmd.starts_with("create acc")=> account::create_account(cmd, swarm_public_net),
                             //cmd if cmd.starts_with("acc d")=> account::get_account(cmd, swarm_public_net),

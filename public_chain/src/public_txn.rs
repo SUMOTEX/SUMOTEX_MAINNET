@@ -14,20 +14,20 @@ use secp256k1::{Signature, SecretKey};
 use rocket::error;
 
 
-fn deserialize_string_to_u64<'de, D>(deserializer: D) -> Result<u64, D::Error>
+fn deserialize_string_to_u128<'de, D>(deserializer: D) -> Result<u128, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    struct StringOrU64Visitor;
+    struct StringOrU128Visitor;
 
-    impl<'de> serde::de::Visitor<'de> for StringOrU64Visitor {
-        type Value = u64;
+    impl<'de> serde::de::Visitor<'de> for StringOrU128Visitor {
+        type Value = u128;
 
         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
             formatter.write_str("a string or an integer")
         }
 
-        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
+        fn visit_u128<E>(self, value: u128) -> Result<Self::Value, E>
         where
             E: serde::de::Error,
         {
@@ -38,11 +38,11 @@ where
         where
             E: serde::de::Error,
         {
-            value.parse::<u64>().map_err(serde::de::Error::custom)
+            value.parse::<u128>().map_err(serde::de::Error::custom)
         }
     }
 
-    deserializer.deserialize_any(StringOrU64Visitor)
+    deserializer.deserialize_any(StringOrU128Visitor)
 }
 
 
@@ -63,11 +63,12 @@ pub enum TransactionType {
 pub struct PublicTxn{
     pub txn_hash: String,
     pub txn_type: TransactionType,  // Added field for transaction type
-    #[serde(deserialize_with = "deserialize_string_to_u64")]
-    pub nonce:u64,
-    pub value: f64,
-    #[serde(deserialize_with = "deserialize_string_to_u64")]
-    pub gas_cost: u64, 
+    #[serde(deserialize_with = "deserialize_string_to_u128")]
+    pub nonce:u128,
+    #[serde(deserialize_with = "deserialize_string_to_u128")]
+    pub value: u128,
+    #[serde(deserialize_with = "deserialize_string_to_u128")]
+    pub gas_cost: u128, 
     pub caller_address:String,
     pub to_address:String,
     pub status:i64,
@@ -172,8 +173,8 @@ impl Txn {
         transaction_type: TransactionType, 
         caller_address: String,
         to_address: String,
-        computed_value: u64
-    ) -> Result<(String,u64, PublicTxn), Box<dyn std::error::Error>> {
+        computed_value: u128
+    ) -> Result<(String,u128, PublicTxn), Box<dyn std::error::Error>> {
         let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
         match transaction_type {
             TransactionType::ContractCreation | TransactionType::ContractInteraction => {
@@ -205,8 +206,8 @@ impl Txn {
                     caller_address,
                     to_address,
                     txn_hash: txn_hash_hex.clone(),
-                    nonce,
-                    value: computed_value as f64,
+                    nonce:nonce.into(),
+                    value: computed_value ,
                     status: 0, // Placeholder
                     timestamp: current_timestamp,
                     signature: Vec::new(), // Placeholder
@@ -336,7 +337,7 @@ impl Txn {
 
         let mut transaction: PublicTxn = serde_json::from_str(&txn_data)?;
         if transaction.txn_type==TransactionType::SimpleTransfer{
-            account::Account::transfer(&transaction.caller_address,&transaction.to_address,transaction.value as f64);
+            account::Account::transfer(&transaction.caller_address,&transaction.to_address,transaction.value);
         }
         Ok(())
 
@@ -346,9 +347,9 @@ impl Txn {
         transaction_type: TransactionType,
         caller_address: &str,
         to_address: &str,
-        computed_value: u64,
+        computed_value: u128,
         current_timestamp: i64
-    ) -> Result<(String, u64, PublicTxn), Box<dyn std::error::Error>> {
+    ) -> Result<(String, u128, PublicTxn), Box<dyn std::error::Error>> {
         // Handle the contract-specific logic here
         // For example, you might have different steps or calculations for contract transactions
     
@@ -376,7 +377,7 @@ impl Txn {
             to_address: to_address.to_string(),
             txn_hash: txn_hash_hex.clone(),
             nonce: 0, // You need to fetch or calculate the correct nonce
-            value: computed_value as f64,
+            value: computed_value,
             status: 0, // Placeholder
             timestamp: current_timestamp,
             signature: Vec::new(), // Placeholder

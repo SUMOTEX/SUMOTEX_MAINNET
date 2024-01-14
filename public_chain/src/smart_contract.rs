@@ -972,7 +972,8 @@ pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, 
 
     Ok(())
 }
-pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contract_name:&str,contract_symbol:&str)->Result<(String,String,u64, PublicTxn), Box<dyn std::error::Error>>{
+pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contract_name:&str,contract_symbol:&str)->
+    Result<(String,String,u128, PublicTxn), Box<dyn std::error::Error>>{
     let (public_key,private_key) = generate_keypair(); 
     let path = "./contract/db";
     let contract_path = rock_storage::open_db(path);
@@ -1214,7 +1215,7 @@ pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<i32, Box<dy
 pub fn mint_token_official(contract_address:&String,
                             account_key:&String,
                             private_key:&String,
-                            ipfs:&String)->Result<(i32,String, u64), Box<dyn std::error::Error>>{
+                            ipfs:&String)->Result<(i32,String, u128), Box<dyn std::error::Error>>{
         let c_path = "./contract/db";
         let a_path = "./account/db";
         let contract_path = match rock_storage::open_db(c_path) {
