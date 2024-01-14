@@ -52,7 +52,7 @@ pub struct Txn{
     pub hashed_txn:Vec<String>,
 }
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
+#[derive(Debug,PartialEq, Clone, Serialize, Deserialize)]
 pub enum TransactionType {
     SimpleTransfer,
     ContractCreation,
@@ -65,7 +65,7 @@ pub struct PublicTxn{
     pub txn_type: TransactionType,  // Added field for transaction type
     #[serde(deserialize_with = "deserialize_string_to_u64")]
     pub nonce:u64,
-    pub value: u64,
+    pub value: f64,
     #[serde(deserialize_with = "deserialize_string_to_u64")]
     pub gas_cost: u64, 
     pub caller_address:String,
@@ -206,7 +206,7 @@ impl Txn {
                     to_address,
                     txn_hash: txn_hash_hex.clone(),
                     nonce,
-                    value: computed_value,
+                    value: computed_value as f64,
                     status: 0, // Placeholder
                     timestamp: current_timestamp,
                     signature: Vec::new(), // Placeholder
@@ -323,7 +323,23 @@ impl Txn {
 
         // Serialize and save the updated transaction
         rock_storage::put_to_db(&db_handle, txn_hash.to_string(), &serde_json::to_string(&transaction)?)?;
+        if new_status==3{
+            Self::handle_post_complete_block(txn_hash.clone());
+        }
         Ok(())
+    }
+    pub fn handle_post_complete_block(txn_hash:&str)-> Result<(), Box<dyn std::error::Error>> {
+        let db_path = "./transactions/db";
+        let db_handle = rock_storage::open_db(db_path)?;
+        let txn_data = rock_storage::get_from_db(&db_handle, txn_hash.to_string())
+            .ok_or("Transaction not found")?; // Handle missing transactions appropriately
+
+        let mut transaction: PublicTxn = serde_json::from_str(&txn_data)?;
+        if transaction.txn_type==TransactionType::SimpleTransfer{
+            account::Account::transfer(&transaction.caller_address,&transaction.to_address,transaction.value as f64);
+        }
+        Ok(())
+
     }
 
     fn handle_contract_transaction(
@@ -360,7 +376,7 @@ impl Txn {
             to_address: to_address.to_string(),
             txn_hash: txn_hash_hex.clone(),
             nonce: 0, // You need to fetch or calculate the correct nonce
-            value: computed_value,
+            value: computed_value as f64,
             status: 0, // Placeholder
             timestamp: current_timestamp,
             signature: Vec::new(), // Placeholder

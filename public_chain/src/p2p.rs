@@ -202,6 +202,13 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         self.app.try_add_block(block.clone());
                         let block_db = self.storage_path.get_blocks();
                         let json = serde_json::to_string(&block).expect("can jsonify request");
+                        let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
+                        for txn in block.transactions{
+                            if let Some(first_txn_id) = txn.first().cloned() {
+                                Txn::update_transaction_status(&first_txn_id,3);
+                                mempool.remove_transaction_by_id(first_txn_id);
+                            } 
+                        }
                         let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &json);
                         let _ = rock_storage::put_to_db(block_db,"epoch", &json);
                     },
@@ -411,6 +418,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     let block_db = self.storage_path.get_blocks();
                                     for txn_hash in &block.transactions {
                                         if let Some(first_txn_id) = txn_hash.first().cloned() {
+                                            Txn::update_transaction_status(&first_txn_id,3);
                                             mempool.remove_transaction_by_id(first_txn_id);
                                         } 
                                     }
