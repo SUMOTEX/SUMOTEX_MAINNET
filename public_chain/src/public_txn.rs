@@ -12,6 +12,7 @@ use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use secp256k1::{Signature, SecretKey};
 use rocket::error;
+use serde_json::Value;
 
 
 fn deserialize_string_to_u128<'de, D>(deserializer: D) -> Result<u128, D::Error>
@@ -27,11 +28,11 @@ where
             formatter.write_str("a string or an integer")
         }
 
-        fn visit_u128<E>(self, value: u128) -> Result<Self::Value, E>
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E>
         where
             E: serde::de::Error,
         {
-            Ok(value)
+            Ok(value as u128)
         }
 
         fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
@@ -44,6 +45,37 @@ where
 
     deserializer.deserialize_any(StringOrU128Visitor)
 }
+
+// fn deserialize_string_to_u128<'de, D>(deserializer: D) -> Result<u128, D::Error>
+// where
+//     D: serde::Deserializer<'de>,
+// {
+//     struct StringOrU128Visitor;
+
+//     impl<'de> serde::de::Visitor<'de> for StringOrU128Visitor {
+//         type Value = u128;
+
+//         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
+//             formatter.write_str("a string or an integer")
+//         }
+
+//         fn visit_u128<E>(self, value: u128) -> Result<Self::Value, E>
+//         where
+//             E: serde::de::Error,
+//         {
+//             Ok(value as u128)
+//         }
+
+//         fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+//         where
+//             E: serde::de::Error,
+//         {
+//             value.parse::<u128>().map_err(serde::de::Error::custom)
+//         }
+//     }
+
+//     deserializer.deserialize_any(StringOrU128Visitor)
+// }
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -63,8 +95,7 @@ pub enum TransactionType {
 pub struct PublicTxn{
     pub txn_hash: String,
     pub txn_type: TransactionType,  // Added field for transaction type
-    #[serde(deserialize_with = "deserialize_string_to_u128")]
-    pub nonce:u128,
+    pub nonce:i64,
     #[serde(deserialize_with = "deserialize_string_to_u128")]
     pub value: u128,
     #[serde(deserialize_with = "deserialize_string_to_u128")]
@@ -98,6 +129,9 @@ impl TransactionType {
 impl PublicTxn {
     pub fn set_status(&mut self, new_status: i64) {
         self.status = new_status;
+    }
+    pub fn set_signature(&mut self, new_signature: Vec<u8>) {
+        self.signature = new_signature;
     }
 }
 
@@ -263,6 +297,8 @@ impl Txn {
                     // Update the transaction status
                     let mut updated_txn = txn.clone();
                     updated_txn.set_status(1);
+                    let signature_bytes = signature.serialize_compact();
+                    updated_txn.set_signature(signature_bytes.to_vec());
                     Self::update_transaction_status(&txn.txn_hash,1);
                     rock_storage::put_to_db(&db_handle, txn.txn_hash.to_string(), &serde_json::to_string(&updated_txn)?)?;
                     let serialized_data = serde_json::to_string(&updated_txn)?;
@@ -318,29 +354,27 @@ impl Txn {
             .ok_or("Transaction not found")?; // Handle missing transactions appropriately
 
         let mut transaction: PublicTxn = serde_json::from_str(&txn_data)?;
-
+        println!("Transaction {:?}",transaction);
         // Update the transaction status
         transaction.set_status(new_status);
 
         // Serialize and save the updated transaction
         rock_storage::put_to_db(&db_handle, txn_hash.to_string(), &serde_json::to_string(&transaction)?)?;
         if new_status==3{
-            Self::handle_post_complete_block(txn_hash.clone());
+            println!("Transaction update requested");
+            Self::handle_post_complete_block(transaction);
         }
         Ok(())
     }
-    pub fn handle_post_complete_block(txn_hash:&str)-> Result<(), Box<dyn std::error::Error>> {
-        let db_path = "./transactions/db";
-        let db_handle = rock_storage::open_db(db_path)?;
-        let txn_data = rock_storage::get_from_db(&db_handle, txn_hash.to_string())
-            .ok_or("Transaction not found")?; // Handle missing transactions appropriately
-
-        let mut transaction: PublicTxn = serde_json::from_str(&txn_data)?;
-        if transaction.txn_type==TransactionType::SimpleTransfer{
-            account::Account::transfer(&transaction.caller_address,&transaction.to_address,transaction.value);
+    pub fn handle_post_complete_block(txn: PublicTxn) -> Result<(), Box<dyn std::error::Error>> {
+    
+        if txn.txn_type == TransactionType::SimpleTransfer {
+            println!("Handling SimpleTransfer");
+            account::Account::transfer(&txn.caller_address, &txn.to_address, txn.value);
+            println!("SimpleTransfer handled successfully.");
         }
+    
         Ok(())
-
     }
 
     fn handle_contract_transaction(
@@ -370,13 +404,14 @@ impl Txn {
         let txn_hash = Sha256::digest(txn_data.as_bytes());
         let txn_hash_hex = format!("{:x}", txn_hash);
         let gas_cost = 1000; // This is an example function call
-    
+        let account = account::get_account_no_swarm(&caller_address).expect("Account not found");
+        let nonce = account.get_nonce();
         let new_txn = PublicTxn {
             txn_type: transaction_type,
             caller_address: caller_address.to_string(),
             to_address: to_address.to_string(),
             txn_hash: txn_hash_hex.clone(),
-            nonce: 0, // You need to fetch or calculate the correct nonce
+            nonce: nonce, // You need to fetch or calculate the correct nonce
             value: computed_value,
             status: 0, // Placeholder
             timestamp: current_timestamp,

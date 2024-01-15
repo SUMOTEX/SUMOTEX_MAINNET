@@ -18,7 +18,7 @@ pub fn generate_keypair()->(PublicKey,SecretKey) {
 pub struct Account {
     public_address: String,
     balance: u128,   
-    nonce: u64,
+    nonce: i64,
     contract_address: Option<Vec<String>>,
     owned_tokens:  Option<HashMap<String, Vec<u64>>>, // Contract address to list of token IDs
 }
@@ -36,8 +36,7 @@ impl From<Secp256k1Error> for SigningError {
 
 impl Account {
     // Creates a new account
-    fn new() -> Self {
-        let (public_key,private_key)=generate_keypair();
+    fn new(public_key:PublicKey) -> Self {
         Account {
             public_address:public_key.to_string(),
             //TEST
@@ -92,36 +91,54 @@ impl Account {
         let token_list = self.owned_tokens.as_mut().unwrap().entry(contract_address.to_string()).or_insert_with(Vec::new);
         
     }
-    pub fn get_account(account_key: &str, db_handle: &DB) -> Option<Account> {
-        let account_data = rock_storage::get_from_db(db_handle, account_key);
-        account_data.and_then(|data| serde_json::from_str(&data).ok())
-    }
+    pub fn get_account(pub_key: &str, db_handle: &DB) -> Option<Account> {
+        let account_data = rock_storage::get_from_db(db_handle, pub_key.to_string());
 
-    pub fn transfer(sender_key: &str, receiver_key: &str, amount: u128) -> Result<(), &'static str> {
-        let path = "./account/db";
-        // Open the database and handle the Result
-        let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
-    
-        let mut sender_account = Self::get_account(sender_key, &db_handle)
-            .ok_or("Sender account not found")?;
-    
-        if sender_account.balance < amount {
-            return Err("Insufficient balance");
+        if let Some(data) = &account_data {
+            println!("Retrieved account data: {}", data);
         }
     
+        account_data.and_then(|data| serde_json::from_str(&data).ok())
+    }
+    pub fn transfer(sender_key: &str, receiver_key: &str, amount: u128) -> Result<(), Box<dyn std::error::Error>> {
+        // Step 1: Open the database and handle the Result
+        let db_handle = open_account_db().map_err(|_| "Failed to open database")?;
+        println!("Database opened successfully");
+    
+        // Step 2: Get sender account
+        let mut sender_account = Self::get_account(sender_key, &db_handle)
+            .ok_or("Sender account not found")?;
+        println!("Sender key: {}, Retrieved sender account: {:?}", sender_key, sender_account);
+
+        // Step 3: Check if sender has enough balance
+        if sender_account.balance < amount {
+            return Err("Insufficient balance".into());
+        }
+        println!("Sufficient balance for transfer");
+    
+        // Step 4: Get receiver account
         let mut receiver_account = Self::get_account(receiver_key, &db_handle)
             .ok_or("Receiver account not found")?;
+        println!("Receiver account retrieved: {:?}", receiver_account);
     
+        // Step 5: Perform the transfer
         sender_account.balance -= amount;
         receiver_account.balance += amount;
     
-        // Assuming save_account expects a reference to a DB handle
+        // Step 6: Save sender account changes
         save_account(&sender_account, &db_handle).map_err(|_| "Failed to save sender account")?;
+        println!("Sender account updated: {:?}", sender_account);
+    
+        // Step 7: Save receiver account changes
         save_account(&receiver_account, &db_handle).map_err(|_| "Failed to save receiver account")?;
+        println!("Receiver account updated: {:?}", receiver_account);
+    
+        println!("Transfer successful");
     
         Ok(())
     }
-    pub fn get_nonce(&self) -> u64 {
+    
+    pub fn get_nonce(&self) -> i64 {
         self.nonce
     }
     
@@ -135,7 +152,7 @@ pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> 
     let account_db = open_account_db()?;
     
     let (public_key, private_key) = generate_keypair();
-    let account = Account::new();
+    let account = Account::new(public_key);
     let serialized_data = serde_json::to_string(&account)?;
 
     match rock_storage::put_to_db(&account_db, public_key.clone().to_string(), &serialized_data) {
