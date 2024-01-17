@@ -9,7 +9,7 @@ use std::fs::File;
 use std::io::prelude::*;
 
 #[proc_macro]
-pub fn generate_abi(input: TokenStream) -> TokenStream {
+pub fn generate_erc_abi(input: TokenStream) -> TokenStream {
     let implementation = parse_macro_input!(input as ItemImpl);
     let mut functions = vec![];
 
@@ -44,7 +44,7 @@ pub fn generate_abi(input: TokenStream) -> TokenStream {
     let expanded = quote! {
         const ABI: &str = #abi_string;
     };
-    let mut file = File::create("./abi.json").unwrap();
+    let mut file = File::create("./test_abi.json").unwrap();
     file.write_all(abi_string.as_bytes()).unwrap();
     TokenStream::from(expanded)
 

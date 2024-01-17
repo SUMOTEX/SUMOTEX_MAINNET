@@ -9,6 +9,7 @@ path = "src/erc721.rs"
 crate-type = ["cdylib", "rlib"]
 
 [dependencies]
+erc20_macro = { path = "../erc20_macro" }
 syn = { version = "1", features = ["full"] }
 quote = "1.0"
 serde = { version = "1.0", features = ["derive", "std"] }

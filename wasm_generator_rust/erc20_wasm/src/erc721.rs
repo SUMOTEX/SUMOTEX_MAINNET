@@ -5,6 +5,7 @@ use std::io::Cursor;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use bincode::{serialize};
+use erc20_macro::generate_abi;
 use std::ffi::{CString, CStr};
 
 #[derive(Serialize, Deserialize,Clone)]
@@ -39,7 +40,7 @@ static mut GLOBAL_STATE: GlobalState = GlobalState {
     token_details_buffer: Vec::new(), // Initialize with an empty Vec
 };
 
-
+#[generate_abi]
 impl ERC721Token {
 
     fn deserialize_from_memory(buffer: *const u8, len: usize) -> Result<ERC721Token, Box<dyn std::error::Error>> {

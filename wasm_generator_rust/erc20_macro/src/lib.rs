@@ -46,7 +46,7 @@ pub fn generate_abi(_attrs: TokenStream, input: TokenStream) -> TokenStream {
     let expanded = quote! {
         const ABI: &str = #abi_string;
     };
-    let mut file = File::create("./abi.json").unwrap();
+    let mut file = File::create("./test_abi.json").unwrap();
     file.write_all(abi_string.as_bytes()).unwrap();
     TokenStream::from(expanded)
 }
