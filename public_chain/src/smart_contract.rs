@@ -1171,6 +1171,38 @@ pub fn get_erc721_supply(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), 
     }
     Ok(())
 }
+pub fn read_total_token_erc721(contract_address:&String)->Result<(i64), Box<dyn std::error::Error>>{
+    let c_path = "./contract/db";
+    let a_path = "./account/db";
+    let contract_path = match rock_storage::open_db(c_path) {
+        Ok(path) => path,
+        Err(e) => {
+            // Handle the error, maybe log it, and then decide what to do next
+            panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+        }
+    };
+    let acc_path = match rock_storage::open_db(a_path) {
+        Ok(path) => path,
+        Err(e) => {
+            // Handle the error, maybe log it, and then decide what to do next
+            panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+        }
+    };
+    let mut contract = WasmContract::new("./sample721.wasm")?;
+    let contract_info = ContractInfo {
+        module_path: "./sample721.wasm".to_string(),
+        pub_key:contract_address.to_string(),
+    };
+    let result = contract.read_numbers(&contract_path,&contract_info,contract_address,"total_tokens");
+    match result {
+        Ok(value) => {
+            Ok(value)
+        }
+        Err(e) => {
+            Err(e)
+        }
+    }
+}
 pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<i32, Box<dyn std::error::Error>>{
     let parts: Vec<&str> = cmd.split_whitespace().collect();
     if parts.len() == 4 && parts[0] == "mint" && parts[1] == "token" {

@@ -60,6 +60,11 @@ pub struct ReadTokenInfo {
 }
 
 #[derive(serde::Deserialize, Debug)]
+pub struct ReadTotalTokenInfo {  
+    contract_address: String
+}
+
+#[derive(serde::Deserialize, Debug)]
 pub struct ReadAccountInfo {
     pub_address: String
 }
@@ -230,7 +235,6 @@ fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value>
     let token_id = &post_data.token_id;
     match smart_contract::read_token_by_id(&contract_address, token_id) {
         Ok(token_detail) => {
-            println!("Read Token Details: {:?}", token_detail);
             let response_body = json!({"token_detail": token_detail});
             Json(json!({"jsonrpc": "1.0",  "result": response_body}))
         },
@@ -240,7 +244,22 @@ fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value>
         }
     }
 }
-
+// // Route to handle RPC requests.
+#[post("/read-total-minted", data = "<post_data>")]
+fn read_total_minted_token(post_data: Json<ReadTotalTokenInfo>)-> Json<serde_json::Value> {
+    println!("Read Minted Token");
+    let contract_address = &post_data.contract_address;
+    match smart_contract::read_total_token_erc721(&contract_address) {
+        Ok(minted_token) => {
+            let response_body = json!({"total_supply": minted_token});
+            Json(json!({"jsonrpc": "1.0",  "result": response_body}))
+        },
+        Err(e) => {
+            error!("Error creating contract: {:?}", e);
+            Json(json!({"jsonrpc": "1.0", "result": "error"}))
+        }
+    }
+}
 // Route to handle RPC requests.
 #[post("/create-wallet")]
 fn create_wallet()-> Json<serde_json::Value> {
@@ -511,6 +530,7 @@ pub async fn start_rpc() {
                             get_account,
                             complete_transaction,
                             read_transaction,
+                            read_total_minted_token,
                             get_receiver_transactions,
                             create_block,
                             get_block,
