@@ -1,3 +1,3 @@
 fn main() {
-    println!("SUMOTEX ERC20");
+    println!("Hello, world!");
 }

@@ -40,6 +40,15 @@ struct TransactionSignedInfo {
     private_key:String
 }
 #[derive(serde::Deserialize, Debug)]
+pub struct GenericContractInfo {
+    contract_address: String,
+    caller_address:String,
+    private_key: String,
+    function_name:String,
+    args_input: HashMap<String, String>,
+    args_output: HashMap<String, String>
+}
+#[derive(serde::Deserialize, Debug)]
 pub struct ContractInfo {
     call_address: String,
     private_key: String,
@@ -90,6 +99,7 @@ pub struct SignedTransaction {
     signature: String,
     // ... other fields as needed ...
 }
+
 
 #[derive( serde::Serialize, serde::Deserialize,Debug,Clone)]
 pub struct AppBlocks {
@@ -399,6 +409,32 @@ fn complete_transaction(transaction_info: Json<TransactionSignedInfo>) -> Json<s
             }))
         }
     }
+}
+
+#[post("/call-contract", data = "<generic_contract>")]
+fn generic_smart_contract_function_call(post_data: Json<GenericContractInfo>)->  Json<serde_json::Value>{
+        // Extract transaction information
+        println!("Generic function called");
+        let contract_address = &post_data.contract_address;
+        let call_address = &post_data.caller_address;
+        let private_key = &post_data.private_key;
+        let function_name = &post_data.function_name;
+        let args_input = &post_data.args_input;
+        let args_output = &post_data.args_output;
+        match smart_contract::call_contract_function(&contract_address, &private_key,args_input,args_output) {
+            Ok((result_map)) => {
+                let response_body = json!({
+                    "contract_address": contract_address,
+                    "result": result_map,
+                });
+                Json(json!({"jsonrpc": "1.0", "result": response_body}))
+            },
+            Err(e) => {
+                error!("Error calling function: {:?}", e);
+                let error_details = format!("{:?}", e);
+                Json(json!({"jsonrpc": "2.0", "error": {"code": -32000, "message": error_details}}))
+            }
+        }
 }
 
 #[get("/create-block")]

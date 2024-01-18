@@ -215,9 +215,6 @@ impl WasmContract {
             module,
         })
     }
-    pub fn get_store(&mut self) -> &mut Store<WasiCtx> {
-        &mut self.store
-    }
     pub fn call(
         &mut self,
         contract_path:&DBWithThreadMode<SingleThreaded>,
@@ -256,7 +253,71 @@ impl WasmContract {
         let updated_byte_vector: Vec<u8> = updated_data.to_vec();
         rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
         Ok(())
-    }    
+    }   
+    pub fn call_function(
+        &mut self,
+        contract_path: &DBWithThreadMode<SingleThreaded>,
+        contract_info: &ContractInfo,
+        account_key: &String,
+        contract_address: &String,
+        function_name: &str,
+        args: HashMap<String, String>,
+    ) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+        let engine = Engine::default();
+        let mut linker = Linker::new(&engine);
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+        let mut store = Store::new(&engine, wasi);
+
+        let module = Module::from_file(&engine, &contract_info.module_path)?;
+        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+
+        let link = linker.instantiate(&mut store, &module)?;
+
+        let wasm_memory = link
+            .get_memory(&mut store, "memory")
+            .ok_or_else(|| "Failed to find `memory` export")?;
+
+        let data = wasm_memory.data(&mut store);
+        let byte_vector: Vec<u8> = data.to_vec();
+
+        //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
+
+        // Convert args to Vec<Val>
+        let arg_values: Vec<Val> = args
+        .iter()
+        .map(|(_, val)| Val::I32(val.parse().unwrap()))
+        .collect();
+
+        // Use generics to call the function with the correct argument and return types
+        let func = link.get_typed_func::<Val, Val>(&mut store, function_name)?;
+        let result_values = func.call(&mut store, &arg_values)?;
+
+        let args_tuple = (
+            wasm_params.args[0].unwrap_i32(),
+            wasm_params.args[1].unwrap_i32(),
+            wasm_params.args[2].unwrap_i32(),
+            wasm_params.args[3].unwrap_i32(),
+        );
+        let initialise_func = link.get_typed_func::<(i32, i32, i32, i32),()>(&mut store, &wasm_params.name)?;
+
+        let result = initialise_func.call(&mut store,  args_tuple)?;
+        // Convert result_values to HashMap<String, String>
+        let result: HashMap<String, String> = {
+            let val = result_values.to_string();
+            let mut map = HashMap::new();
+            map.insert("output".to_string(), val);
+            map
+        };
+
+        let updated_data = wasm_memory.data(&mut store);
+        let updated_byte_vector: Vec<u8> = updated_data.to_vec();
+        rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
+
+        Ok(result)
+    }
+    pub fn get_store(&mut self) -> &mut Store<WasiCtx> {
+        &mut self.store
+    }  
     pub fn call_721(
         &mut self,
         contract_path:&DBWithThreadMode<SingleThreaded>,
@@ -1171,7 +1232,7 @@ pub fn get_erc721_supply(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), 
     }
     Ok(())
 }
-pub fn read_total_token_erc721(contract_address:&String)->Result<(i64), Box<dyn std::error::Error>>{
+pub fn read_total_token_erc721(contract_address:&String)->Result<i64, Box<dyn std::error::Error>>{
     let c_path = "./contract/db";
     let a_path = "./account/db";
     let contract_path = match rock_storage::open_db(c_path) {
@@ -1393,3 +1454,85 @@ pub fn transfer_nft(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box
     Ok(())
 }
 
+pub fn call_contract_function(
+    contract_address: &String,
+    account_key: &String,
+    private_key: &String,
+    function_name: &str,
+    args_input: HashMap<String, String>,
+    args_output: HashMap<String, String>,
+) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+    let c_path = "./contract/db";
+    let a_path = "./account/db";
+    let contract_path = match rock_storage::open_db(c_path) {
+        Ok(path) => path,
+        Err(e) => {
+            panic!("Failed to open database: {:?}", e);
+        }
+    };
+    let acc_path = match rock_storage::open_db(a_path) {
+        Ok(path) => path,
+        Err(e) => {
+            panic!("Failed to open database: {:?}", e);
+        }
+    };
+    let mut contract = WasmContract::new("./sample721.wasm")?;
+    let contract_info = ContractInfo {
+        module_path: "./sample721.wasm".to_string(),
+        pub_key: contract_address.to_string(),
+    };
+    let the_memory = create_memory(contract.get_store())?;
+    let account_data = rock_storage::get_from_db(&acc_path, account_key);
+
+    let txn = public_txn::Txn::create_and_prepare_transaction(
+        TransactionType::ContractInteraction,
+        account_key.to_string(),
+        contract_address.to_string(),
+        1000,
+    );
+
+    match txn {
+        Ok((txn_hash, gas_cost, new_txn)) => {
+            let private_key_bytes = match hex::decode(&private_key) {
+                Ok(bytes) => bytes,
+                Err(e) => {
+                    panic!("Failed to decode private key: {:?}", e);
+                }
+            };
+
+            let the_official_private_key = match SecretKey::from_slice(&private_key_bytes) {
+                Ok(key) => key,
+                Err(e) => {
+                    panic!("Failed to create SecretKey: {:?}", e);
+                }
+            };
+
+            public_txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
+
+            let result = contract.call_function(
+                &contract_path,
+                &contract_info,
+                account_key,
+                &contract_address.to_string(),
+                function_name,
+                args_input,
+                args_output
+            );
+
+            match result {
+                Ok(result_map) => {
+                    println!("Function {} result: {:?}", function_name, result_map);
+                    Ok(result_map)
+                }
+                Err(e) => {
+                    println!("Error calling function {}: {}", function_name, e);
+                    Err(e)
+                }
+            }
+        }
+        Err(txn_err) => {
+            println!("Error creating transaction: {}", txn_err);
+            Err(txn_err.into())
+        }
+    }
+}

@@ -1,61 +1,76 @@
 [{
                 "name": "deserialize_from_memory",
                 "type": "function",
-                "inputs": [{"name": "buffer", "type": "* const u8"},{"name": "len", "type": "usize"}]
+                "inputs": [{"name": "buffer", "type": "buffer : * const u8"},{"name": "len", "type": "len : usize"}],
+                "outputs": [{"name": "output", "type": "Result < ERC721Token, Box < dyn std :: error :: Error > >"}]
             },{
                 "name": "to_memory",
                 "type": "function",
-                "inputs": []
+                "inputs": [],
+                "outputs": [{"name": "output", "type": "Result < Vec < u8 >, Box < dyn std :: error :: Error > >"}]
             },{
                 "name": "initialize",
                 "type": "function",
-                "inputs": [{"name": "name_ptr", "type": "* mut u8"},{"name": "name_len", "type": "usize"},{"name": "symbol_ptr", "type": "* mut u8"},{"name": "symbol_len", "type": "usize"}]
+                "inputs": [{"name": "name_ptr", "type": "name_ptr : * mut u8"},{"name": "name_len", "type": "name_len : usize"},{"name": "symbol_ptr", "type": "symbol_ptr : * mut u8"},{"name": "symbol_len", "type": "symbol_len : usize"}],
+                "outputs": []
             },{
                 "name": "mint",
                 "type": "function",
-                "inputs": [{"name": "owner_ptr", "type": "* const u8"},{"name": "owner_len", "type": "usize"},{"name": "ipfs_hash_ptr", "type": "* const u8"},{"name": "ipfs_hash_len", "type": "usize"}]
+                "inputs": [{"name": "owner_ptr", "type": "owner_ptr : * const u8"},{"name": "owner_len", "type": "owner_len : usize"},{"name": "ipfs_hash_ptr", "type": "ipfs_hash_ptr : * const u8"},{"name": "ipfs_hash_len", "type": "ipfs_hash_len : usize"}],
+                "outputs": [{"name": "output", "type": "u32"}]
             },{
                 "name": "get_token_or_default",
                 "type": "function",
-                "inputs": []
+                "inputs": [],
+                "outputs": [{"name": "output", "type": "ERC721Token"}]
             },{
                 "name": "get_owner_len",
                 "type": "function",
-                "inputs": [{"name": "token_id", "type": "i32"}]
+                "inputs": [{"name": "token_id", "type": "token_id : i32"}],
+                "outputs": [{"name": "output", "type": "i64"}]
             },{
                 "name": "get_owner_ptr",
                 "type": "function",
-                "inputs": [{"name": "token_id", "type": "i32"}]
+                "inputs": [{"name": "token_id", "type": "token_id : i32"}],
+                "outputs": [{"name": "output", "type": "* const i8"}]
             },{
                 "name": "get_ipfs_len",
                 "type": "function",
-                "inputs": [{"name": "token_id", "type": "i32"}]
+                "inputs": [{"name": "token_id", "type": "token_id : i32"}],
+                "outputs": [{"name": "output", "type": "i32"}]
             },{
                 "name": "get_ipfs_ptr",
                 "type": "function",
-                "inputs": [{"name": "token_id", "type": "i32"}]
+                "inputs": [{"name": "token_id", "type": "token_id : i32"}],
+                "outputs": [{"name": "output", "type": "* const i8"}]
             },{
                 "name": "encode_token_details",
                 "type": "function",
-                "inputs": [{"name": "details", "type": "& TokenDetails"}]
+                "inputs": [{"name": "details", "type": "details : & TokenDetails"}],
+                "outputs": [{"name": "output", "type": "Vec < u8 >"}]
             },{
                 "name": "transfer",
                 "type": "function",
-                "inputs": [{"name": "from_ptr", "type": "* const u8"},{"name": "from_len", "type": "usize"},{"name": "to_ptr", "type": "* const u8"},{"name": "to_len", "type": "usize"},{"name": "token_id", "type": "i32"}]
+                "inputs": [{"name": "from_ptr", "type": "from_ptr : * const u8"},{"name": "from_len", "type": "from_len : usize"},{"name": "to_ptr", "type": "to_ptr : * const u8"},{"name": "to_len", "type": "to_len : usize"},{"name": "token_id", "type": "token_id : i32"}],
+                "outputs": [{"name": "output", "type": "Result < (), & 'static str >"}]
             },{
                 "name": "read_name",
                 "type": "function",
-                "inputs": [{"name": "buffer", "type": "* mut u8"},{"name": "buffer_len", "type": "usize"}]
+                "inputs": [{"name": "buffer", "type": "buffer : * mut u8"},{"name": "buffer_len", "type": "buffer_len : usize"}],
+                "outputs": [{"name": "output", "type": "isize"}]
             },{
                 "name": "read_symbol",
                 "type": "function",
-                "inputs": [{"name": "buffer", "type": "* mut u8"},{"name": "buffer_len", "type": "usize"}]
+                "inputs": [{"name": "buffer", "type": "buffer : * mut u8"},{"name": "buffer_len", "type": "buffer_len : usize"}],
+                "outputs": [{"name": "output", "type": "isize"}]
             },{
                 "name": "string_to_buffer",
                 "type": "function",
-                "inputs": [{"name": "source", "type": "& str"},{"name": "buffer", "type": "* mut u8"},{"name": "buffer_len", "type": "usize"}]
+                "inputs": [{"name": "source", "type": "source : & str"},{"name": "buffer", "type": "buffer : * mut u8"},{"name": "buffer_len", "type": "buffer_len : usize"}],
+                "outputs": [{"name": "output", "type": "isize"}]
             },{
                 "name": "total_tokens",
                 "type": "function",
-                "inputs": []
+                "inputs": [],
+                "outputs": [{"name": "output", "type": "i64"}]
             }]
