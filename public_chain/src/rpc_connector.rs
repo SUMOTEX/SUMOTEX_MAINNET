@@ -19,6 +19,7 @@ use crate::public_txn::TransactionType;
 use crate::public_app::App as PubApp;
 use lazy_static::lazy_static;
 use rocket::Route;
+use std::collections::HashMap;
 use secp256k1::SecretKey;
 use rocket_okapi::{openapi, routes_with_openapi, JsonSchema};
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
@@ -45,8 +46,9 @@ pub struct GenericContractInfo {
     caller_address:String,
     private_key: String,
     function_name:String,
-    args_input: HashMap<String, String>,
-    args_output: HashMap<String, String>
+    args_values:String,
+    args_input:String,
+    args_output: String
 }
 #[derive(serde::Deserialize, Debug)]
 pub struct ContractInfo {
@@ -411,7 +413,7 @@ fn complete_transaction(transaction_info: Json<TransactionSignedInfo>) -> Json<s
     }
 }
 
-#[post("/call-contract", data = "<generic_contract>")]
+#[post("/call-contract", data = "<post_data>")]
 fn generic_smart_contract_function_call(post_data: Json<GenericContractInfo>)->  Json<serde_json::Value>{
         // Extract transaction information
         println!("Generic function called");
@@ -419,10 +421,11 @@ fn generic_smart_contract_function_call(post_data: Json<GenericContractInfo>)-> 
         let call_address = &post_data.caller_address;
         let private_key = &post_data.private_key;
         let function_name = &post_data.function_name;
+        let args_input_values = &post_data.args_values;
         let args_input = &post_data.args_input;
         let args_output = &post_data.args_output;
-        match smart_contract::call_contract_function(&contract_address, &private_key,args_input,args_output) {
-            Ok((result_map)) => {
+        match smart_contract::call_contract_function(&contract_address,&call_address, &private_key,&function_name,&args_input_values,&args_input,&args_output) {
+            Ok(result_map) => {
                 let response_body = json!({
                     "contract_address": contract_address,
                     "result": result_map,

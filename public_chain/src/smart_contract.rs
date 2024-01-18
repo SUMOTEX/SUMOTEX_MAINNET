@@ -4,13 +4,14 @@ use libp2p::{
 };
 use rocksdb::{DBWithThreadMode,SingleThreaded};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use crate::p2p::AppBehaviour;
 use secp256k1::{Secp256k1, PublicKey, SecretKey};
 use crate::rock_storage;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use wasmtime::*;
-use wasmtime::Val;
+//use wasmtime::Val;
 use wasmtime_wasi::WasiCtx;
 use wasmtime::MemoryType;
 use wasmtime::Linker;
@@ -54,6 +55,20 @@ pub struct OwnerData {
     ptr: i32,
     len: i32,
 }
+
+#[derive(Debug, Deserialize, Serialize)]
+struct Parameter {
+    name: String,
+    #[serde(rename = "type")]
+    p_type: String,
+}
+
+#[derive(Debug, Deserialize, Serialize)]
+struct FunctionInfo {
+    inputs: Vec<Parameter>,
+    outputs: Vec<Parameter>,
+}
+
 
 
 impl PublicSmartContract {
@@ -140,7 +155,6 @@ enum WasmType {
     bool
     // Add more types as needed
 }
-
 #[derive(Debug, Clone)]
 pub struct FunctionDescriptor {
     name: String,
@@ -236,16 +250,33 @@ impl WasmContract {
 
         let data = wasm_memory.data(&mut store);
         let byte_vector: Vec<u8> = data.to_vec();
-
-        //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
         let args_tuple = (
-            wasm_params.args[0].unwrap_i32(),
-            wasm_params.args[1].unwrap_i32(),
-            wasm_params.args[2].unwrap_i32(),
-            wasm_params.args[3].unwrap_i32(),
-            wasm_params.args[4].unwrap_i32(),
-            wasm_params.args[5].unwrap_i64(),
+            match &wasm_params.args[0] {
+                Val::I32(val) => *val,
+                _ => return Err("Failed to unwrap i32 from argument 1".into()),
+            },
+            match &wasm_params.args[1] {
+                Val::I32(val) => *val,
+                _ => return Err("Failed to unwrap i32 from argument 2".into()),
+            },
+            match &wasm_params.args[2] {
+                Val::I32(val) => *val,
+                _ => return Err("Failed to unwrap i32 from argument 3".into()),
+            },
+            match &wasm_params.args[3] {
+                Val::I32(val) => *val,
+                _ => return Err("Failed to unwrap i32 from argument 4".into()),
+            },
+            match &wasm_params.args[4] {
+                Val::I32(val) => *val,
+                _ => return Err("Failed to unwrap i32 from argument 5".into()),
+            },
+            match &wasm_params.args[5] {
+                Val::I64(val) => *val,
+                _ => return Err("Failed to unwrap i64 from argument 6".into()),
+            },
         );
+        //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
         let initialise_func = link.get_typed_func::<(i32, i32, i32, i32, i32, i64), ()>(&mut store, &wasm_params.name)?;
         let result = initialise_func.call(&mut store,  args_tuple)?;
         println!("Initialize: {:?}",result);
@@ -260,9 +291,11 @@ impl WasmContract {
         contract_info: &ContractInfo,
         account_key: &String,
         contract_address: &String,
-        function_name: &str,
-        args: HashMap<String, String>,
-    ) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+        function_name:  &String,
+        args_input_values:&String,
+        args_input: &String,
+        args_output:  &String,
+    ) -> Result<(), Box<dyn std::error::Error>> {
         let engine = Engine::default();
         let mut linker = Linker::new(&engine);
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
@@ -281,39 +314,49 @@ impl WasmContract {
         let byte_vector: Vec<u8> = data.to_vec();
 
         //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
+        let input_types: Vec<Parameter> = serde_json::from_str(args_input)?;
+        // Parse the output types from the JSON string
+        let output_types: Vec<Parameter> = serde_json::from_str(args_output)?;
 
-        // Convert args to Vec<Val>
-        let arg_values: Vec<Val> = args
-        .iter()
-        .map(|(_, val)| Val::I32(val.parse().unwrap()))
-        .collect();
+        // Calculate the number of required outputs
+        let output_values_count = output_types.len();
 
-        // Use generics to call the function with the correct argument and return types
-        let func = link.get_typed_func::<Val, Val>(&mut store, function_name)?;
-        let result_values = func.call(&mut store, &arg_values)?;
-
-        let args_tuple = (
-            wasm_params.args[0].unwrap_i32(),
-            wasm_params.args[1].unwrap_i32(),
-            wasm_params.args[2].unwrap_i32(),
-            wasm_params.args[3].unwrap_i32(),
-        );
-        let initialise_func = link.get_typed_func::<(i32, i32, i32, i32),()>(&mut store, &wasm_params.name)?;
-
-        let result = initialise_func.call(&mut store,  args_tuple)?;
-        // Convert result_values to HashMap<String, String>
-        let result: HashMap<String, String> = {
-            let val = result_values.to_string();
-            let mut map = HashMap::new();
-            map.insert("output".to_string(), val);
-            map
+        // Extract types in sequence from the input specification
+        let args_input_values:  serde_json::Value  = serde_json::from_str(args_input_values)?;
+        let arg_values: Result<Vec<Val>, _> = match args_input_values.as_array() {
+            Some(array) => array.iter()
+                .zip(input_types.iter())
+                .map(|(value, param)| {
+                    match param.p_type.as_str() {
+                        "i32" => value.as_i64()
+                                      .map(|i| wasmtime::Val::I32(i as i32))
+                                      .ok_or("Invalid i32 value"),
+                        "i64" => value.as_i64()
+                                      .map(wasmtime::Val::I64)
+                                      .ok_or("Invalid i64 value"),
+                        // Add other type cases as necessary
+                        _ => Err("Unsupported type"),
+                    }
+                })
+                .collect(),
+            None => Err("args_input_values is not an array"),
         };
+        
+        let arg_values = arg_values?; 
 
+        let mut outputs = vec![wasmtime::Val::I32(0); output_values_count]; // Adjust the size and type as needed
+        let func = link.get_func(&mut store, function_name)
+        .ok_or_else(|| format!("Function '{}' not found", function_name))?;
+    
+        // Using the instance to call the function
+        let result = func.call(&mut store, &arg_values, &mut outputs)?;
+
+        //let result_values = func.call(&mut store, &arg_values)?;
         let updated_data = wasm_memory.data(&mut store);
         let updated_byte_vector: Vec<u8> = updated_data.to_vec();
         rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
 
-        Ok(result)
+        Ok(())
     }
     pub fn get_store(&mut self) -> &mut Store<WasiCtx> {
         &mut self.store
@@ -342,10 +385,22 @@ impl WasmContract {
 
         //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
         let args_tuple = (
-            wasm_params.args[0].unwrap_i32(),
-            wasm_params.args[1].unwrap_i32(),
-            wasm_params.args[2].unwrap_i32(),
-            wasm_params.args[3].unwrap_i32(),
+            match &wasm_params.args[0] {
+                Val::I32(val) => *val,
+                _ => return Err("Failed to unwrap i32 from argument 1".into()),
+            },
+            match &wasm_params.args[1] {
+                Val::I32(val) => *val,
+                _ => return Err("Failed to unwrap i32 from argument 2".into()),
+            },
+            match &wasm_params.args[2] {
+                Val::I32(val) => *val,
+                _ => return Err("Failed to unwrap i32 from argument 3".into()),
+            },
+            match &wasm_params.args[3] {
+                Val::I32(val) => *val,
+                _ => return Err("Failed to unwrap i32 from argument 4".into()),
+            },
         );
         let initialise_func = link.get_typed_func::<(i32, i32, i32, i32),()>(&mut store, &wasm_params.name)?;
 
@@ -1458,10 +1513,11 @@ pub fn call_contract_function(
     contract_address: &String,
     account_key: &String,
     private_key: &String,
-    function_name: &str,
-    args_input: HashMap<String, String>,
-    args_output: HashMap<String, String>,
-) -> Result<HashMap<String, String>, Box<dyn std::error::Error>> {
+    function_name: &String,
+    args_input_values:&String,
+    args_input:  &String,
+    args_output: &String,
+) -> Result<(), Box<dyn std::error::Error>> {
     let c_path = "./contract/db";
     let a_path = "./account/db";
     let contract_path = match rock_storage::open_db(c_path) {
@@ -1515,6 +1571,7 @@ pub fn call_contract_function(
                 account_key,
                 &contract_address.to_string(),
                 function_name,
+                args_input_values,
                 args_input,
                 args_output
             );
@@ -1522,7 +1579,7 @@ pub fn call_contract_function(
             match result {
                 Ok(result_map) => {
                     println!("Function {} result: {:?}", function_name, result_map);
-                    Ok(result_map)
+                    Ok(())
                 }
                 Err(e) => {
                     println!("Error calling function {}: {}", function_name, e);
