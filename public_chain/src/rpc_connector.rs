@@ -41,13 +41,20 @@ struct TransactionSignedInfo {
     private_key:String
 }
 #[derive(serde::Deserialize, Debug)]
+pub struct Parameter {
+    name: String,
+    #[serde(rename = "type")]
+    p_type: String,
+}
+
+#[derive(serde::Deserialize, Debug)]
 pub struct GenericContractInfo {
     contract_address: String,
     caller_address:String,
     private_key: String,
     function_name:String,
     args_values:String,
-    args_input:String,
+    args_input: String,
     args_output: String
 }
 #[derive(serde::Deserialize, Debug)]
@@ -416,7 +423,7 @@ fn complete_transaction(transaction_info: Json<TransactionSignedInfo>) -> Json<s
 #[post("/call-contract", data = "<post_data>")]
 fn generic_smart_contract_function_call(post_data: Json<GenericContractInfo>)->  Json<serde_json::Value>{
         // Extract transaction information
-        println!("Generic function called");
+
         let contract_address = &post_data.contract_address;
         let call_address = &post_data.caller_address;
         let private_key = &post_data.private_key;
@@ -435,7 +442,7 @@ fn generic_smart_contract_function_call(post_data: Json<GenericContractInfo>)-> 
             Err(e) => {
                 error!("Error calling function: {:?}", e);
                 let error_details = format!("{:?}", e);
-                Json(json!({"jsonrpc": "2.0", "error": {"code": -32000, "message": error_details}}))
+                Json(json!({"jsonrpc": "2.0", "error": {"code": 32000, "message": error_details}}))
             }
         }
 }
@@ -571,6 +578,7 @@ pub async fn start_rpc() {
                             read_transaction,
                             read_total_minted_token,
                             get_receiver_transactions,
+                            generic_smart_contract_function_call,
                             create_block,
                             get_block,
                             get_latest_block,

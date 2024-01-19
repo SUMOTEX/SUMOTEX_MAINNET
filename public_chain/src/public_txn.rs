@@ -211,14 +211,19 @@ impl Txn {
     ) -> Result<(String,u128, PublicTxn), Box<dyn std::error::Error>> {
         let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
         match transaction_type {
-            TransactionType::ContractCreation | TransactionType::ContractInteraction => {
+            TransactionType::ContractCreation => {
             //TransactionType::ContractCreation => {
                 // Handle contract-specific transactions
                 Self::handle_contract_transaction(transaction_type, &caller_address, &to_address, computed_value, current_timestamp)
             },
             _ => {
                 // For other transaction types
-                let account = account::get_account_no_swarm(&caller_address).expect("Account not found");
+                let account = match account::get_account_no_swarm(&caller_address) {
+                    Ok(Some(acc)) => acc,
+                    Ok(None) => return Err("Account not found".into()), // or handle this case as needed
+                    Err(e) => return Err(e.into()), // error while fetching account
+                };
+                
                 let nonce = account.get_nonce();
     
                 let txn_data = format!(
@@ -240,7 +245,7 @@ impl Txn {
                     caller_address,
                     to_address,
                     txn_hash: txn_hash_hex.clone(),
-                    nonce:nonce.into(),
+                    nonce:nonce +1,
                     value: computed_value ,
                     status: 0, // Placeholder
                     timestamp: current_timestamp,
@@ -404,14 +409,20 @@ impl Txn {
         let txn_hash = Sha256::digest(txn_data.as_bytes());
         let txn_hash_hex = format!("{:x}", txn_hash);
         let gas_cost = 1000; // This is an example function call
-        let account = account::get_account_no_swarm(&caller_address).expect("Account not found");
+        println!("Caller: {:?}",caller_address);
+        let account = match account::get_account_no_swarm(&caller_address) {
+            Ok(Some(acc)) => acc,
+            Ok(None) => return Err("Account not found".into()), // or handle this case as needed
+            Err(e) => return Err(e.into()), // error while fetching account
+        };
+        
         let nonce = account.get_nonce();
         let new_txn = PublicTxn {
             txn_type: transaction_type,
             caller_address: caller_address.to_string(),
             to_address: to_address.to_string(),
             txn_hash: txn_hash_hex.clone(),
-            nonce: nonce, // You need to fetch or calculate the correct nonce
+            nonce: nonce+1, // You need to fetch or calculate the correct nonce
             value: computed_value,
             status: 0, // Placeholder
             timestamp: current_timestamp,

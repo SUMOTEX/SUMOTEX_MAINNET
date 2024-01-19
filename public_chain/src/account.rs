@@ -187,19 +187,21 @@ pub fn get_balance(public_key: &str) -> Result<u128, Box<dyn std::error::Error>>
     }
 }
 
-pub fn get_account_no_swarm(account_key: &str) -> Option<Account> {
+pub fn get_account_no_swarm(account_key: &str) -> Result<Option<Account>, Box<dyn std::error::Error>> {
     let path = "./account/db";
-    let account_path = rock_storage::open_db(path);
+    let account_path = rock_storage::open_db(path)?;
 
-    match account_path {
-        Ok(db_handle) => {
-            let account_data = rock_storage::get_from_db(&db_handle, account_key.to_string());
-            account_data.and_then(|data| serde_json::from_str(&data).ok())
+    match rock_storage::get_from_db(&account_path, account_key) {
+        Some(data) => {
+            // Try to deserialize the account data
+            match serde_json::from_str::<Account>(&data) {
+                Ok(account) => Ok(Some(account)), // Account found and successfully deserialized
+                Err(e) => Err(e.into()), // Error during deserialization
+            }
         }
-        Err(_) => None, // Return None in case of error
+        None => Ok(None), // Account not found
     }
 }
-
 pub fn account_exists(account_key: &str) -> Result<bool, Box<dyn std::error::Error>> {
     let path = "./account/db";
     let account_path = rock_storage::open_db(path)?;

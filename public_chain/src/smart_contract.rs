@@ -23,6 +23,7 @@ use rocksdb::Error as RocksDBError;
 use wasm_bindgen::JsCast;
 use crate::gas_calculator;
 use crate::public_txn;
+use crate::account;
 use crate::rock_storage::StoragePath;
 use crate::public_swarm;
 use crate::public_txn::TransactionType;
@@ -153,7 +154,6 @@ enum WasmType {
     U64,
     Str,
     bool
-    // Add more types as needed
 }
 #[derive(Debug, Clone)]
 pub struct FunctionDescriptor {
@@ -279,6 +279,7 @@ impl WasmContract {
         //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
         let initialise_func = link.get_typed_func::<(i32, i32, i32, i32, i32, i64), ()>(&mut store, &wasm_params.name)?;
         let result = initialise_func.call(&mut store,  args_tuple)?;
+
         println!("Initialize: {:?}",result);
         let updated_data = wasm_memory.data(&mut store);
         let updated_byte_vector: Vec<u8> = updated_data.to_vec();
@@ -295,7 +296,7 @@ impl WasmContract {
         args_input_values:&String,
         args_input: &String,
         args_output:  &String,
-    ) -> Result<(), Box<dyn std::error::Error>> {
+    ) -> Result<Vec<i32>, Box<dyn std::error::Error>>  {
         let engine = Engine::default();
         let mut linker = Linker::new(&engine);
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
@@ -318,51 +319,53 @@ impl WasmContract {
 
         let data = wasm_memory.data(&mut store);
         let byte_vector: Vec<u8> = data.to_vec();
-
         //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
         let input_types: Vec<Parameter> = serde_json::from_str(args_input)?;
         // Parse the output types from the JSON string
+        println!("Input Types: {:?}",input_types);
         let output_types: Vec<Parameter> = serde_json::from_str(args_output)?;
+        println!("Output Types: {:?}",output_types);
 
         // Calculate the number of required outputs
         let output_values_count = output_types.len();
-
-        // Extract types in sequence from the input specification
-        let args_input_values:  serde_json::Value  = serde_json::from_str(args_input_values)?;
-        let arg_values: Result<Vec<Val>, _> = match args_input_values.as_array() {
-            Some(array) => array.iter()
-                .zip(input_types.iter())
-                .map(|(value, param)| {
-                    match param.p_type.as_str() {
-                        "i32" => value.as_i64()
-                                      .map(|i| wasmtime::Val::I32(i as i32))
-                                      .ok_or("Invalid i32 value"),
-                        "i64" => value.as_i64()
-                                      .map(wasmtime::Val::I64)
-                                      .ok_or("Invalid i64 value"),
-                        // Add other type cases as necessary
-                        _ => Err("Unsupported type"),
-                    }
-                })
-                .collect(),
-            None => Err("args_input_values is not an array"),
-        };
-        
+        let args_input_values: serde_json::Value = serde_json::from_str(args_input_values)?;
+        println!("Input Arg Values: {:?}",args_input_values);
+        let arg_values: Result<Vec<Val>, _> = args_input_values.as_array()
+            .ok_or("args_input_values is not an array")?
+            .iter()
+            .zip(input_types.iter())
+            .map(|(value, param)| {
+                match param.p_type.as_str() {
+                    "i32" => value.as_i64().map(|i| Val::I32(i as i32)).ok_or("Invalid i32 value"),
+                    "usize" => value.as_u64().map(|u| Val::I64(u as i64)).ok_or("Invalid usize value"),
+                    "isize" => value.as_i64().map(Val::I64).ok_or("Invalid isize value"),
+                    _ => Err("Unsupported type"),
+                }
+            })
+            .collect();
+    
         let arg_values = arg_values?; 
-
         let mut outputs = vec![wasmtime::Val::I32(0); output_values_count]; // Adjust the size and type as needed
         let func = link.get_func(&mut store, function_name)
-        .ok_or_else(|| format!("Function '{}' not found", function_name))?;
-    
-        // Using the instance to call the function
-        let result = func.call(&mut store, &arg_values, &mut outputs)?;
+            .ok_or_else(|| format!("Function '{}' not found", function_name))?;
 
+        // Using the instance to call the function
+        func.call(&mut store, &arg_values, &mut outputs)?;
+        // Convert the outputs to the desired format
+        let result_values = outputs.iter().map(|val| {
+            match val {
+                Val::I32(i) => *i,
+                Val::I64(i) => *i as i32, // You might want to handle i64 differently
+                // Handle other value types as needed
+                _ => 0, // Placeholder for unsupported types
+            }
+        }).collect();
         //let result_values = func.call(&mut store, &arg_values)?;
         let updated_data = wasm_memory.data(&mut store);
         let updated_byte_vector: Vec<u8> = updated_data.to_vec();
         rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
-
-        Ok(())
+    
+        Ok(result_values)
     }
     pub fn get_store(&mut self) -> &mut Store<WasiCtx> {
         &mut self.store
@@ -994,36 +997,36 @@ impl WasmContract {
 
         Ok(Some(result_string))
     }
-    pub fn get_erc20_name(cmd: &str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
-        if let Some(data) = cmd.strip_prefix("contract name ") {
-            let contract = WasmContract::new("./sample.wasm")?;
-            let contract_path = swarm.behaviour().storage_path.get_contract();
+    // pub fn get_erc20_name(cmd: &str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
+    //     if let Some(data) = cmd.strip_prefix("contract name ") {
+    //         let contract = WasmContract::new("./sample.wasm")?;
+    //         let contract_path = swarm.behaviour().storage_path.get_contract();
     
-            let contract_info = ContractInfo {
-                module_path: "./sample.wasm".to_string(),
-                pub_key: data.to_string(),
-            };
+    //         let contract_info = ContractInfo {
+    //             module_path: "./sample.wasm".to_string(),
+    //             pub_key: data.to_string(),
+    //         };
     
-            let name = contract.read_name(contract_path, &contract_info, &data.to_string())?;
+    //         let name = contract.read_name(contract_path, &contract_info, &data.to_string())?;
     
-            println!("Contract Name: {}", name);
-        }
-        Ok(())
-    }
-    pub fn read_name(
-        &self,
-        contract_path: &DBWithThreadMode<SingleThreaded>,
-        contract_info: &ContractInfo,
-        pub_key: &str,
-    ) -> Result<String, Box<dyn std::error::Error>> {
-        // Call the 'read_symbol' function using the same mechanism
-        let result_bytes = self.read(contract_path, contract_info, pub_key, "read_name")?;
+    //         println!("Contract Name: {}", name);
+    //     }
+    //     Ok(())
+    // }
+    // pub fn read_name(
+    //     &self,
+    //     contract_path: &DBWithThreadMode<SingleThreaded>,
+    //     contract_info: &ContractInfo,
+    //     pub_key: &str,
+    // ) -> Result<String, Box<dyn std::error::Error>> {
+    //     // Call the 'read_symbol' function using the same mechanism
+    //     let result_bytes = self.read(contract_path, contract_info, pub_key, "read_name")?;
 
-        // Convert the result bytes into a string
-        let result_string = String::from_utf8(result_bytes)?;
+    //     // Convert the result bytes into a string
+    //     let result_string = String::from_utf8(result_bytes)?;
 
-        Ok(result_string)
-    }    
+    //     Ok(result_string)
+    // }    
 }
 
 pub fn create_memory(store: &mut Store<WasiCtx>) -> Result<Memory, Box<dyn std::error::Error>> {
@@ -1371,15 +1374,7 @@ pub fn mint_token_official(contract_address:&String,
                             private_key:&String,
                             ipfs:&String)->Result<(i32,String, u128), Box<dyn std::error::Error>>{
         let c_path = "./contract/db";
-        let a_path = "./account/db";
         let contract_path = match rock_storage::open_db(c_path) {
-            Ok(path) => path,
-            Err(e) => {
-                // Handle the error, maybe log it, and then decide what to do next
-                panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
-            }
-        };
-        let acc_path = match rock_storage::open_db(a_path) {
             Ok(path) => path,
             Err(e) => {
                 // Handle the error, maybe log it, and then decide what to do next
@@ -1393,13 +1388,18 @@ pub fn mint_token_official(contract_address:&String,
         };
         let the_memory = create_memory(contract.get_store())?;
         // Retrieve the account to check if it exists
-        println!("Acc Key {:?}",account_key);
-        let account_data = rock_storage::get_from_db(&acc_path, account_key);
-        println!("Acc Data {:?}",account_data);
+        // println!("Acc Key {:?}",account_key);
+        // let account_data = rock_storage::get_from_db(&acc_path, account_key);
+        // println!("Acc Data {:?}",account_data);
         // if account_data.is_none() {
         //     return Err("Account not found".into());
         // }
-        let txn = public_txn::Txn::create_and_prepare_transaction(TransactionType::ContractInteraction,account_key.to_string(),contract_address.to_string(),1000);
+        let txn = public_txn::Txn::create_and_prepare_transaction(
+            TransactionType::ContractInteraction,
+            account_key.to_string(),
+            contract_address.to_string(),
+            1000);
+        println!("{:?}",txn);
         match txn {
             Ok((txn_hash,gas_cost,new_txn)) => {
                 let private_key_bytes = match hex::decode(&private_key) {
@@ -1532,20 +1532,19 @@ pub fn call_contract_function(
             panic!("Failed to open database: {:?}", e);
         }
     };
-    let acc_path = match rock_storage::open_db(a_path) {
-        Ok(path) => path,
-        Err(e) => {
-            panic!("Failed to open database: {:?}", e);
-        }
-    };
+
     let mut contract = WasmContract::new("./sample721.wasm")?;
     let contract_info = ContractInfo {
         module_path: "./sample721.wasm".to_string(),
         pub_key: contract_address.to_string(),
     };
     let the_memory = create_memory(contract.get_store())?;
-    let account_data = rock_storage::get_from_db(&acc_path, account_key);
-
+    let account_data = match account::get_account_no_swarm(&account_key) {
+        Ok(Some(acc)) => acc,
+        Ok(None) => return Err("Account not found".into()), // or handle this case as needed
+        Err(e) => return Err(e.into()), // error while fetching account
+    };
+    
     let txn = public_txn::Txn::create_and_prepare_transaction(
         TransactionType::ContractInteraction,
         account_key.to_string(),
