@@ -213,12 +213,14 @@ impl ERC721Token {
 
     #[no_mangle]
     pub extern "C" fn transfer(&mut self, 
-        from_ptr: *const u8, 
-        from_len: usize, 
-        to_ptr: *const u8, 
-        to_len: usize, 
+        from: String, to: String, token_id: i32
         token_id: i32) -> Result<(), &'static str >{
         // Convert raw pointers to Rust strings
+        let from_ptr = from.as_ptr();
+        let from_len = from.len();
+    
+        let to_ptr = to.as_ptr();
+        let to_len = to.len();
         let from_slice = unsafe { std::slice::from_raw_parts(from_ptr, from_len) };
         let from_str = std::str::from_utf8(from_slice).expect("Failed to convert from");
     
