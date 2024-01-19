@@ -244,7 +244,6 @@ impl ERC721Token {
             Err("Token not found")
         }
     }
-    
     #[no_mangle]
     pub extern "C" fn read_name(&self, buffer: *mut u8, buffer_len: usize) -> isize {
         println!("Read Name: Reading name into buffer...");

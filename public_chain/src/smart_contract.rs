@@ -303,12 +303,18 @@ impl WasmContract {
 
         let module = Module::from_file(&engine, &contract_info.module_path)?;
         wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
-
         let link = linker.instantiate(&mut store, &module)?;
-
         let wasm_memory = link
             .get_memory(&mut store, "memory")
             .ok_or_else(|| "Failed to find `memory` export")?;
+        let link = linker.instantiate(&mut store, &module)?;
+        // Load the current memory state from the database
+        let saved_data = rock_storage::get_from_db_vector(contract_path, contract_address).unwrap_or_default();
+        if saved_data.len() > wasm_memory.data_size(&store) {
+            let additional_pages_needed = ((saved_data.len() as u64 + (64 * 1024 - 1)) / (64 * 1024)) - (wasm_memory.data_size(&store) as u64 / (64 * 1024));
+            wasm_memory.grow(&mut store, additional_pages_needed).map_err(|_| "Failed to grow memory")?;
+        }
+        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
 
         let data = wasm_memory.data(&mut store);
         let byte_vector: Vec<u8> = data.to_vec();
