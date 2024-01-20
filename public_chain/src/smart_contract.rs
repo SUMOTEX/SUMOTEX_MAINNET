@@ -296,7 +296,7 @@ impl WasmContract {
         args_input_values:&String,
         args_input: &String,
         args_output:  &String,
-    ) -> Result<Vec<i32>, Box<dyn std::error::Error>>  {
+    ) -> Result<Vec<i64>, Box<dyn std::error::Error>>  {
         let engine = Engine::default();
         let mut linker = Linker::new(&engine);
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
@@ -306,9 +306,9 @@ impl WasmContract {
         wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
         let link = linker.instantiate(&mut store, &module)?;
         let wasm_memory = link
-            .get_memory(&mut store, "memory")
-            .ok_or_else(|| "Failed to find `memory` export")?;
-        let link = linker.instantiate(&mut store, &module)?;
+        .get_memory(&mut store, "memory")
+        .ok_or_else(|| "Failed to find `memory` export")?;
+
         // Load the current memory state from the database
         let saved_data = rock_storage::get_from_db_vector(contract_path, contract_address).unwrap_or_default();
         if saved_data.len() > wasm_memory.data_size(&store) {
@@ -343,7 +343,6 @@ impl WasmContract {
                 }
             })
             .collect();
-    
         let arg_values = arg_values?; 
         let mut outputs = vec![wasmtime::Val::I32(0); output_values_count]; // Adjust the size and type as needed
         let func = link.get_func(&mut store, function_name)
@@ -352,14 +351,14 @@ impl WasmContract {
         // Using the instance to call the function
         func.call(&mut store, &arg_values, &mut outputs)?;
         // Convert the outputs to the desired format
-        let result_values = outputs.iter().map(|val| {
+        let result_values: Vec<i64> = outputs.iter().map(|val| {
             match val {
-                Val::I32(i) => *i,
-                Val::I64(i) => *i as i32, // You might want to handle i64 differently
-                // Handle other value types as needed
-                _ => 0, // Placeholder for unsupported types
+                Val::I32(i) => *i as i64, // Convert i32 to i64
+                Val::I64(i) => *i,        // Already i64, no conversion needed
+                _ => 0i64,                // Use 0i64 as a placeholder for unsupported types
             }
         }).collect();
+        
         //let result_values = func.call(&mut store, &arg_values)?;
         let updated_data = wasm_memory.data(&mut store);
         let updated_byte_vector: Vec<u8> = updated_data.to_vec();
@@ -469,24 +468,31 @@ impl WasmContract {
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
         let mut store = Store::new(&engine, wasi);
         
-        // 1. Instantiate the WebAssembly module.
         let module = Module::from_file(&engine, &contract_info.module_path)?;
         wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
         let link = linker.instantiate(&mut store, &module)?;
         
-        // 2. Get the WebAssembly memory.
         let wasm_memory = link.get_memory(&mut store, "memory")
             .ok_or_else(|| "Failed to find `memory` export")?;
         let saved_data = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
-        // 2.2. Set this memory state into the WebAssembly module's memory.
-        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
     
-        // 3. Call the desired function in the WebAssembly module by its name.
+        let current_memory_size = wasm_memory.data_size(&store);
+        let required_memory_size = saved_data.len();
+        
+        if required_memory_size > current_memory_size {
+            let additional_pages_needed = (required_memory_size - current_memory_size + (64 * 1024 - 1)) / (64 * 1024);
+            wasm_memory.grow(&mut store, additional_pages_needed as u64)
+                .map_err(|_| "Failed to grow memory")?;
+        }
+    
+        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
+        
         let result = link.get_typed_func::<_, i64>(&mut store, function_name)?
         .call(&mut store, ())?;
-    
+        
         Ok(result)
     }
+    
     fn bytes_to_token_details(data: &[u8]) -> Result<TokenDetails, Box<dyn std::error::Error>> {
         Ok(bincode::deserialize(data)?)
     }
@@ -1399,7 +1405,6 @@ pub fn mint_token_official(contract_address:&String,
             account_key.to_string(),
             contract_address.to_string(),
             1000);
-        println!("{:?}",txn);
         match txn {
             Ok((txn_hash,gas_cost,new_txn)) => {
                 let private_key_bytes = match hex::decode(&private_key) {

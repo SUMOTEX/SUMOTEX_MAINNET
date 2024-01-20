@@ -261,7 +261,7 @@ fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value>
             error!("Error creating contract: {:?}", e);
             Json(json!({"jsonrpc": "1.0", "result": "error"}))
         }
-    }
+    }   
 }
 // // Route to handle RPC requests.
 #[post("/read-total-minted", data = "<post_data>")]
