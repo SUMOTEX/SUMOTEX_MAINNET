@@ -65,6 +65,14 @@ pub struct ContractInfo {
     contract_symbol:String
 }
 #[derive(serde::Deserialize, Debug)]
+pub struct GenericContractCreationInfo {
+    call_address: String,
+    private_key: String,
+    contract_name:String,
+    contract_symbol:String,
+    wasm_file:String
+}
+#[derive(serde::Deserialize, Debug)]
 pub struct MintTokenInfo {
     contract_address: String,
     caller_address: String,
@@ -125,7 +133,7 @@ pub fn add_api_blocks(app: PubApp) {
     let new_blocks = app.get_blocks();
     let mut app_blocks = APP_BLOCKS.lock().unwrap();
     app_blocks.blocks = new_blocks.clone();
-    let json_response = json!(new_blocks);
+    let _json_response = json!(new_blocks);
 }
 
 // Route to handle RPC requests for transaction creation
@@ -202,16 +210,39 @@ fn sign_transaction(transaction_signed_data: Json<TransactionSignedInfo>) -> Jso
         }
     }
 }
-// Route to handle RPC requests.
-#[post("/create-nft-contract", data = "<post_data>")]
-fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> {
-    println!("create_nft_contract");
+// // Route to handle RPC requests.
+// #[post("/create-nft-contract", data = "<post_data>")]
+// fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> {
+//     println!("create_nft_contract");
+//     let call_address = &post_data.call_address;
+//     let private_key = &post_data.private_key;
+//     let contract_name = &post_data.contract_name;
+//     let contract_symbol = &post_data.contract_symbol;
+//     match smart_contract::create_erc721_contract_official(&call_address, &private_key,contract_name,contract_symbol) {
+//         Ok((contract_address,txn_hash,gas_cost,body)) => {
+//             let response_body = json!({"contract_address": contract_address,
+//                                         "txn_hash":txn_hash,
+//                                         "gas_cost":gas_cost,
+//                                         });
+//             Json(json!({"jsonrpc": "1.0", "result": response_body}))
+//         },
+//         Err(e) => {
+//             error!("Error creating contract: {:?}", e);
+//             Json(json!({"jsonrpc": "1.0", "result": "error"}))
+//         }
+//     }
+// }
+
+#[post("/create-contract", data = "<post_data>")]
+fn create_contract(post_data: Json<GenericContractCreationInfo>)-> Json<serde_json::Value> {
+    println!("Create Contract");
     let call_address = &post_data.call_address;
     let private_key = &post_data.private_key;
     let contract_name = &post_data.contract_name;
     let contract_symbol = &post_data.contract_symbol;
-    match smart_contract::create_erc721_contract_official(&call_address, &private_key,contract_name,contract_symbol) {
-        Ok((contract_address,txn_hash,gas_cost,body)) => {
+    let wasm_file = &post_data.wasm_file;
+    match smart_contract::create_contract_official(&call_address, &private_key,contract_name,contract_symbol,wasm_file) {
+        Ok((contract_address,txn_hash,gas_cost)) => {
             let response_body = json!({"contract_address": contract_address,
                                         "txn_hash":txn_hash,
                                         "gas_cost":gas_cost,
@@ -224,7 +255,6 @@ fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> 
         }
     }
 }
-
 // Route to handle RPC requests.
 #[post("/mint-token", data = "<post_data>")]
 fn mint_token_contract(post_data: Json<MintTokenInfo>)-> Json<serde_json::Value> {
@@ -307,7 +337,7 @@ fn get_account(post_data: Json<ReadAccountInfo>)->Json<serde_json::Value>{
         Ok(false) => {
             Json(json!({"jsonrpc": "1.0", "result": false}))
         },
-        Err(e) => {
+        Err(_) => {
             Json(json!({"jsonrpc": "1.0", "result": "error"}))
         }
     }
@@ -451,7 +481,7 @@ fn generic_smart_contract_function_call(post_data: Json<GenericContractInfo>)-> 
 fn create_block() -> Json<serde_json::Value> {
     //Create blocks
     let response_body = json!({});
-    public_block::pbft_pre_message_block_create_scheduler();
+    let _ = public_block::pbft_pre_message_block_create_scheduler();
     Json(json!({"jsonrpc": "1.0", "result": response_body}))
 }
 
@@ -563,7 +593,7 @@ pub async fn start_rpc() {
             //port: 8545,
             ..rocket::Config::default()
         })
-        .mount("/", routes![create_nft_contract,
+        .mount("/", routes![
                             create_transaction,
                             sign_transaction,
                             create_wallet,
@@ -580,6 +610,7 @@ pub async fn start_rpc() {
                             get_receiver_transactions,
                             generic_smart_contract_function_call,
                             create_block,
+                            create_contract,
                             get_block,
                             get_latest_block,
                             healthcheck])

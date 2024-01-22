@@ -2,6 +2,9 @@ use std::collections::HashMap;
 use libp2p::{
     swarm::{Swarm},
 };
+
+use std::fs::File;
+use std::io::Write;
 use rocksdb::{DBWithThreadMode,SingleThreaded};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -21,6 +24,8 @@ use bincode::{serialize, deserialize};
 use bincode::{ Error as BincodeError};
 use rocksdb::Error as RocksDBError;
 use wasm_bindgen::JsCast;
+extern crate base64;
+use base64::{encode, decode};
 use crate::gas_calculator;
 use crate::public_txn;
 use crate::account;
@@ -419,6 +424,43 @@ impl WasmContract {
         rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
         Ok(())
     }    
+    pub fn create_contract(
+        &mut self,
+        contract_path: &DBWithThreadMode<SingleThreaded>,
+        contract_info: &ContractInfo,
+        wasm_params: &WasmParams// Added parameter to specify the function name
+    ) -> Result<(), Box<dyn std::error::Error>> {
+        let engine = Engine::default();
+        let mut linker = Linker::new(&engine);
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+        let mut store = Store::new(&engine, wasi);
+    
+        let module = Module::from_file(&engine, &contract_info.module_path)?;
+        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+        let link = linker.instantiate(&mut store, &module)?;
+    
+        let wasm_memory = link
+            .get_memory(&mut store, "memory")
+            .ok_or_else(|| "Failed to find `memory` export")?;
+    
+        let data = wasm_memory.data(&mut store);
+        let byte_vector: Vec<u8> = data.to_vec();
+    
+        //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
+    
+        // Dynamically calling a function based on the input string
+        let dyn_func = link.get_func(&mut store, "initialize")
+            .ok_or_else(|| format!("Failed to find function `{}`", "initialize"))?;
+    
+        let args: Vec<Val> = wasm_params.args.iter().cloned().collect();
+        dyn_func.call(&mut store,&[],&mut [])?;
+    
+        let updated_data = wasm_memory.data(&mut store);
+        let updated_byte_vector: Vec<u8> = updated_data.to_vec();
+        rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
+        Ok(())
+    }
+    
     pub fn read(
         &self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
@@ -493,77 +535,6 @@ impl WasmContract {
         Ok(result)
     }
     
-    fn bytes_to_token_details(data: &[u8]) -> Result<TokenDetails, Box<dyn std::error::Error>> {
-        Ok(bincode::deserialize(data)?)
-    }
-    pub fn transfer_nft_token(&self, 
-        contract_path: &DBWithThreadMode<SingleThreaded>, 
-        contract_info: &ContractInfo, 
-        token_id: i32) -> Result<String, Box<dyn std::error::Error>>
-    {   
-        let function_name = "transfer";
-        let engine = Engine::default();
-        let mut linker = Linker::new(&engine);
-        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-        let mut store = Store::new(&engine, wasi);
-    
-        let module = Module::from_file(&engine, &contract_info.module_path)?;
-        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
-        let link = linker.instantiate(&mut store, &module)?;
-        let wasm_memory = link.get_memory(&mut store, "memory")
-        .ok_or_else(|| "Failed to find `memory` export")?;
-        let saved_data = rock_storage::get_from_db_vector(contract_path, &contract_info.pub_key).unwrap_or_default();
-      
-        // 2.2. Set this memory state into the WebAssembly module's memory.
-        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);  
-        let empty = Self::is_memory_empty(&wasm_memory, &store);
-        println!("Memory is empty: {}", empty);   
-        // Convert token_id to expected format (assuming u64 for simplicity here)
-        // Assuming `link` is of type `wasmtime::Link`
-        let result = link.get_typed_func::<i32, i64>(&mut store, function_name)?.call(&mut store, token_id)?;
-        println!("RESULT OF TOKEN: {:?}",result);
-        let result_to_unpack =Self::decode_token_details(result, &wasm_memory, &mut store)?;
-        println!("Unpack result {:?}", result_to_unpack);
-        // let result_str = result.to_string();
-        // println!("{:?}", result_str);
-        // let result_to_u8 = Self::i64_to_u8_array(result);
-        // let the_result = Self::decode_token_details(&result_to_u8);
-        Ok("".to_string())
-    }
-    pub fn read_token(&self, 
-        contract_path: &DBWithThreadMode<SingleThreaded>, 
-        contract_info: &ContractInfo, 
-        token_id: i32) -> Result<String, Box<dyn std::error::Error>>
-    {   
-        let function_name = "read_token";
-        let engine = Engine::default();
-        let mut linker = Linker::new(&engine);
-        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-        let mut store = Store::new(&engine, wasi);
-    
-        let module = Module::from_file(&engine, &contract_info.module_path)?;
-        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
-        let link = linker.instantiate(&mut store, &module)?;
-        let wasm_memory = link.get_memory(&mut store, "memory")
-        .ok_or_else(|| "Failed to find `memory` export")?;
-        let saved_data = rock_storage::get_from_db_vector(contract_path, &contract_info.pub_key).unwrap_or_default();
-      
-        // 2.2. Set this memory state into the WebAssembly module's memory.
-        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);  
-        let empty = Self::is_memory_empty(&wasm_memory, &store);
-        println!("Memory is empty: {}", empty);   
-        // Convert token_id to expected format (assuming u64 for simplicity here)
-        // Assuming `link` is of type `wasmtime::Link`
-        let result = link.get_typed_func::<i32, i64>(&mut store, function_name)?.call(&mut store, token_id)?;
-        println!("RESULT OF TOKEN: {:?}",result);
-        let result_to_unpack =Self::decode_token_details(result, &wasm_memory, &mut store)?;
-        println!("Unpack result {:?}", result_to_unpack);
-        // let result_str = result.to_string();
-        // println!("{:?}", result_str);
-        // let result_to_u8 = Self::i64_to_u8_array(result);
-        // let the_result = Self::decode_token_details(&result_to_u8);
-        Ok("".to_string())
-    }
     pub fn test_write(&self, 
         contract_path: &DBWithThreadMode<SingleThreaded>,
         contract_info: &ContractInfo,
@@ -1114,7 +1085,7 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
                 module_path: "./sample721.wasm".to_string(),
                 pub_key:public_key.to_string(),
             };
-            gas_calculator::calculate_gas_for_contract_creation("./sample721.wasm");
+            let _ = gas_calculator::calculate_gas_for_contract_creation("./sample721.wasm");
             let mut contract = WasmContract::new("./sample721.wasm")?;
             let functions = contract.exported_functions();
         
@@ -1166,59 +1137,88 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
         }
     }
 }
+pub fn create_contract_official(
+    call_address: &str,
+    private_key: &str,
+    contract_name: &str,
+    contract_symbol: &str,
+    base64_wasm_data: &str, // Add base64-encoded Wasm data parameter
+) -> Result<(String, String,u128), Box<dyn std::error::Error>> {
+    let (public_key, private_key) = generate_keypair();
+    let path = "./contract/db";
+    let contract_path = rock_storage::open_db(path);
 
-//TODO:: DELETE, why? Because its a mock key
-pub fn create_erc721_contract(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn std::error::Error>>{
-    let contract_path = swarm.behaviour().storage_path.get_contract();
-    let (public_key,private_key) = generate_keypair();
-    //TODO: Call with signature sign
-    let (public_caller_key,private_caller_key) = generate_keypair();
-    read_wasm_file("./sample721.wasm",contract_path,public_key.to_string());
-    // Reading from DB and deserializing
-    let contract_info = ContractInfo {
-        module_path: "./sample721.wasm".to_string(),
-        pub_key:public_key.to_string(),
-    };
-    let mut contract = WasmContract::new("./sample721.wasm")?;
+    match contract_path {
+        Ok(contract_db) => {
+            // Generate a unique contract address or use an existing one1
+            // Create a Wasm file with the contract address as the file name
+            let wasm_file_name = format!("{}.wasm", public_key);
+            let wasm_file_path = format!("./{}", wasm_file_name);
 
-    println!("Contract successfully created.");
-    println!("Successfully instantiated the wasm module.");
+            // Decode base64-encoded Wasm data and write it to the file
+            let wasm_data = base64::decode(base64_wasm_data)
+                .map_err(|e| format!("Error decoding base64-encoded Wasm data: {}", e))?;
+            let mut wasm_file = File::create(&wasm_file_path)
+                .map_err(|e| format!("Error creating Wasm file: {}", e))?;
+            wasm_file
+                .write_all(&wasm_data)
+                .map_err(|e| format!("Error writing Wasm data to file: {}", e))?;
 
-    // Print the exported functions
-    let functions = contract.exported_functions();
-    // println!("Available Functions: {:?}", functions);
-    // for func in functions.iter() {
-    //     println!("Exported Function: {}", func);
-    // }
+            // Rest of your function code...
+            let contract_info = ContractInfo {
+                module_path: wasm_file_path.clone(), // Use the file path
+                pub_key: public_key.to_string(),
+            };
+            let mut contract = WasmContract::new(&wasm_file_path)?;
+            let functions = contract.exported_functions();
+        
+            let the_memory = create_memory(contract.get_store())?;
+            let owner_memory_offset = 0;
+            let (name_ptr, name_len) = write_data_to_memory(&the_memory, contract_name,owner_memory_offset, contract.get_store())?;
+            let ipfs_memory_offset = name_ptr + name_len;
+            let (symbol_ptr, symbol_len) = write_data_to_memory(&the_memory, contract_symbol, ipfs_memory_offset,contract.get_store())?;
+        
+            let wasm_params = WasmParams {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+                name: "initialize".to_string(),
+                args: vec![
+                    Val::I32(name_ptr as i32),
+                    Val::I32(name_len as i32),
+                    Val::I32(symbol_ptr as i32),
+                    Val::I32(symbol_len as i32),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+                ],
+            };
 
-    let the_memory = create_memory(contract.get_store())?;
-    let owner_memory_offset = 0;
-    let (name_ptr, name_len) = write_data_to_memory(&the_memory, "SUMOTEX-CERT",owner_memory_offset, contract.get_store())?;
-    let ipfs_memory_offset = name_ptr + name_len;
-    let (symbol_ptr, symbol_len) = write_data_to_memory(&the_memory, "SMTX", ipfs_memory_offset,contract.get_store())?;
+            let the_item = rock_storage::get_from_db(&contract_db,public_key.to_string());
+            let _  = gas_calculator::calculate_gas_for_contract_creation(&wasm_file_path); // Use the file path
 
-    let wasm_params = WasmParams {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
-        name: "initialize".to_string(),
-        args: vec![
-            Val::I32(name_ptr as i32),
-            Val::I32(name_len as i32),
-            Val::I32(symbol_ptr as i32),
-            Val::I32(symbol_len as i32),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
-        ],
-    };
-    let mut contract = WasmContract::new("./sample721.wasm")?;
-    contract.call_721(contract_path,&contract_info, &wasm_params)?;
-    let the_item = rock_storage::get_from_db(contract_path,public_key.to_string());
-    //TODO: compute value
-    //public_txn::Txn::create_transactions(public_caller_key.to_string(),public_key.to_string(),1000);
-    println!("Contract Public Key: {:?}",public_key.to_string());
-    println!("The Key Item: {:?}",the_item);
-    Ok(())
+            let result = public_txn::Txn::create_and_prepare_transaction(
+                TransactionType::ContractCreation,
+                call_address.to_string(),
+                public_key.to_string(),
+                1000);
+            // Return the values from your function
+            match result {
+                Ok((txn_hash, gas_cost,body)) => {
+                    let result = contract.create_contract(&contract_db,&contract_info, &wasm_params)?;
+                    return Ok((public_key.to_string(),txn_hash, gas_cost));
+                }
+                Err(err) => {
+                    // Handle the error if necessary
+                    Err(err)
+                }
+            }
+        }
+        Err(e) => {
+            eprintln!("Failed to open contract database: {:?}", e);
+            Err(e.into())
+        }
+    }
 }
+
 pub fn create_erc20_contract(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<(), Box<dyn std::error::Error>>{
     let contract_path = swarm.behaviour().storage_path.get_contract();
     let (public_key,private_key) = generate_keypair();
-    read_wasm_file("./sample.wasm",contract_path,public_key.to_string());
+    let _ = read_wasm_file("./sample.wasm",contract_path,public_key.to_string());
     // Reading from DB and deserializing
     let contract_info = ContractInfo {
         module_path: "./sample.wasm".to_string(),
@@ -1420,7 +1420,7 @@ pub fn mint_token_official(contract_address:&String,
                         panic!("Failed to create SecretKey: {:?}", e);
                     }
                 };
-                public_txn::Txn::sign_and_submit_transaction(account_key,txn_hash.clone(),&the_official_private_key);
+                let _ = public_txn::Txn::sign_and_submit_transaction(account_key,txn_hash.clone(),&the_official_private_key);
                 let result = contract.mint_token(&contract_path, &contract_info,account_key,&contract_address.to_string(),ipfs);
                 match result {
                     Ok(token_id) => {
@@ -1456,14 +1456,7 @@ pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<(String,String
             panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
         }
     };
-    let acc_path = match rock_storage::open_db(a_path) {
-        Ok(path) => path,
-        Err(e) => {
-            // Handle the error, maybe log it, and then decide what to do next
-            panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
-        }
-    };
-    let mut contract = WasmContract::new("./sample721.wasm")?;
+    let contract = WasmContract::new("./sample721.wasm")?;
     let contract_info = ContractInfo {
         module_path: "./sample721.wasm".to_string(),
         pub_key:contract_address.to_string(),
@@ -1486,39 +1479,7 @@ pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<(String,String
         }
     }
 }
-pub fn get_token_owner(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(data) = cmd.strip_prefix("token id ") {
-        let mut contract = WasmContract::new("./sample721.wasm")?;
-        let contract_path = swarm.behaviour().storage_path.get_contract();
-        let contract_info = ContractInfo {
-            module_path: "./sample721.wasm".to_string(),
-            pub_key: data.to_string(),
-        };
-        let token_id = "1";
-        let token_id_u64: i32 = token_id.parse()?;
 
-        let owner = contract.read_token(contract_path, &contract_info, token_id_u64)?;
-        println!("Owner of token {}: {}", token_id_u64.clone(), owner);
-    }
-    Ok(())
-}
-
-pub fn transfer_nft(cmd:&str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
-    if let Some(data) = cmd.strip_prefix("token id ") {
-        let mut contract = WasmContract::new("./sample721.wasm")?;
-        let contract_path = swarm.behaviour().storage_path.get_contract();
-        let contract_info = ContractInfo {
-            module_path: "./sample721.wasm".to_string(),
-            pub_key: data.to_string(),
-        };
-        let token_id =data.to_string();
-        let token_id_u64: i32 = token_id.parse()?;
-
-        let owner = contract.transfer_nft_token(contract_path, &contract_info, token_id_u64)?;
-        println!("Owner of token {}: {}", token_id_u64.clone(), owner);
-    }
-    Ok(())
-}
 
 pub fn call_contract_function(
     contract_address: &String,
@@ -1544,7 +1505,7 @@ pub fn call_contract_function(
         pub_key: contract_address.to_string(),
     };
     let the_memory = create_memory(contract.get_store())?;
-    let account_data = match account::get_account_no_swarm(&account_key) {
+    let _account_data = match account::get_account_no_swarm(&account_key) {
         Ok(Some(acc)) => acc,
         Ok(None) => return Err("Account not found".into()), // or handle this case as needed
         Err(e) => return Err(e.into()), // error while fetching account
@@ -1558,7 +1519,7 @@ pub fn call_contract_function(
     );
 
     match txn {
-        Ok((txn_hash, gas_cost, new_txn)) => {
+        Ok((txn_hash, _gas_cost, _new_txn)) => {
             let private_key_bytes = match hex::decode(&private_key) {
                 Ok(bytes) => bytes,
                 Err(e) => {
@@ -1573,7 +1534,7 @@ pub fn call_contract_function(
                 }
             };
 
-            public_txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
+            let _ = public_txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
 
             let result = contract.call_function(
                 &contract_path,

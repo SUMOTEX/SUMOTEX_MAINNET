@@ -62,7 +62,7 @@ server {
     ssl_certificate_key /etc/letsencrypt/live/rpc.sumotex.co/privkey.pem;
 
     location / {
-        proxy_pass http://localhost:8000; # Replace with the port your Rust app is running on
+        proxy_pass http://localhost:8080; # Replace with the port your Rust app is running on
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -74,7 +74,7 @@ server {
 
 server {
     listen 443 ssl;
-    server_name rpc.sumotex.co;
+    server_name generator.sumotex.co;
 
     ssl_certificate /etc/letsencrypt/live/rpc.sumotex.co/fullchain.pem;
     ssl_certificate_key /etc/letsencrypt/live/rpc.sumotex.co/privkey.pem;

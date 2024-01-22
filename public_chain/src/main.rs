@@ -126,7 +126,7 @@ pub fn remove_lock_file() {
 async fn block_producer() {
     loop {
         // Your periodic function logic goes here
-        public_block::pbft_pre_message_block_create_scheduler();
+        let _ = public_block::pbft_pre_message_block_create_scheduler();
 
         // Sleep for the specified interval
         sleep(Duration::from_secs(20)).await; // Adjust the interval as needed
@@ -354,24 +354,6 @@ async fn main() {
                             // cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, swarm_public_net),
                             //cmd if cmd.starts_with("create acc")=> account::create_account(cmd, swarm_public_net),
                             //cmd if cmd.starts_with("acc d")=> account::get_account(cmd, swarm_public_net),
-                            cmd if cmd.starts_with("contract c")=> {
-                                match smart_contract::create_erc721_contract(cmd,  swarm_public_net) {
-                                    Ok(_) => {} // Do nothing on success
-                                    Err(e) => eprintln!("Error creating contract: {:?}", e), // Print the error
-                                }
-                            },
-                            cmd if cmd.starts_with("mint token")=> {
-                                match smart_contract::mint_token(cmd,  swarm_public_net) {
-                                    Ok(_) => {} // Do nothing on success
-                                    Err(e) => eprintln!("Error minting token: {:?}", e), // Print the error
-                                }
-                            },
-                            cmd if cmd.starts_with("token id")=> {
-                                match smart_contract::get_token_owner(cmd,  swarm_public_net) {
-                                    Ok(_) => {} // Do nothing on success
-                                    Err(e) => eprintln!("Error getting token id: {:?}", e), // Print the error
-                                }
-                            },
                             _ => error!("unknown command"),  
                         },
                     }
