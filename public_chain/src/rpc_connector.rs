@@ -331,7 +331,7 @@ fn get_balance(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
     }
 }
 
-#[post("/get-wallet-transactions",data="<post_data>")]
+#[post("/get-caller-transactions",data="<post_data>")]
 fn get_wallet_transactions(post_data: Json<ReadAccountInfo>)-> Json<serde_json::Value> {
     let pub_add = &post_data.pub_address;
     match public_txn::Txn::get_transactions_by_caller(pub_add) {

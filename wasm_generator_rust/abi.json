@@ -51,7 +51,7 @@
             },{
                 "name": "transfer",
                 "type": "function",
-                "inputs": [{"name": "from_ptr", "type": "u8"},{"name": "from_len", "type": "usize"},{"name": "to_ptr", "type": "u8"},{"name": "to_len", "type": "usize"},{"name": "token_id", "type": "i32"}],
+                "inputs": [{"name": "from", "type": "String"},{"name": "to", "type": "String"},{"name": "token_id", "type": "i32"}],
                 "outputs": [{"name": "output", "type": ">"}]
             },{
                 "name": "read_name",

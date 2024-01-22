@@ -213,8 +213,7 @@ impl ERC721Token {
 
     #[no_mangle]
     pub extern "C" fn transfer(&mut self, 
-        from: String, to: String, token_id: i32
-        token_id: i32) -> Result<(), &'static str >{
+        from: String, to: String, token_id: i32) -> Result<(), &'static str >{
         // Convert raw pointers to Rust strings
         let from_ptr = from.as_ptr();
         let from_len = from.len();
