@@ -8,7 +8,8 @@ edition = "2021"
 name = "public_chain"
 
 [global.limits]
-json = 16777216  # 16 MiB in bytes
+json = 33554432  # 32 MiB in bytes
+
 
 [dependencies]
 common = { path = "../common" }
