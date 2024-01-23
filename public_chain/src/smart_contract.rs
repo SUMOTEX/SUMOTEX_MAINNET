@@ -1171,7 +1171,9 @@ pub fn create_contract_official(
             };
             let mut contract = WasmContract::new(&wasm_file_path)?;
             let functions = contract.exported_functions();
-        
+            for func_name in functions {
+                println!("Exported Function: {}", func_name);
+            }
             let the_memory = create_memory(contract.get_store())?;
             let owner_memory_offset = 0;
             let (name_ptr, name_len) = write_data_to_memory(&the_memory, contract_name,owner_memory_offset, contract.get_store())?;
