@@ -120,15 +120,12 @@ fn calculate_gas_by_opcode(opcodes: &HashSet<String>)->u64 {
             println!("No gas cost found for base opcode {}", base_opcode);
         }
     }
-
     total_gas
 }
 
 
-
-
 /// Calculate gas for interacting with a contract.
-pub fn qcalculate_gas_for_contract_interaction(data: &[u8],function_cost:u64) -> u64 {
+pub fn calculate_gas_for_contract_interaction(data: &[u8],function_cost:u64) -> u64 {
     let data_size_gas = data.len() as u64; // Example, replace with actual gas calculation
     let function_call_gas = function_cost; // Example, replace with actual gas calculation
 

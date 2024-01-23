@@ -21,6 +21,9 @@ use lazy_static::lazy_static;
 use rocket::Route;
 use std::collections::HashMap;
 use secp256k1::SecretKey;
+use rocket::data::Limits;
+use rocket::data::ByteUnit; 
+use rocket::config::{Config};
 use rocket_okapi::{openapi, routes_with_openapi, JsonSchema};
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
 
@@ -582,40 +585,40 @@ impl Fairing for CORS {
 // Launch the Rocket HTTP server.
 pub async fn start_rpc() {
     println!("Starting RPC server...");
+    let rocket_config = Config {
+        address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
+        port: 8000, // or 8545 for dev
+        limits: Limits::new()
+            .limit("json",ByteUnit::Megabyte(32)), // 32 MiB in bytes
+        ..Config::default()
+    };
     rocket::build()
-        .attach(CORS)
-        //.manage(swarm) // Add the swarm to the application state
-        .configure(rocket::Config {
-            address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-           //prod
-            port:8000,
-            //dev
-            //port: 8545,
-            ..rocket::Config::default()
-        })
-        .mount("/", routes![
-                            create_transaction,
-                            sign_transaction,
-                            create_wallet,
-                            mint_token_contract,
-                            read_token_contract,
-                            transfer_nft,
-                            transfer_token,
-                            get_balance,
-                            get_wallet_transactions,
-                            get_account,
-                            complete_transaction,
-                            read_transaction,
-                            read_total_minted_token,
-                            get_receiver_transactions,
-                            generic_smart_contract_function_call,
-                            create_block,
-                            create_contract,
-                            get_block,
-                            get_latest_block,
-                            healthcheck])
-        .launch()
-        .await
-        .expect("Failed to start Rocket server");
+    .attach(CORS)
+    //.manage(swarm) // Add the swarm to the application state
+    .configure(rocket_config)
+    .mount("/", routes![
+                        create_transaction,
+                        sign_transaction,
+                        create_wallet,
+                        mint_token_contract,
+                        read_token_contract,
+                        transfer_nft,
+                        transfer_token,
+                        get_balance,
+                        get_wallet_transactions,
+                        get_account,
+                        complete_transaction,
+                        read_transaction,
+                        read_total_minted_token,
+                        get_receiver_transactions,
+                        generic_smart_contract_function_call,
+                        create_block,
+                        create_contract,
+                        get_block,
+                        get_latest_block,
+                        healthcheck])
+    .launch()
+    .await
+    .expect("Failed to start Rocket server");
 }
 
