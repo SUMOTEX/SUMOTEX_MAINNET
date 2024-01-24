@@ -428,7 +428,7 @@ impl WasmContract {
         &mut self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
         contract_info: &ContractInfo,
-        wasm_params: &WasmParams// Added parameter to specify the function name
+        wasm_params: &WasmParams // Added parameter to specify the function name
     ) -> Result<(), Box<dyn std::error::Error>> {
         let engine = Engine::default();
         let mut linker = Linker::new(&engine);
@@ -453,13 +453,19 @@ impl WasmContract {
             .ok_or_else(|| format!("Failed to find function `{}`", "initialize"))?;
     
         let args: Vec<Val> = wasm_params.args.iter().cloned().collect();
-        dyn_func.call(&mut store,&[],&mut [])?;
+    
+        // Prepare a mutable slice for the results if the function returns values
+        let mut results = vec![Val::I32(0); dyn_func.ty(&store).results().len()]; // Adjust the size based on expected results
+    
+        dyn_func.call(&mut store, &args[..], &mut results)?;
     
         let updated_data = wasm_memory.data(&mut store);
         let updated_byte_vector: Vec<u8> = updated_data.to_vec();
         rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
+    
         Ok(())
     }
+    
     
     pub fn read(
         &self,
@@ -1189,8 +1195,6 @@ pub fn create_contract_official(
                     Val::I32(symbol_len as i32),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
                 ],
             };
-
-            let the_item = rock_storage::get_from_db(&contract_db,public_key.to_string());
             let _  = gas_calculator::calculate_gas_for_contract_creation(&wasm_file_path); // Use the file path
 
             let result = public_txn::Txn::create_and_prepare_transaction(
