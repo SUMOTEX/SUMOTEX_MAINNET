@@ -2,7 +2,7 @@ use std::collections::HashMap;
 use libp2p::{
     swarm::{Swarm},
 };
-
+use std::fs;
 use std::fs::File;
 use std::io::Write;
 use rocksdb::{DBWithThreadMode,SingleThreaded};
@@ -1150,6 +1150,8 @@ pub fn create_contract_official(
             match result {
                 Ok((txn_hash, gas_cost,body)) => {
                     let result = contract.create_contract(&contract_db,&contract_info, &wasm_params)?;
+                    fs::remove_file(&wasm_file_path)
+                    .map_err(|e| format!("Failed to delete Wasm file: {:?}", e))?;            
                     return Ok((public_key.to_string(),txn_hash, gas_cost));
                 }
                 Err(err) => {
