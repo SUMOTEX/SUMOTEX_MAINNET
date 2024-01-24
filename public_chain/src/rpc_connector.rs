@@ -61,6 +61,10 @@ pub struct GenericContractInfo {
     args_output: String
 }
 #[derive(serde::Deserialize, Debug)]
+pub struct ReadContractInfo {
+    contract_address: String
+}
+#[derive(serde::Deserialize, Debug)]
 pub struct ContractInfo {
     call_address: String,
     private_key: String,
@@ -297,6 +301,20 @@ fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value>
         }
     }   
 }
+#[post("/read-contract", data = "<post_data>")]
+fn read_contract(post_data: Json<ReadContractInfo>)-> Json<serde_json::Value> {
+    let contract_address = &post_data.contract_address;
+    match smart_contract::read_contract(&contract_address){
+        Ok(contract_detail) => {
+            let response_body = json!({"contract_detail": contract_detail});
+            Json(json!({"jsonrpc": "1.0",  "result": response_body}))
+        },
+        Err(e) => {
+            error!("Error creating contract: {:?}", e);
+            Json(json!({"jsonrpc": "1.0", "result": "error"}))
+        }
+    }
+}
 // // Route to handle RPC requests.
 #[post("/read-total-minted", data = "<post_data>")]
 fn read_total_minted_token(post_data: Json<ReadTotalTokenInfo>)-> Json<serde_json::Value> {
@@ -520,7 +538,6 @@ fn get_latest_block() -> Json<serde_json::Value>{
 #[post("/read-transaction", data = "<txn_id_info>")]
 fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
     let txn_id = &txn_id_info.txn_hash;
-
     // Assuming a function `get_transaction_by_id` that fetches the transaction from storage
     match public_txn::Txn::get_transaction_by_id(txn_id) {
         Ok(transaction) => {
@@ -603,6 +620,7 @@ pub async fn start_rpc() {
                         create_wallet,
                         mint_token_contract,
                         read_token_contract,
+                        read_contract,
                         transfer_nft,
                         transfer_token,
                         get_balance,
