@@ -622,7 +622,7 @@ impl WasmContract {
         };
         let new_data_offset = saved_data.len() as i32;
         let owner_data_bytes = owner.as_bytes().len() as i32;
-        let ipfs_data_bytes = "SMTX_IPFS_TEST".as_bytes().len() as i32;
+        let ipfs_data_bytes = ipfs_hash.as_bytes().len() as i32;
         let required_memory_size_bytes = new_data_offset + owner_data_bytes + ipfs_data_bytes;        
 
         let current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
@@ -657,7 +657,7 @@ impl WasmContract {
         } // The scope of memory_view ends here
         
         // Write the IPFS hash
-        let (ipfs_ptr, ipfs_len) = write_data_to_memory(&wasm_memory, "SMTX_IPFS_TEST", ipfs_memory_offset, &mut store)?;
+        let (ipfs_ptr, ipfs_len) = write_data_to_memory(&wasm_memory, ipfs_hash, ipfs_memory_offset, &mut store)?;
 
         let mint_result = mint_func.call(&mut store, (
             name_ptr as i32,
