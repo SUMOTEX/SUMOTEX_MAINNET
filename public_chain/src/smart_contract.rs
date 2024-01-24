@@ -595,7 +595,7 @@ impl WasmContract {
         //let wasm_memory = contract.instance.get_memory(&mut store,"memory").ok_or_else(|| "Failed to find `memory` export")?;
         let wasm_memory = link.get_memory(&mut store, "memory")
             .ok_or_else(|| "Failed to find `memory` export")?;
-        let serialized_contract = rock_storage::get_from_db_vector(contract_path, contract_address).unwrap_or_default();
+        let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
         let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
             .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
         contract.nonce+=1;
@@ -678,7 +678,7 @@ impl WasmContract {
                 } else {
                     println!("WebAssembly memory updated after mint operation.");
                 }
-                contract.wasm_file = updated_data.to_vec()
+                contract.wasm_file = updated_data.to_vec();
                 let updated_serialized_contract = serde_json::to_vec(&contract)
                 .map_err(|e| format!("Failed to serialize updated contract: {:?}", e))?;
                 rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_serialized_contract)?;        
