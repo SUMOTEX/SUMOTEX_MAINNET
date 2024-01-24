@@ -595,7 +595,11 @@ impl WasmContract {
         //let wasm_memory = contract.instance.get_memory(&mut store,"memory").ok_or_else(|| "Failed to find `memory` export")?;
         let wasm_memory = link.get_memory(&mut store, "memory")
             .ok_or_else(|| "Failed to find `memory` export")?;
-        let saved_data = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
+        let serialized_contract = rock_storage::get_from_db_vector(contract_path, contract_address).unwrap_or_default();
+        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+            .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+        contract.nonce+=1;
+        let saved_data = contract.wasm_file;
         let saved_data_length = saved_data.len() as u64;
         let current_memory_size_bytes = wasm_memory.data_size(&store) as u64;
         if saved_data.len() > wasm_memory.data_size(&store) {
@@ -674,7 +678,10 @@ impl WasmContract {
                 } else {
                     println!("WebAssembly memory updated after mint operation.");
                 }
-                rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
+                contract.wasm_file = updated_data.to_vec()
+                let updated_serialized_contract = serde_json::to_vec(&contract)
+                .map_err(|e| format!("Failed to serialize updated contract: {:?}", e))?;
+                rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_serialized_contract)?;        
                 println!("Token ID value: {:?}", token_id);
                 //Ok(token_id);
                 Ok(token_id as i32)
@@ -1199,47 +1206,7 @@ pub fn read_total_token_erc721(contract_address:&String)->Result<i64, Box<dyn st
         }
     }
 }
-pub fn mint_token(cmd:&str,swarm:  &mut Swarm<AppBehaviour>)->Result<i32, Box<dyn std::error::Error>>{
-    let parts: Vec<&str> = cmd.split_whitespace().collect();
-    if parts.len() == 4 && parts[0] == "mint" && parts[1] == "token" {
-        let contract_pub_key = parts[2]; // The contract public key
-        let account_key = parts[3]; 
-        let mut contract = WasmContract::new("./sample721.wasm")?;
-        let contract_path = swarm.behaviour().storage_path.get_contract();
-        let contract_info = ContractInfo {
-            module_path: "./sample721.wasm".to_string(),
-            pub_key:contract_pub_key.to_string(),
-        };
-        let the_memory = create_memory(contract.get_store())?;
-            // Retrieve the account to check if it exists
-        let acc_path = swarm.behaviour().storage_path.get_account();
-        let account_data = rock_storage::get_from_db(acc_path, &account_key);
-        if account_data.is_none() {
-            return Err("Account not found".into());
-        }
-        let result = contract.mint_token(contract_path, &contract_info,account_key,&contract_pub_key.to_string(),"TEST_IPFS");
 
-        match result {
-            Ok(token_id) => {
-                println!("Mint: {}", token_id);
-                let read_result = contract.read_owner_token(contract_path, &contract_info,&contract_pub_key.to_string(),token_id);
-                if let Err(e) = read_result {
-                    println!("Error after minting, could not read token owner: {}", e);
-                    return Err(e);
-                }
-
-                Ok(token_id)
-            }
-            Err(e) => {
-                println!("Error reading: {}", e);
-                Err(e)
-            }
-        }
-    } else {
-        // If the command is not properly formatted, return an error
-        Err("Command format not recognized".into())
-    }
-}
 pub fn mint_token_official(contract_address:&String,
                             account_key:&String,
                             private_key:&String,
