@@ -1394,57 +1394,82 @@ pub fn call_contract_function(
         Ok(None) => return Err("Account not found".into()), // or handle this case as needed
         Err(e) => return Err(e.into()), // error while fetching account
     };
+    if(args_input.len()>0){
+        let txn = public_txn::Txn::create_and_prepare_transaction(
+            TransactionType::ContractInteraction,
+            account_key.to_string(),
+            contract_address.to_string(),
+            1000,
+        );
+        match txn {
+            Ok((txn_hash, _gas_cost, _new_txn)) => {
+                let private_key_bytes = match hex::decode(&private_key) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        panic!("Failed to decode private key: {:?}", e);
+                    }
+                };
     
-    let txn = public_txn::Txn::create_and_prepare_transaction(
-        TransactionType::ContractInteraction,
-        account_key.to_string(),
-        contract_address.to_string(),
-        1000,
-    );
-
-    match txn {
-        Ok((txn_hash, _gas_cost, _new_txn)) => {
-            let private_key_bytes = match hex::decode(&private_key) {
-                Ok(bytes) => bytes,
-                Err(e) => {
-                    panic!("Failed to decode private key: {:?}", e);
-                }
-            };
-
-            let the_official_private_key = match SecretKey::from_slice(&private_key_bytes) {
-                Ok(key) => key,
-                Err(e) => {
-                    panic!("Failed to create SecretKey: {:?}", e);
-                }
-            };
-
-            let _ = public_txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
-
-            let result = contract.call_function(
-                &contract_path,
-                &contract_info,
-                account_key,
-                &contract_address.to_string(),
-                function_name,
-                args_input_values,
-                args_input,
-                args_output
-            );
-
-            match result {
-                Ok(result_map) => {
-                    println!("Function {} result: {:?}", function_name, result_map);
-                    Ok(())
-                }
-                Err(e) => {
-                    println!("Error calling function {}: {}", function_name, e);
-                    Err(e)
+                let the_official_private_key = match SecretKey::from_slice(&private_key_bytes) {
+                    Ok(key) => key,
+                    Err(e) => {
+                        panic!("Failed to create SecretKey: {:?}", e);
+                    }
+                };
+    
+                let _ = public_txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
+    
+                let result = contract.call_function(
+                    &contract_path,
+                    &contract_info,
+                    account_key,
+                    &contract_address.to_string(),
+                    function_name,
+                    args_input_values,
+                    args_input,
+                    args_output
+                );
+    
+                match result {
+                    Ok(result_map) => {
+                        println!("Function {} result: {:?}", function_name, result_map);
+                        Ok(())
+                    }
+                    Err(e) => {
+                        println!("Error calling function {}: {}", function_name, e);
+                        Err(e)
+                    }
                 }
             }
+            Err(txn_err) => {
+                println!("Error creating transaction: {}", txn_err);
+                Err(txn_err.into())
+            }
         }
-        Err(txn_err) => {
-            println!("Error creating transaction: {}", txn_err);
-            Err(txn_err.into())
+    }else{
+        let result = contract.call_function(
+            &contract_path,
+            &contract_info,
+            account_key,
+            &contract_address.to_string(),
+            function_name,
+            args_input_values,
+            args_input,
+            args_output
+        );
+
+        match result {
+            Ok(result_map) => {
+                println!("Function {} result: {:?}", function_name, result_map);
+                Ok(())
+            }
+            Err(e) => {
+                println!("Error calling function {}: {}", function_name, e);
+                Err(e)
+            }
         }
     }
+
+
+
 }

@@ -475,7 +475,6 @@ fn complete_transaction(transaction_info: Json<TransactionSignedInfo>) -> Json<s
 #[post("/call-contract", data = "<post_data>")]
 fn generic_smart_contract_function_call(post_data: Json<GenericContractInfo>)->  Json<serde_json::Value>{
         // Extract transaction information
-
         let contract_address = &post_data.contract_address;
         let call_address = &post_data.caller_address;
         let private_key = &post_data.private_key;
