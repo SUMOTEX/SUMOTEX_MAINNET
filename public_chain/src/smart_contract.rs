@@ -566,7 +566,139 @@ impl WasmContract {
         }
         true
     }
+    pub fn mint_token_dynamic(
+        &self,
+        contract_path: &DBWithThreadMode<SingleThreaded>,
+        contract_info: &ContractInfo,
+        owner:&str,
+        pub_key: &str,
+        ipfs_hash: &str
+    ) -> Result<i32, Box<dyn std::error::Error>> {
+        println!("Initializing engine and linker...");
+        println!("Contract name and pub key {:?}",pub_key);
+        let engine = Engine::default();
+        let mut linker = Linker::new(&engine);
+        let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
+        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+            .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+        contract.nonce+=1;
 
+        let module = Module::new(&engine, &contract.wasm_file)
+        .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+        let mut store = Store::new(&engine, wasi);
+
+
+        println!("Attempting to instantiate the WebAssembly module...");
+        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+        let link = linker.instantiate(&mut store, &module)?;
+        let instance = linker.instantiate(&mut store, &module)?;
+        //let contract = WasmContract::new(instance)?;
+        // ... (Your operations using token_instance)
+    
+        println!("Fetching WebAssembly memory...");
+        //let wasm_memory = contract.instance.get_memory(&mut store,"memory").ok_or_else(|| "Failed to find `memory` export")?;
+        let wasm_memory = link.get_memory(&mut store, "memory")
+            .ok_or_else(|| "Failed to find `memory` export")?;
+        let saved_data = contract.wasm_file;
+        let saved_data_length = saved_data.len() as u64;
+        let current_memory_size_bytes = wasm_memory.data_size(&store) as u64;
+        if saved_data.len() > wasm_memory.data_size(&store) {
+            // If not, calculate how many additional memory pages are needed
+            // Calculate the number of additional pages needed, rounding up
+            let additional_pages_needed = ((saved_data_length + (64 * 1024 - 1)) / (64 * 1024)) - (current_memory_size_bytes / (64 * 1024));
+            // Attempt to grow the WebAssembly memory by the required number of pages
+            if saved_data_length > current_memory_size_bytes {
+                wasm_memory.grow(&mut store, additional_pages_needed).map_err(|_| "Failed to grow memory")?;
+            }
+        }
+        // After ensuring the memory is large enough, copy the saved data into the WebAssembly memory within bounds
+        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
+
+
+        println!("Attempting to call mint function in the WebAssembly module...");
+
+        let mint_func = match link.get_typed_func::<(i32,i32,i32,i32), u32>(&mut store, "mint") {
+            Ok(func) => func,
+            Err(err) => {
+                println!("Error retrieving the 'mint' function: {}", err);
+                return Err(err.into());
+            }
+        };
+        let new_data_offset = saved_data.len() as i32;
+        let owner_data_bytes = owner.as_bytes().len() as i32;
+        let ipfs_data_bytes = ipfs_hash.as_bytes().len() as i32;
+        let required_memory_size_bytes = new_data_offset + owner_data_bytes + ipfs_data_bytes;      
+        let current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
+        println!("New data offset: {:?}", new_data_offset);
+        println!("Owner data bytes: {:?}", owner_data_bytes);
+        println!("IPFS data bytes: {:?}", ipfs_data_bytes);
+        println!("Required memory size bytes: {:?}", required_memory_size_bytes);
+        println!("Current memory size bytes: {:?}", current_memory_size_bytes);
+        // Check if we need more memory pages and grow memory if needed
+        if required_memory_size_bytes > current_memory_size_bytes {
+            // Calculate how many more pages are needed, rounding up
+            let additional_pages_needed = ((required_memory_size_bytes - current_memory_size_bytes + (64 * 1024 - 1)) / (64 * 1024)) as u32;
+            // Grow the memory
+            wasm_memory.grow(&mut store, additional_pages_needed as u64).map_err(|_| "Failed to grow memory")?;
+
+        }
+        // We need to limit the scope of the memory view so that we can mutably borrow `store` again later
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            // Ensure the new data offset is within the bounds of the current memory size
+            if new_data_offset as usize >= memory_view.len() {
+                return Err("New data offset is out of the current memory bounds.".into());
+            }
+        } // `memory_view` goes out of scope here, so we can mutably borrow `store` again
+
+
+        let (name_ptr, name_len) = write_data_to_memory(&wasm_memory, owner, new_data_offset, &mut store)?;
+        println!("Owner data pointer: {:?}, length: {:?}", name_ptr, name_len);
+        let ipfs_memory_offset = name_ptr + name_len;
+
+        // Check that the IPFS data fits within memory bounds
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            if ipfs_memory_offset as usize + ipfs_data_bytes as usize > memory_view.len() {
+                return Err("IPFS data offset or length is out of the current memory bounds.".into());
+            }
+        } // The scope of memory_view ends here
+        
+        // Write the IPFS hash
+        let (ipfs_ptr, ipfs_len) = write_data_to_memory(&wasm_memory, ipfs_hash, ipfs_memory_offset, &mut store)?;
+
+        let mint_result = mint_func.call(&mut store, (
+            name_ptr as i32,
+            name_len as i32,
+            ipfs_ptr as i32,
+            ipfs_len as i32,
+        ));
+        match mint_result {
+            Ok(token_id) => {
+                let updated_data = wasm_memory.data(&mut store);
+                let updated_byte_vector: Vec<u8> = updated_data.to_vec();
+                if saved_data == updated_data.to_vec() {
+                    println!("No change in the WebAssembly memory after mint operation.");
+                } else {
+                    println!("WebAssembly memory updated after mint operation.");
+                }
+                contract.wasm_file = updated_data.to_vec();
+                let updated_serialized_contract = serde_json::to_vec(&contract)
+                .map_err(|e| format!("Failed to serialize updated contract: {:?}", e))?;
+                rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_serialized_contract)?;        
+                println!("Token ID value: {:?}", token_id);
+                //Ok(token_id);
+                Ok(token_id as i32)
+                // rest of the logic here
+            },
+            Err(e) => {
+                println!("Mint function failed: {}", e);
+                // handle the error
+                Err(e.into())
+            }
+        }
+    }
     pub fn mint_token(
         &self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
