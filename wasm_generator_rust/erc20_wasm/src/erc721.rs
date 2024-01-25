@@ -40,7 +40,7 @@ static mut GLOBAL_STATE: GlobalState = GlobalState {
     token_details_buffer: Vec::new(), // Initialize with an empty Vec
 };
 
-#[generate_abi]
+//#[generate_abi]
 impl ERC721Token {
 
     fn deserialize_from_memory(buffer: *const u8, len: usize) -> Result<ERC721Token, Box<dyn std::error::Error>> {

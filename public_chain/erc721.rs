@@ -100,7 +100,6 @@ impl ERC721Token {
                 return i32::MAX; // Error value indicating uninitialized TOKEN_PTR.
             }
         };
-        
         let owner_slice = unsafe { std::slice::from_raw_parts(owner_ptr, owner_len) };
         let owner_str = std::str::from_utf8(owner_slice).expect("Failed to convert owner");
         
