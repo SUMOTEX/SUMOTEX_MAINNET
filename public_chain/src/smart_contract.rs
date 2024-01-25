@@ -5,6 +5,7 @@ use libp2p::{
 use std::fs;
 use std::fs::File;
 use std::io::Write;
+use std::io::Read;
 use rocksdb::{DBWithThreadMode,SingleThreaded};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -54,6 +55,7 @@ pub struct PublicSmartContract {
     balance: f64,
     nonce: u64,
     wasm_file:Vec<u8>,
+    wasm_memory:Vec<u8>,
     timestamp:u64,
 }
 
@@ -81,12 +83,13 @@ struct FunctionInfo {
 
 impl PublicSmartContract {
     // Creates a new PublicSmartContract
-    pub fn new(public_key:String, wasm_file: Vec<u8>) -> Self {
+    pub fn new(public_key:String,wasm_file:Vec<u8>, wasm_memory: Vec<u8>) -> Self {
         PublicSmartContract {
             contract_address:public_key.to_string(),
             balance: 0.0,
             nonce: 0,
             wasm_file,
+            wasm_memory,
             timestamp: Self::current_timestamp(),
         }
     }
@@ -302,7 +305,7 @@ impl WasmContract {
         let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
             .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
         contract.nonce+=1;
-        let saved_data = contract.wasm_file;
+        let saved_data = contract.wasm_memory;
         if saved_data.len() > wasm_memory.data_size(&store) {
             let additional_pages_needed = ((saved_data.len() as u64 + (64 * 1024 - 1)) / (64 * 1024)) - (wasm_memory.data_size(&store) as u64 / (64 * 1024));
             wasm_memory.grow(&mut store, additional_pages_needed).map_err(|_| "Failed to grow memory")?;
@@ -354,7 +357,7 @@ impl WasmContract {
         //let result_values = func.call(&mut store, &arg_values)?;
         let updated_data = wasm_memory.data(&mut store);
         let updated_byte_vector: Vec<u8> = updated_data.to_vec();
-        contract.wasm_file=updated_byte_vector;
+        contract.wasm_memory=updated_byte_vector;
         let updated_serialized_contract = serde_json::to_vec(&contract)
         .map_err(|e| format!("Failed to serialize updated contract: {:?}", e))?;
         rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_serialized_contract)?;
@@ -401,8 +404,10 @@ impl WasmContract {
     
         let updated_data = wasm_memory.data(&mut store);
         let updated_byte_vector: Vec<u8> = updated_data.to_vec();
-        let updated_byte_vector_copy: Vec<u8> = updated_data.to_vec();
-        let contract = PublicSmartContract::new(contract_info.pub_key.clone(),updated_byte_vector_copy);
+        let mut file = File::open(contract_info.module_path.clone())?;
+        let mut wasm_contents = Vec::new();
+        file.read_to_end(&mut wasm_contents)?;
+        let contract = PublicSmartContract::new(contract_info.pub_key.clone(),wasm_contents,updated_byte_vector);
         let serialized_contract = serde_json::to_vec(&contract)?;
         rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &serialized_contract)?;
     
@@ -582,25 +587,24 @@ impl WasmContract {
         let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
             .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
         contract.nonce+=1;
-
+        // let mut file = File::create(output_file_path)?;
+        // file.write_all(&wasm_contents)?;
         let module = Module::new(&engine, &contract.wasm_file)
         .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
         let mut store = Store::new(&engine, wasi);
 
-
         println!("Attempting to instantiate the WebAssembly module...");
         wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
         let link = linker.instantiate(&mut store, &module)?;
         let instance = linker.instantiate(&mut store, &module)?;
-        //let contract = WasmContract::new(instance)?;
         // ... (Your operations using token_instance)
     
         println!("Fetching WebAssembly memory...");
         //let wasm_memory = contract.instance.get_memory(&mut store,"memory").ok_or_else(|| "Failed to find `memory` export")?;
         let wasm_memory = link.get_memory(&mut store, "memory")
             .ok_or_else(|| "Failed to find `memory` export")?;
-        let saved_data = contract.wasm_file;
+        let saved_data = contract.wasm_memory;
         let saved_data_length = saved_data.len() as u64;
         let current_memory_size_bytes = wasm_memory.data_size(&store) as u64;
         if saved_data.len() > wasm_memory.data_size(&store) {
@@ -612,19 +616,19 @@ impl WasmContract {
                 wasm_memory.grow(&mut store, additional_pages_needed).map_err(|_| "Failed to grow memory")?;
             }
         }
+        // Print the exported functions
+        for export in module.exports() {
+            if let ExternType::Func(func_type) = export.ty() {
+                println!("Exported function: {} with type {:?}", export.name(), func_type);
+            }
+        }
+        
         // After ensuring the memory is large enough, copy the saved data into the WebAssembly memory within bounds
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
 
+        let mint_func = link.get_typed_func::<(i32, i32, i32, i32), u32>(&mut store, "mint")?;
 
-        println!("Attempting to call mint function in the WebAssembly module...");
 
-        let mint_func = match link.get_typed_func::<(i32,i32,i32,i32), u32>(&mut store, "mint") {
-            Ok(func) => func,
-            Err(err) => {
-                println!("Error retrieving the 'mint' function: {}", err);
-                return Err(err.into());
-            }
-        };
         let new_data_offset = saved_data.len() as i32;
         let owner_data_bytes = owner.as_bytes().len() as i32;
         let ipfs_data_bytes = ipfs_hash.as_bytes().len() as i32;
@@ -683,9 +687,8 @@ impl WasmContract {
                 } else {
                     println!("WebAssembly memory updated after mint operation.");
                 }
-                contract.wasm_file = updated_data.to_vec();
-                let updated_serialized_contract = serde_json::to_vec(&contract)
-                .map_err(|e| format!("Failed to serialize updated contract: {:?}", e))?;
+                contract.wasm_memory = wasm_memory.data(&mut store).to_vec(); // Update this only if the WASM memory state is relevant
+                let updated_serialized_contract = serde_json::to_vec(&contract)?;
                 rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_serialized_contract)?;        
                 println!("Token ID value: {:?}", token_id);
                 //Ok(token_id);
@@ -731,7 +734,7 @@ impl WasmContract {
         let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
             .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
         contract.nonce+=1;
-        let saved_data = contract.wasm_file;
+        let saved_data = contract.wasm_memory;
         let saved_data_length = saved_data.len() as u64;
         let current_memory_size_bytes = wasm_memory.data_size(&store) as u64;
         if saved_data.len() > wasm_memory.data_size(&store) {
@@ -800,10 +803,10 @@ impl WasmContract {
         let (ipfs_ptr, ipfs_len) = write_data_to_memory(&wasm_memory, ipfs_hash, ipfs_memory_offset, &mut store)?;
 
         let mint_result = mint_func.call(&mut store, (
-            name_ptr as i32,
-            name_len as i32,
-            ipfs_ptr as i32,
-            ipfs_len as i32,
+            name_ptr,
+            name_len,
+            ipfs_ptr,
+            ipfs_len,
         ));
         match mint_result {
             Ok(token_id) => {
@@ -814,7 +817,7 @@ impl WasmContract {
                 } else {
                     println!("WebAssembly memory updated after mint operation.");
                 }
-                contract.wasm_file = updated_data.to_vec();
+                contract.wasm_memory = updated_data.to_vec();
                 let updated_serialized_contract = serde_json::to_vec(&contract)
                 .map_err(|e| format!("Failed to serialize updated contract: {:?}", e))?;
                 rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_serialized_contract)?;        
@@ -990,8 +993,10 @@ impl WasmContract {
         //println!("Initialize: {:?}",result);
         let updated_data = wasm_memory.data(&mut store);
         let updated_byte_vector: Vec<u8> = updated_data.to_vec();
-        let updated_byte_vector_copy: Vec<u8> = updated_data.to_vec();
-        let contract = PublicSmartContract::new(contract_info.pub_key.clone(),updated_byte_vector_copy);
+        let mut file = File::open(contract_info.module_path.clone())?;
+        let mut wasm_contents = Vec::new();
+        file.read_to_end(&mut wasm_contents)?;
+        let contract = PublicSmartContract::new(contract_info.pub_key.clone(),wasm_contents,updated_byte_vector);
         let serialized_contract = serde_json::to_vec(&contract)?;
         rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &serialized_contract)?;
         Ok(())
@@ -1434,7 +1439,7 @@ pub fn mint_token_official(contract_address:&String,
                         panic!("Failed to create SecretKey: {:?}", e);
                     }
                 };
-                let result = contract.mint_token(&contract_path, &contract_info,account_key,&contract_address.to_string(),ipfs);
+                let result = contract.mint_token_dynamic(&contract_path, &contract_info,account_key,&contract_address.to_string(),ipfs);
                 let _ = public_txn::Txn::sign_and_submit_transaction(account_key,txn_hash.clone(),&the_official_private_key);
                 match result {
                     Ok(token_id) => {
