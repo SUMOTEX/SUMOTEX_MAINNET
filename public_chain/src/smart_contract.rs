@@ -190,15 +190,7 @@ pub fn generate_keypair()->(PublicKey,SecretKey) {
 
 
 impl WasmContract {
-    pub fn new(pub_key: &str) -> Result<Self, Box<dyn std::error::Error>> {
-        let c_path = "./contract/db";
-        let contract_path = match rock_storage::open_db(c_path) {
-            Ok(path) => path,
-            Err(e) => {
-                // Handle the error, maybe log it, and then decide what to do next
-                panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
-            }
-        };
+    pub fn new(pub_key: &str,contract_path: &DBWithThreadMode<SingleThreaded>) -> Result<Self, Box<dyn std::error::Error>> {
         let engine = Engine::default();
         let mut linker = Linker::new(&engine);
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
@@ -1125,7 +1117,7 @@ pub struct ContractInfo {
 }
 
 pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, pub_key: String) -> Result<(), Box<dyn std::error::Error>> {
-    let mut contract = WasmContract::new(module_path)?;
+    let mut contract = WasmContract::new(module_path,path)?;
 
     println!("Contract successfully created.");
     println!("Successfully instantiated the wasm module.");
@@ -1169,7 +1161,7 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
                 pub_key:public_key.to_string(),
             };
             let _ = gas_calculator::calculate_gas_for_contract_creation("./sample721.wasm");
-            let mut contract = WasmContract::new("./sample721.wasm")?;
+            let mut contract = WasmContract::new("./sample721.wasm",&contract_db)?;
             let functions = contract.exported_functions();
         
             let the_memory = create_memory(contract.get_store())?;
@@ -1187,7 +1179,7 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
                     Val::I32(symbol_len as i32),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
                 ],
             };
-            let mut contract = WasmContract::new("./sample721.wasm")?;
+            let mut contract = WasmContract::new("./sample721.wasm",&contract_db)?;
             contract.call_721(&contract_db,&contract_info, &wasm_params)?;
             let result = public_txn::Txn::create_and_prepare_transaction(
                 TransactionType::ContractCreation,
@@ -1251,7 +1243,7 @@ pub fn create_contract_official(
                 module_path: wasm_file_path.clone(), // Use the file path
                 pub_key: public_key.to_string(),
             };
-            let mut contract = WasmContract::new(&wasm_file_path)?;
+            let mut contract = WasmContract::new(&wasm_file_path,&contract_db)?;
 
             // let functions = contract.exported_functions();
             // for func_name in functions {
@@ -1317,7 +1309,7 @@ pub fn read_total_token_erc721(contract_address:&String)->Result<i64, Box<dyn st
             panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
         }
     };
-    let mut contract = WasmContract::new("./sample721.wasm")?;
+    let mut contract = WasmContract::new("./sample721.wasm",&contract_path)?;
     let contract_info = ContractInfo {
         module_path: "./sample721.wasm".to_string(),
         pub_key:contract_address.to_string(),
@@ -1346,7 +1338,7 @@ pub fn mint_token_official(contract_address:&String,
                 panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
             }
         };
-        let mut contract = WasmContract::new("./sample721.wasm")?;
+        let mut contract = WasmContract::new(contract_address,&contract_path)?;
         let contract_info = ContractInfo {
             module_path: "./sample721.wasm".to_string(),
             pub_key:contract_address.to_string(),
@@ -1609,7 +1601,7 @@ pub fn call_contract_function(
         }
     };
 
-    let mut contract = WasmContract::new("./sample721.wasm")?;
+    let mut contract = WasmContract::new("./sample721.wasm",&contract_path)?;
     let contract_info = ContractInfo {
         module_path: "./sample721.wasm".to_string(),
         pub_key: contract_address.to_string(),
