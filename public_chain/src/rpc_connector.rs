@@ -292,9 +292,9 @@ fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value>
     println!("Read Token By ID");
     let contract_address = &post_data.contract_address;
     let token_id = &post_data.token_id;
-    match smart_contract::read_token_by_id(&contract_address, token_id) {
-        Ok(token_detail) => {
-            let response_body = json!({"token_detail": token_detail});
+    match smart_contract::read_id(&contract_address, token_id) {
+        Ok((token_owner,ipfs_data,owned_id)) => {
+            let response_body = json!({"owner_address": token_owner,"ipfs":ipfs_data,"owner_id":owned_id});
             Json(json!({"jsonrpc": "1.0",  "result": response_body}))
         },
         Err(e) => {

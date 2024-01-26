@@ -190,30 +190,34 @@ pub fn generate_keypair()->(PublicKey,SecretKey) {
 
 
 impl WasmContract {
-    pub fn new(module_path: &str) -> Result<Self, Box<dyn std::error::Error>> {
-    // Define the WASI functions globally on the `Config`.
+    pub fn new(pub_key: &str) -> Result<Self, Box<dyn std::error::Error>> {
+        let c_path = "./contract/db";
+        let contract_path = match rock_storage::open_db(c_path) {
+            Ok(path) => path,
+            Err(e) => {
+                // Handle the error, maybe log it, and then decide what to do next
+                panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+            }
+        };
         let engine = Engine::default();
-        // let mut exports = module.exports();
-        // while let Some(foo) = exports.next() {
-        //     println!("{}", foo.name());
-        // }
         let mut linker = Linker::new(&engine);
-        //let mut exports = module.exports();
-        // Create a WASI context and put it in a Store; all instances in the store
-        // share this context. `WasiCtxBuilder` provides a number of ways to
-        // configure what the target program will have access to.
-        let wasi = WasiCtxBuilder::new()
-            .inherit_stdio()
-            .inherit_args().unwrap()
-            .build();
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
         let mut store = Store::new(&engine, wasi);
-        let module = Module::from_file(&engine, module_path)?;
-        // while let Some(foo) = exports.next() {
-        //         println!("Functions: {}", foo.name());
-        // }
-        wasmtime_wasi::add_to_linker(&mut linker, |s| s).unwrap();
+        let serialized_contract = rock_storage::get_from_db_vector(&contract_path, pub_key).unwrap_or_default();
+        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+            .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+        let module = Module::new(&engine, &contract.wasm_file)
+        .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+        let mut store = Store::new(&engine, wasi);
+        println!("Attempting to instantiate the WebAssembly module...");
+        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+        let link = linker.instantiate(&mut store, &module)?;
+        // ... (Your operations using token_instance)
+    
+        let wasm_memory = link.get_memory(&mut store, "memory")
+            .ok_or_else(|| "Failed to find `memory` export")?;
         let instance = linker.instantiate(&mut store, &module)?;
-        linker.module(&mut store, "", &module)?;
         Ok(WasmContract {
             instance,
             store,
@@ -418,7 +422,6 @@ impl WasmContract {
     pub fn read(
         &self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
-        contract_info: &ContractInfo,
         pub_key: &str,
         function_name: &str,
     ) -> Result<Vec<u8>, Box<dyn std::error::Error>> {
@@ -427,8 +430,15 @@ impl WasmContract {
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
         let mut store = Store::new(&engine, wasi);
         
-        // 1. Instantiate the WebAssembly module.
-        let module = Module::from_file(&engine, &contract_info.module_path)?;
+        let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
+        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+            .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+        let module = Module::new(&engine, &contract.wasm_file)
+        .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+        let mut store = Store::new(&engine, wasi);
+
+        println!("Attempting to instantiate the WebAssembly module...");
         wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
         let link = linker.instantiate(&mut store, &module)?;
         
@@ -464,7 +474,15 @@ impl WasmContract {
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
         let mut store = Store::new(&engine, wasi);
         
-        let module = Module::from_file(&engine, &contract_info.module_path)?;
+        let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
+        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+            .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+        let module = Module::new(&engine, &contract.wasm_file)
+        .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+        let mut store = Store::new(&engine, wasi);
+
+        println!("Attempting to instantiate the WebAssembly module...");
         wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
         let link = linker.instantiate(&mut store, &module)?;
         
@@ -587,7 +605,7 @@ impl WasmContract {
         let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
         let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
             .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
-        contract.nonce+=1;
+
         // let mut file = File::create(output_file_path)?;
         // file.write_all(&wasm_contents)?;
         let module = Module::new(&engine, &contract.wasm_file)
@@ -635,20 +653,27 @@ impl WasmContract {
         let ipfs_data_bytes = ipfs_hash.as_bytes().len() as i32;
         let owner_id_data_bytes = owner_id.as_bytes().len() as i32; 
         let required_memory_size_bytes = new_data_offset + owner_data_bytes + ipfs_data_bytes +owner_id_data_bytes;      
-        let current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
+        let mut current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
         println!("New data offset: {:?}", new_data_offset);
         println!("Owner data bytes: {:?}", owner_data_bytes);
+        println!("Owner ID bytes: {:?}", owner_id_data_bytes);
         println!("IPFS data bytes: {:?}", ipfs_data_bytes);
         println!("Required memory size bytes: {:?}", required_memory_size_bytes);
         println!("Current memory size bytes: {:?}", current_memory_size_bytes);
         // Check if we need more memory pages and grow memory if needed
-        if required_memory_size_bytes > current_memory_size_bytes {
+        while required_memory_size_bytes > current_memory_size_bytes {
             // Calculate how many more pages are needed, rounding up
             let additional_pages_needed = ((required_memory_size_bytes - current_memory_size_bytes + (64 * 1024 - 1)) / (64 * 1024)) as u32;
-            // Grow the memory
-            wasm_memory.grow(&mut store, additional_pages_needed as u64).map_err(|_| "Failed to grow memory")?;
-
+        
+            // Attempt to grow the memory
+            if wasm_memory.grow(&mut store, additional_pages_needed as u64).is_err() {
+                // Handle the error if memory growth fails
+                return Err("Failed to grow memory".into());
+            }
+            // Update the current memory size
+            current_memory_size_bytes = wasm_memory.data_size(&mut store) as i32;
         }
+        println!("New memory size bytes: {:?}", current_memory_size_bytes);
         // We need to limit the scope of the memory view so that we can mutably borrow `store` again later
         {
             let memory_view = wasm_memory.data_mut(&mut store);
@@ -673,7 +698,16 @@ impl WasmContract {
         
         // Write the IPFS hash
         let (ipfs_ptr, ipfs_len) = write_data_to_memory(&wasm_memory, ipfs_hash, ipfs_memory_offset, &mut store)?;
-        let owner_id_memory_offset = ipfs_memory_offset + ipfs_ptr+ipfs_len;
+
+        let owner_id_memory_offset =  ipfs_ptr+ipfs_len;
+        // Check that the IPFS data fits within memory bounds
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            if owner_id_memory_offset as usize + owner_id_data_bytes as usize > memory_view.len() {
+                return Err("OWNER ID data offset or length is out of the current memory bounds.".into());
+            }
+        } // The scope of memory_view ends here
+        
         let (owner_id_ptr,owner_id_len)= write_data_to_memory(&wasm_memory,owner_id,owner_id_memory_offset, &mut store)?;
 
         let mint_result = mint_func.call(&mut store, (
@@ -693,139 +727,9 @@ impl WasmContract {
                 } else {
                     println!("WebAssembly memory updated after mint operation.");
                 }
+                contract.nonce+=1;
                 contract.wasm_memory = wasm_memory.data(&mut store).to_vec(); // Update this only if the WASM memory state is relevant
                 let updated_serialized_contract = serde_json::to_vec(&contract)?;
-                rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_serialized_contract)?;        
-                println!("Token ID value: {:?}", token_id);
-                //Ok(token_id);
-                Ok(token_id as i32)
-                // rest of the logic here
-            },
-            Err(e) => {
-                println!("Mint function failed: {}", e);
-                // handle the error
-                Err(e.into())
-            }
-        }
-    }
-    pub fn mint_token(
-        &self,
-        contract_path: &DBWithThreadMode<SingleThreaded>,
-        contract_info: &ContractInfo,
-        owner:&str,
-        pub_key: &str,
-        ipfs_hash: &str
-    ) -> Result<i32, Box<dyn std::error::Error>> {
-        println!("Initializing engine and linker...");
-        println!("Contract name and pub key {:?}",pub_key);
-        let engine = Engine::default();
-        let mut linker = Linker::new(&engine);
-        let module = Module::from_file(&engine, "./sample721.wasm")?;
-        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-        let mut store = Store::new(&engine, wasi);
-
-
-        println!("Attempting to instantiate the WebAssembly module...");
-        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
-        let link = linker.instantiate(&mut store, &module)?;
-        let instance = linker.instantiate(&mut store, &module)?;
-        //let contract = WasmContract::new(instance)?;
-        // ... (Your operations using token_instance)
-    
-        println!("Fetching WebAssembly memory...");
-        //let wasm_memory = contract.instance.get_memory(&mut store,"memory").ok_or_else(|| "Failed to find `memory` export")?;
-        let wasm_memory = link.get_memory(&mut store, "memory")
-            .ok_or_else(|| "Failed to find `memory` export")?;
-        let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
-        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
-            .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
-        contract.nonce+=1;
-        let saved_data = contract.wasm_memory;
-        let saved_data_length = saved_data.len() as u64;
-        let current_memory_size_bytes = wasm_memory.data_size(&store) as u64;
-        if saved_data.len() > wasm_memory.data_size(&store) {
-            // If not, calculate how many additional memory pages are needed
-            // Calculate the number of additional pages needed, rounding up
-            let additional_pages_needed = ((saved_data_length + (64 * 1024 - 1)) / (64 * 1024)) - (current_memory_size_bytes / (64 * 1024));
-            // Attempt to grow the WebAssembly memory by the required number of pages
-            if saved_data_length > current_memory_size_bytes {
-                wasm_memory.grow(&mut store, additional_pages_needed).map_err(|_| "Failed to grow memory")?;
-            }
-        }
-        // After ensuring the memory is large enough, copy the saved data into the WebAssembly memory within bounds
-        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
-
-
-        println!("Attempting to call mint function in the WebAssembly module...");
-
-        let mint_func = match link.get_typed_func::<(i32,i32,i32,i32), u32>(&mut store, "mint") {
-            Ok(func) => func,
-            Err(err) => {
-                println!("Error retrieving the 'mint' function: {}", err);
-                return Err(err.into());
-            }
-        };
-        let new_data_offset = saved_data.len() as i32;
-        let owner_data_bytes = owner.as_bytes().len() as i32;
-        let ipfs_data_bytes = ipfs_hash.as_bytes().len() as i32;
-        let required_memory_size_bytes = new_data_offset + owner_data_bytes + ipfs_data_bytes;      
-        let current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
-        println!("New data offset: {:?}", new_data_offset);
-        println!("Owner data bytes: {:?}", owner_data_bytes);
-        println!("IPFS data bytes: {:?}", ipfs_data_bytes);
-        println!("Required memory size bytes: {:?}", required_memory_size_bytes);
-        println!("Current memory size bytes: {:?}", current_memory_size_bytes);
-        // Check if we need more memory pages and grow memory if needed
-        if required_memory_size_bytes > current_memory_size_bytes {
-            // Calculate how many more pages are needed, rounding up
-            let additional_pages_needed = ((required_memory_size_bytes - current_memory_size_bytes + (64 * 1024 - 1)) / (64 * 1024)) as u32;
-            // Grow the memory
-            wasm_memory.grow(&mut store, additional_pages_needed as u64).map_err(|_| "Failed to grow memory")?;
-
-        }
-        // We need to limit the scope of the memory view so that we can mutably borrow `store` again later
-        {
-            let memory_view = wasm_memory.data_mut(&mut store);
-            // Ensure the new data offset is within the bounds of the current memory size
-            if new_data_offset as usize >= memory_view.len() {
-                return Err("New data offset is out of the current memory bounds.".into());
-            }
-        } // `memory_view` goes out of scope here, so we can mutably borrow `store` again
-
-
-        let (name_ptr, name_len) = write_data_to_memory(&wasm_memory, owner, new_data_offset, &mut store)?;
-        println!("Owner data pointer: {:?}, length: {:?}", name_ptr, name_len);
-        let ipfs_memory_offset = name_ptr + name_len;
-
-        // Check that the IPFS data fits within memory bounds
-        {
-            let memory_view = wasm_memory.data_mut(&mut store);
-            if ipfs_memory_offset as usize + ipfs_data_bytes as usize > memory_view.len() {
-                return Err("IPFS data offset or length is out of the current memory bounds.".into());
-            }
-        } // The scope of memory_view ends here
-        
-        // Write the IPFS hash
-        let (ipfs_ptr, ipfs_len) = write_data_to_memory(&wasm_memory, ipfs_hash, ipfs_memory_offset, &mut store)?;
-
-        let mint_result = mint_func.call(&mut store, (
-            name_ptr,
-            name_len,
-            ipfs_ptr,
-            ipfs_len,
-        ));
-        match mint_result {
-            Ok(token_id) => {
-                let updated_data = wasm_memory.data(&mut store);
-                let updated_byte_vector: Vec<u8> = updated_data.to_vec();
-                if saved_data == updated_data.to_vec() {
-                    println!("No change in the WebAssembly memory after mint operation.");
-                } else {
-                    println!("WebAssembly memory updated after mint operation.");
-                }
-                contract.wasm_memory = updated_data.to_vec();
-                let updated_serialized_contract = serde_json::to_vec(&contract)
-                .map_err(|e| format!("Failed to serialize updated contract: {:?}", e))?;
                 rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_serialized_contract)?;        
                 println!("Token ID value: {:?}", token_id);
                 //Ok(token_id);
@@ -951,7 +855,6 @@ impl WasmContract {
                 return Err(e.into());
             },
         }        
-    Ok("".to_string())
     }
     pub fn call_721(
         &mut self,
@@ -993,7 +896,8 @@ impl WasmContract {
                 Val::I32(val) => *val,
                 _ => return Err("Failed to unwrap i32 from argument 4".into()),
             },
-        );   let initialise_func = link.get_typed_func::<(i32, i32, i32, i32),()>(&mut store, &wasm_params.name)?;
+        );   
+        let initialise_func = link.get_typed_func::<(i32, i32, i32, i32),()>(&mut store, &wasm_params.name)?;
 
         let result = initialise_func.call(&mut store,  args_tuple)?;
         //println!("Initialize: {:?}",result);
@@ -1010,7 +914,6 @@ impl WasmContract {
     pub fn read_ipfs_token(
         &self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
-        contract_info: &ContractInfo,
         pub_key: &str,
         id: i32,
     ) -> Result<String, Box<dyn std::error::Error>> {
@@ -1019,8 +922,15 @@ impl WasmContract {
         let mut linker = Linker::new(&engine);
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
         let mut store = Store::new(&engine, wasi);
-    
-        let module = Module::from_file(&engine, &contract_info.module_path)?;
+        let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
+        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+            .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+        let module = Module::new(&engine, &contract.wasm_file)
+        .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+        let mut store = Store::new(&engine, wasi);
+
+        println!("Attempting to instantiate the WebAssembly module...");
         wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
         let link = linker.instantiate(&mut store, &module)?;
         // ... (Your operations using token_instance)
@@ -1117,18 +1027,36 @@ impl WasmContract {
     pub fn exported_functions(&self) -> Vec<String> {
         self.module.exports().map(|export| export.name().to_string()).collect()
     }
-    pub fn get_ipfs_link(
-        &self,
-        contract_path: &DBWithThreadMode<SingleThreaded>,
-        contract_info: &ContractInfo,
-        token_id: u64,
-    ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-        
-        let result_bytes = self.read(contract_path, contract_info, &contract_info.pub_key, "get_ipfs_link")?;
-        let result_string = String::from_utf8(result_bytes)?;
+    // pub fn get_ipfs_link(
+    //     &self,
+    //     contract_path: &DBWithThreadMode<SingleThreaded>,
+    //     pub_key: String,
+    //     token_id: u64,
+    // ) -> Result<Option<String>, Box<dyn std::error::Error>> {
+    //     let engine = Engine::default();
+    //     let mut linker = Linker::new(&engine);
+    //     let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+    //     let mut store = Store::new(&engine, wasi);
+    //     let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key.clone()).unwrap_or_default();
+    //     let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+    //         .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+    //     let module = Module::new(&engine, &contract.wasm_file)
+    //     .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
+    //     let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+    //     let mut store = Store::new(&engine, wasi);
 
-        Ok(Some(result_string))
-    }
+    //     println!("Attempting to instantiate the WebAssembly module...");
+    //     wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+    //     let link = linker.instantiate(&mut store, &module)?;
+    //     // ... (Your operations using token_instance)
+    
+    //     let wasm_memory = link.get_memory(&mut store, "memory")
+    //         .ok_or_else(|| "Failed to find `memory` export")?;
+    //     let result_bytes = self.read(contract_path, &pub_key, "get_ipfs_link")?;
+    //     let result_string = String::from_utf8(result_bytes)?;
+
+    //     Ok(Some(result_string))
+    // }
     // pub fn get_erc20_name(cmd: &str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
     //     if let Some(data) = cmd.strip_prefix("contract name ") {
     //         let contract = WasmContract::new("./sample.wasm")?;
@@ -1491,9 +1419,41 @@ pub fn read_contract(contract_address: &String) -> Result<PublicSmartContract, B
         Ok(contract)
     }
     
-pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<(String,String), Box<dyn std::error::Error>>{
+// pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<(String,String), Box<dyn std::error::Error>>{
+//     let c_path = "./contract/db";
+//     let a_path = "./account/db";
+//     let contract_path = match rock_storage::open_db(c_path) {
+//         Ok(path) => path,
+//         Err(e) => {
+//             // Handle the error, maybe log it, and then decide what to do next
+//             panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+//         }
+//     };
+//     let contract = WasmContract::new("./sample721.wasm")?;
+//     let contract_info = ContractInfo {
+//         module_path: "./sample721.wasm".to_string(),
+//         pub_key:contract_address.to_string(),
+//     };
+//     let read_result = contract.read_owner_token(&contract_path, &contract_info,&contract_address.to_string(),*id);
+//     match read_result {
+//         Ok(read_items) => {
+//             let read_ipfs = match contract.read_ipfs_token(&contract_path, &contract_info, &contract_address.to_string(), *id) {
+//                 Ok(ipfs_data) => ipfs_data,
+//                 Err(e) => {
+//                     println!("Error reading IPFS data: {}", e);
+//                     "default value or error info".to_string() // Provide a default value or error information
+//                 }
+//             };
+//             Ok((read_items, read_ipfs)) // Use `read_items` here instead of `read_item`
+//         }
+//         Err(e) => {
+//             println!("Error after minting, could not read token owner: {}", e);
+//             Err(e.into())
+//         }
+//     }
+// }
+pub fn read_id(contract_address:&String,id:&i32)->Result<(String,String,String), Box<dyn std::error::Error>>{
     let c_path = "./contract/db";
-    let a_path = "./account/db";
     let contract_path = match rock_storage::open_db(c_path) {
         Ok(path) => path,
         Err(e) => {
@@ -1501,30 +1461,135 @@ pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<(String,String
             panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
         }
     };
-    let contract = WasmContract::new("./sample721.wasm")?;
-    let contract_info = ContractInfo {
-        module_path: "./sample721.wasm".to_string(),
-        pub_key:contract_address.to_string(),
-    };
-    let read_result = contract.read_owner_token(&contract_path, &contract_info,&contract_address.to_string(),*id);
-    match read_result {
-        Ok(read_items) => {
-            let read_ipfs = match contract.read_ipfs_token(&contract_path, &contract_info, &contract_address.to_string(), *id) {
-                Ok(ipfs_data) => ipfs_data,
-                Err(e) => {
-                    println!("Error reading IPFS data: {}", e);
-                    "default value or error info".to_string() // Provide a default value or error information
-                }
-            };
-            Ok((read_items, read_ipfs)) // Use `read_items` here instead of `read_item`
-        }
-        Err(e) => {
-            println!("Error after minting, could not read token owner: {}", e);
-            Err(e.into())
-        }
-    }
-}
+    let engine = Engine::default();
+    let mut linker = Linker::new(&engine);
+    let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+    let mut store = Store::new(&engine, wasi);
+    let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address).unwrap_or_default();
+    let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+        .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+    let module = Module::new(&engine, &contract.wasm_file)
+    .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
+    let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+    let mut store = Store::new(&engine, wasi);
+    // Assuming `module` is successfully created as shown in your provided code.
+    // for export in module.exports() {
+    //     if let ExternType::Func(func_type) = export.ty() {
+    //         println!("Function Name: {}", export.name());
+    //         // If you want to print the function signature as well, you can do so here.
+    //         // This is optional and can be complex because you'll need to interpret
+    //         // the types (e.g., parameters and return types).
+    //         println!("Function Signature: {:?}", func_type);
+    //     }
+    // }
 
+    println!("Attempting to instantiate the WebAssembly module...");
+    wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+    let link = linker.instantiate(&mut store, &module)?;
+    // ... (Your operations using token_instance)
+
+    let wasm_memory = link.get_memory(&mut store, "memory")
+        .ok_or_else(|| "Failed to find `memory` export")?;
+    let saved_data = contract.wasm_memory;
+    // 2.2. Set this memory state into the WebAssembly module's memory.
+    let current_memory_size = wasm_memory.data_size(&store); // Current memory size in bytes
+    // Convert `current_memory_size` from `usize` to `u64` for the calculation.
+    let current_memory_size_pages = (current_memory_size as u64) / (64 * 1024);
+    let required_pages = (saved_data.len() as u64 + (64 * 1024 - 1)) / (64 * 1024);
+    let additional_pages_needed = if required_pages > current_memory_size_pages {
+        required_pages - current_memory_size_pages
+    } else {
+        0  // No additional pages are needed.
+    };
+
+    if additional_pages_needed > 0 {
+        wasm_memory.grow(&mut store, additional_pages_needed as u64).map_err(|_| "Failed to grow memory")?;
+    }
+
+    if saved_data.len() > wasm_memory.data(&mut store).len() {
+        return Err("Saved data is larger than the available WASM memory.".into());
+    }
+    wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data); 
+    let memory_data = wasm_memory.data(&store);
+    // // Assuming the memory content is ASCII text
+    // if let Ok(text) = std::str::from_utf8(&memory_data) {
+    //     println!("Memory Contents: {}", text);
+    // } else {
+    //     // If the memory contains binary data, you can print it as bytes
+    //     println!("Memory Contents (as bytes)");
+    // }
+    let ipfs_ptr_call = link.get_typed_func::<i32,i32>(&mut store, "get_ipfs_ptr")?;
+    let ipfs_ptr_result = ipfs_ptr_call.call(&mut store,  *id)
+        .map_err(|e| {
+            println!("Error Reading IPFS ptr data: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) // Convert the error to a Box<dyn std::error::Error>
+        })?;
+    let ipfs_len_call= link.get_typed_func::<i32,i32>(&mut store, "get_ipfs_len")?;
+    let ipfs_len_result = ipfs_len_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error IPFS len data: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) // Convert the error to a Box<dyn std::error::Error>
+        })?;
+
+    let get_owner_len_call = link.get_typed_func::<i32, i64>(&mut store, "get_owner_len")?;
+    let owner_len_result = get_owner_len_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_len: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let get_owner_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_ptr")?;
+    let owner_ptr_result = get_owner_ptr_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_ptr: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?; 
+    let get_owner_of_len_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_of_len")?;
+    let owner_of_len_result = get_owner_of_len_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_of_len: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let get_owner_of_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_of_ptr")?;
+    let owner_of_ptr_result = get_owner_of_ptr_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_of_ptr: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let ipfs_start = ipfs_ptr_result as usize;
+    let ipfs_end = ipfs_start + ipfs_len_result as usize;
+    let ipfs_data_bytes = wasm_memory.data(&store)[ipfs_start..ipfs_end].to_vec();
+    let ipfs_data_string = String::from_utf8(ipfs_data_bytes)
+        .map_err(|e| {
+            println!("Error converting ipfs data bytes to String: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
+        })?;
+    // Use owner_ptr_result and owner_len_result to access the owner data in Wasm memory
+    let owner_data_start = owner_ptr_result as usize;
+    let owner_data_end = owner_data_start + owner_len_result as usize;
+    let owner_data_bytes = wasm_memory.data(&store)[owner_data_start..owner_data_end].to_vec();
+    let owner_data_string = String::from_utf8(owner_data_bytes)
+        .map_err(|e| {
+            println!("Error converting owner data bytes to String: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
+        })?;
+
+    
+    // Do similar for `get_owner_of_ptr` and `get_owner_of_len` if needed
+    let owner_of_data_start = owner_of_ptr_result as usize;
+    let owner_of_data_end = owner_of_data_start + owner_of_len_result as usize;
+    let owner_of_data_bytes = wasm_memory.data(&store)[owner_of_data_start..owner_of_data_end].to_vec();
+    let owner_of_data_string = String::from_utf8(owner_of_data_bytes)
+        .map_err(|e| {
+            println!("Error converting owner data bytes to String: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
+        })?;
+
+    
+
+    // Finally, return the collected data
+    Ok((owner_data_string, ipfs_data_string, owner_of_data_string))
+
+}
 
 pub fn call_contract_function(
     contract_address: &String,
@@ -1555,7 +1620,7 @@ pub fn call_contract_function(
         Ok(None) => return Err("Account not found".into()), // or handle this case as needed
         Err(e) => return Err(e.into()), // error while fetching account
     };
-    if(args_input.len()>0){
+    if args_input.len()>0 {
         let txn = public_txn::Txn::create_and_prepare_transaction(
             TransactionType::ContractInteraction,
             account_key.to_string(),
