@@ -577,6 +577,7 @@ impl WasmContract {
         contract_info: &ContractInfo,
         owner:&str,
         pub_key: &str,
+        owner_id:&str,
         ipfs_hash: &str
     ) -> Result<i32, Box<dyn std::error::Error>> {
         println!("Initializing engine and linker...");
@@ -626,13 +627,14 @@ impl WasmContract {
         // After ensuring the memory is large enough, copy the saved data into the WebAssembly memory within bounds
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
 
-        let mint_func = link.get_typed_func::<(i32, i32, i32, i32), u32>(&mut store, "mint")?;
+        let mint_func = link.get_typed_func::<(i32, i32,i32,i32, i32, i32), u32>(&mut store, "mint")?;
 
 
         let new_data_offset = saved_data.len() as i32;
         let owner_data_bytes = owner.as_bytes().len() as i32;
         let ipfs_data_bytes = ipfs_hash.as_bytes().len() as i32;
-        let required_memory_size_bytes = new_data_offset + owner_data_bytes + ipfs_data_bytes;      
+        let owner_id_data_bytes = owner_id.as_bytes().len() as i32; 
+        let required_memory_size_bytes = new_data_offset + owner_data_bytes + ipfs_data_bytes +owner_id_data_bytes;      
         let current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
         println!("New data offset: {:?}", new_data_offset);
         println!("Owner data bytes: {:?}", owner_data_bytes);
@@ -671,10 +673,14 @@ impl WasmContract {
         
         // Write the IPFS hash
         let (ipfs_ptr, ipfs_len) = write_data_to_memory(&wasm_memory, ipfs_hash, ipfs_memory_offset, &mut store)?;
+        let owner_id_memory_offset = ipfs_memory_offset + ipfs_ptr+ipfs_len;
+        let (owner_id_ptr,owner_id_len)= write_data_to_memory(&wasm_memory,owner_id,owner_id_memory_offset, &mut store)?;
 
         let mint_result = mint_func.call(&mut store, (
             name_ptr as i32,
             name_len as i32,
+            owner_id_ptr as i32,
+            owner_id_len as i32,
             ipfs_ptr as i32,
             ipfs_len as i32,
         ));
@@ -1402,6 +1408,7 @@ pub fn read_total_token_erc721(contract_address:&String)->Result<i64, Box<dyn st
 pub fn mint_token_official(contract_address:&String,
                             account_key:&String,
                             private_key:&String,
+                            owner_id:&String,
                             ipfs:&String)->Result<(i32,String, u128), Box<dyn std::error::Error>>{
         let c_path = "./contract/db";
         let contract_path = match rock_storage::open_db(c_path) {
@@ -1439,7 +1446,7 @@ pub fn mint_token_official(contract_address:&String,
                         panic!("Failed to create SecretKey: {:?}", e);
                     }
                 };
-                let result = contract.mint_token_dynamic(&contract_path, &contract_info,account_key,&contract_address.to_string(),ipfs);
+                let result = contract.mint_token_dynamic(&contract_path, &contract_info,account_key,&contract_address.to_string(),owner_id,ipfs);
                 let _ = public_txn::Txn::sign_and_submit_transaction(account_key,txn_hash.clone(),&the_official_private_key);
                 match result {
                     Ok(token_id) => {

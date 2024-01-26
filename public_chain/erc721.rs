@@ -8,11 +8,13 @@ pub struct ERC721Token {
     pub name: String,
     pub symbol: String,
     pub owner_of: HashMap<i32, String>,
+    pub owner_id:HashMap<i32, String>,
     pub token_to_ipfs: HashMap<i32, String>,
     pub next_token_id: i32,
 }
 #[derive(Serialize, Deserialize, Clone)]
 pub struct TokenDetails {
+    pub owner_id:String,
     pub owner: String,
     pub ipfs_link: String,
 }
@@ -60,6 +62,7 @@ impl ERC721Token {
         let token = ERC721Token {
             name: name,
             symbol: symbol,
+            owner_id:HashMap::new(),
             owner_of: HashMap::new(),
             token_to_ipfs: HashMap::new(),
             next_token_id: 1,
@@ -92,7 +95,13 @@ impl ERC721Token {
     }
 
     #[no_mangle]
-    pub extern "C" fn mint(owner_ptr: *const u8, owner_len: usize, ipfs_hash_ptr: *const u8, ipfs_hash_len: usize) -> i32 {
+    pub extern "C" fn mint(
+         owner_ptr: *const u8,
+         owner_len: usize,
+         owner_id_ptr: *const u8,
+         owner_id_len: usize, 
+         ipfs_hash_ptr: *const u8,
+         ipfs_hash_len: usize) -> i32 {
         let token = unsafe {
             if let Some(ptr) = TOKEN_PTR {
                 &mut *ptr
@@ -100,13 +109,18 @@ impl ERC721Token {
                 return i32::MAX; // Error value indicating uninitialized TOKEN_PTR.
             }
         };
+
         let owner_slice = unsafe { std::slice::from_raw_parts(owner_ptr, owner_len) };
         let owner_str = std::str::from_utf8(owner_slice).expect("Failed to convert owner");
+
+        let owner_id_slice = unsafe { std::slice::from_raw_parts(owner_id_ptr, owner_id_len) };
+        let owner_id_str = std::str::from_utf8(owner_id_slice).expect("Failed to convert owner id");
         
         let ipfs_hash_slice = unsafe { std::slice::from_raw_parts(ipfs_hash_ptr, ipfs_hash_len) };
         let ipfs_hash_str = std::str::from_utf8(ipfs_hash_slice).expect("Failed to convert ipfs_hash");
     
         let token_id = token.next_token_id;
+        token.owner_id.insert(token_id,owner_id_str.to_string());
         token.owner_of.insert(token_id, owner_str.to_string());
         token.token_to_ipfs.insert(token_id, ipfs_hash_str.to_string());
         token.next_token_id += 1;
