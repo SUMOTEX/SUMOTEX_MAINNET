@@ -41,7 +41,7 @@ impl Account {
             public_address:public_key.to_string(),
             //TEST
             //PROD: TODO: Change to 0
-            balance: 100000000000000000,
+            balance: 1000000000000000000,
             nonce: 1,
             contract_address: Some(Vec::new()),
             owned_tokens: None::<HashMap<String, Vec<u64>>>, // Initially, the account does not own any tokens

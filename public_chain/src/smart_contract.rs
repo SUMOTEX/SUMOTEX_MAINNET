@@ -1128,7 +1128,7 @@ pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, 
     // for func in functions.iter() {
     //     println!("Exported Function: {}", func);
     // }
-
+        
     let the_memory = create_memory(contract.get_store())?;
     let owner_memory_offset = 0;
     let (name_ptr, name_len) = write_data_to_memory(&the_memory, "SUMOTEX-T",owner_memory_offset, contract.get_store())?;
@@ -1146,7 +1146,6 @@ pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, 
     let args: Vec<ParamValue> = vals.into_iter().map(val_to_param_value).collect();
     // Commented out the below call as it seems unfinished, uncomment and complete when ready
     // let result = contract.call(&pub_key, "initialize", args); 
-
     Ok(())
 }
 pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contract_name:&str,contract_symbol:&str)->
@@ -1160,7 +1159,7 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
                 module_path: "./sample721.wasm".to_string(),
                 pub_key:public_key.to_string(),
             };
-            let _ = gas_calculator::calculate_gas_for_contract_creation("./sample721.wasm");
+            let the_gas_cost = gas_calculator::calculate_gas_for_contract_creation("./sample721.wasm");
             let mut contract = WasmContract::new("./sample721.wasm",&contract_db)?;
             let functions = contract.exported_functions();
         
@@ -1185,7 +1184,7 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
                 TransactionType::ContractCreation,
                 call_address.to_string(),
                 public_key.to_string(),
-                1000);
+                the_gas_cost);
             println!("Contract Public Key: {:?}",public_key.to_string());
             // Check the result
             match result {
@@ -1264,13 +1263,13 @@ pub fn create_contract_official(
                     Val::I32(symbol_len as i32),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
                 ],
             };
-            let _  = gas_calculator::calculate_gas_for_contract_creation(&wasm_file_path); // Use the file path
+            let the_gas_cost  = gas_calculator::calculate_gas_for_contract_creation(&wasm_file_path); // Use the file path
 
             let result = public_txn::Txn::create_and_prepare_transaction(
                 TransactionType::ContractCreation,
                 call_address.to_string(),
                 public_key.to_string(),
-                1000);
+                the_gas_cost);
             // Return the values from your function
             match result {
                 Ok((txn_hash, gas_cost,body)) => {
