@@ -238,7 +238,7 @@ impl Txn {
                 // Open the database and handle the Result
                 let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
             
-                let gas_cost = 1000;  // Example gas cost, adjust as needed
+                let gas_cost = computed_value;  // Example gas cost, adjust as needed
     
                 let new_txn = PublicTxn {
                     txn_type: transaction_type,
@@ -408,7 +408,7 @@ impl Txn {
     
         let txn_hash = Sha256::digest(txn_data.as_bytes());
         let txn_hash_hex = format!("{:x}", txn_hash);
-        let gas_cost = 1000; // This is an example function call
+        let gas_cost = computed_value; // This is an example function call
         println!("Caller: {:?}",caller_address);
         let account = match account::get_account_no_swarm(&caller_address) {
             Ok(Some(acc)) => acc,

@@ -16,6 +16,8 @@ const GAS_PER_FUNCTION_CALL: u64 = 100; // Base cost for function call
 
 fn opcode_gas_costs() -> HashMap<String, u64> {
     let mut map = HashMap::new();
+    map.insert("CallIndirect".to_string(), 8);
+    map.insert("I64Load".to_string(), 4);
     map.insert("I32Const".to_string(), 2);  // Example cost for I32Const
     map.insert("I32Store8".to_string(), 4); // Example cost for I32Store8
     map.insert("I32Load8U".to_string(), 3); // Example cost for I32Load8U
@@ -80,10 +82,7 @@ impl GasCalculator {
         self.base_cost + (memory_size as u64 * self.per_byte_cost) + (instructions * self.per_instruction_cost)
     }
 }
-pub fn calculate_gas_for_contract_creation(file_path: &str) -> Result<u64, Box<dyn std::error::Error>> {
-    let mut file = File::open(file_path)?;
-    let mut wasm_bytes = Vec::new();
-    file.read_to_end(&mut wasm_bytes)?;
+pub fn calculate_gas_for_contract_creation(wasm_bytes: &[u8]) -> Result<u64, Box<dyn std::error::Error>> {
 
     let parser = Parser::new(0);
     let mut opcodes = HashSet::new();

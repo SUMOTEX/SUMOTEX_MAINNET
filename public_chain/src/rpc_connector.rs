@@ -249,7 +249,6 @@ fn create_contract(post_data: Json<GenericContractCreationInfo>)-> Json<serde_js
     let contract_name = &post_data.contract_name;
     let contract_symbol = &post_data.contract_symbol;
     let wasm_file = &post_data.wasm_file;
-    println!("WASM: {:?}",wasm_file);
     match smart_contract::create_contract_official(&call_address, &private_key,contract_name,contract_symbol,wasm_file) {
         Ok((contract_address,txn_hash,gas_cost)) => {
             let response_body = json!({"contract_address": contract_address,
