@@ -14,22 +14,19 @@ impl App {
         Self { blocks: vec![]}
     }
     pub fn initialize_from_storage(&mut self) -> Result<Self, Box<dyn std::error::Error>> {
-        let mut app = App::new();
 
         // Try to load the latest block from storage
         match public_block::get_latest_block_hash() {
             Ok(latest_block) => {
                 info!("Resuming from block id: {}", latest_block.id);
                 // Add the logic to load the entire chain from the storage
-                // For now, I'm adding only the latest block for simplicity
-                app.blocks.push(latest_block);
+                self.blocks.push(latest_block);
             },
             Err(e) => {
                 warn!("Could not retrieve the latest block: {:?}", e);
                 self.genesis();  // Creating a genesis block if loading failed
             }
         }
-
         Ok(app)
     }
     pub fn get_blocks(&self)->Vec<public_block::Block>{
