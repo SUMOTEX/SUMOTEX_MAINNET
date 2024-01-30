@@ -587,7 +587,9 @@ impl WasmContract {
         contract_info: &ContractInfo,
         owner:&str,
         pub_key: &str,
-        owner_id:&str,
+        owner_creds:&str,
+        owner_name:&str,
+        owner_email:&str,
         ipfs_hash: &str
     ) -> Result<i32, Box<dyn std::error::Error>> {
         println!("Initializing engine and linker...");
@@ -637,18 +639,28 @@ impl WasmContract {
         // After ensuring the memory is large enough, copy the saved data into the WebAssembly memory within bounds
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
 
-        let mint_func = link.get_typed_func::<(i32, i32,i32,i32, i32, i32), u32>(&mut store, "mint")?;
+        let mint_func = link.get_typed_func::<(i32, i32, i32,i32,i32,i32,i32,i32,i32,i32), u32>(&mut store, "mint")?;
 
 
         let new_data_offset = saved_data.len() as i32;
         let owner_data_bytes = owner.as_bytes().len() as i32;
         let ipfs_data_bytes = ipfs_hash.as_bytes().len() as i32;
-        let owner_id_data_bytes = owner_id.as_bytes().len() as i32; 
-        let required_memory_size_bytes = new_data_offset + owner_data_bytes + ipfs_data_bytes +owner_id_data_bytes;      
+        let owner_email_data_bytes = owner_email.as_bytes().len() as i32; 
+        let owner_name_data_bytes = owner_name.as_bytes().len() as i32; 
+        let owner_creds_data_bytes = owner_creds.as_bytes().len() as i32; 
+        let required_memory_size_bytes = 
+            new_data_offset + 
+            owner_data_bytes + 
+            ipfs_data_bytes + 
+            owner_email_data_bytes +
+            owner_name_data_bytes +
+            owner_creds_data_bytes ;      
         let mut current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
         println!("New data offset: {:?}", new_data_offset);
         println!("Owner data bytes: {:?}", owner_data_bytes);
-        println!("Owner ID bytes: {:?}", owner_id_data_bytes);
+        println!("Owner Email bytes: {:?}", owner_email_data_bytes);
+        println!("Owner Name bytes: {:?}", owner_name_data_bytes);
+        println!("Owner Creds bytes: {:?}", owner_creds_data_bytes);
         println!("IPFS data bytes: {:?}", ipfs_data_bytes);
         println!("Required memory size bytes: {:?}", required_memory_size_bytes);
         println!("Current memory size bytes: {:?}", current_memory_size_bytes);
@@ -691,22 +703,48 @@ impl WasmContract {
         // Write the IPFS hash
         let (ipfs_ptr, ipfs_len) = write_data_to_memory(&wasm_memory, ipfs_hash, ipfs_memory_offset, &mut store)?;
 
-        let owner_id_memory_offset =  ipfs_ptr+ipfs_len;
+        let owner_email_memory_offset =  ipfs_ptr+ipfs_len;
         // Check that the IPFS data fits within memory bounds
         {
             let memory_view = wasm_memory.data_mut(&mut store);
-            if owner_id_memory_offset as usize + owner_id_data_bytes as usize > memory_view.len() {
+            if owner_email_memory_offset as usize + owner_email_data_bytes as usize > memory_view.len() {
                 return Err("OWNER ID data offset or length is out of the current memory bounds.".into());
             }
         } // The scope of memory_view ends here
         
-        let (owner_id_ptr,owner_id_len)= write_data_to_memory(&wasm_memory,owner_id,owner_id_memory_offset, &mut store)?;
+        let (owner_email_ptr,owner_email_len)= write_data_to_memory(&wasm_memory,owner_email,owner_email_memory_offset, &mut store)?;
+
+        let owner_name_memory_offset =  owner_email_ptr+owner_email_len;
+        // Check that the IPFS data fits within memory bounds
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            if owner_name_memory_offset as usize + owner_name_data_bytes as usize > memory_view.len() {
+                return Err("owner name data offset or length is out of the current memory bounds.".into());
+            }
+        } // The scope of memory_view ends here
+        
+        let (owner_name_ptr,owner_name_len)= write_data_to_memory(&wasm_memory,owner_name,owner_name_memory_offset, &mut store)?;
+
+        let owner_creds_memory_offset =  owner_name_ptr+owner_name_len;
+        // Check that the IPFS data fits within memory bounds
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            if owner_creds_memory_offset as usize + owner_creds_data_bytes as usize > memory_view.len() {
+                return Err("owner name data offset or length is out of the current memory bounds.".into());
+            }
+        } // The scope of memory_view ends here
+        
+        let (owner_creds_ptr,owner_creds_len)= write_data_to_memory(&wasm_memory,owner_creds,owner_creds_memory_offset, &mut store)?;
 
         let mint_result = mint_func.call(&mut store, (
             name_ptr as i32,
             name_len as i32,
-            owner_id_ptr as i32,
-            owner_id_len as i32,
+            owner_creds_ptr as i32,
+            owner_creds_len as i32,
+            owner_name_ptr as i32,
+            owner_name_len as i32,
+            owner_email_ptr as i32,
+            owner_email_len as i32,
             ipfs_ptr as i32,
             ipfs_len as i32,
         ));
@@ -1019,66 +1057,7 @@ impl WasmContract {
     pub fn exported_functions(&self) -> Vec<String> {
         self.module.exports().map(|export| export.name().to_string()).collect()
     }
-    // pub fn get_ipfs_link(
-    //     &self,
-    //     contract_path: &DBWithThreadMode<SingleThreaded>,
-    //     pub_key: String,
-    //     token_id: u64,
-    // ) -> Result<Option<String>, Box<dyn std::error::Error>> {
-    //     let engine = Engine::default();
-    //     let mut linker = Linker::new(&engine);
-    //     let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-    //     let mut store = Store::new(&engine, wasi);
-    //     let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key.clone()).unwrap_or_default();
-    //     let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
-    //         .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
-    //     let module = Module::new(&engine, &contract.wasm_file)
-    //     .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
-    //     let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-    //     let mut store = Store::new(&engine, wasi);
 
-    //     println!("Attempting to instantiate the WebAssembly module...");
-    //     wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
-    //     let link = linker.instantiate(&mut store, &module)?;
-    //     // ... (Your operations using token_instance)
-    
-    //     let wasm_memory = link.get_memory(&mut store, "memory")
-    //         .ok_or_else(|| "Failed to find `memory` export")?;
-    //     let result_bytes = self.read(contract_path, &pub_key, "get_ipfs_link")?;
-    //     let result_string = String::from_utf8(result_bytes)?;
-
-    //     Ok(Some(result_string))
-    // }
-    // pub fn get_erc20_name(cmd: &str, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn std::error::Error>> {
-    //     if let Some(data) = cmd.strip_prefix("contract name ") {
-    //         let contract = WasmContract::new("./sample.wasm")?;
-    //         let contract_path = swarm.behaviour().storage_path.get_contract();
-    
-    //         let contract_info = ContractInfo {
-    //             module_path: "./sample.wasm".to_string(),
-    //             pub_key: data.to_string(),
-    //         };
-    
-    //         let name = contract.read_name(contract_path, &contract_info, &data.to_string())?;
-    
-    //         println!("Contract Name: {}", name);
-    //     }
-    //     Ok(())
-    // }
-    // pub fn read_name(
-    //     &self,
-    //     contract_path: &DBWithThreadMode<SingleThreaded>,
-    //     contract_info: &ContractInfo,
-    //     pub_key: &str,
-    // ) -> Result<String, Box<dyn std::error::Error>> {
-    //     // Call the 'read_symbol' function using the same mechanism
-    //     let result_bytes = self.read(contract_path, contract_info, pub_key, "read_name")?;
-
-    //     // Convert the result bytes into a string
-    //     let result_string = String::from_utf8(result_bytes)?;
-
-    //     Ok(result_string)
-    // }    
 }
 
 pub fn create_memory(store: &mut Store<WasiCtx>) -> Result<Memory, Box<dyn std::error::Error>> {
@@ -1365,7 +1344,9 @@ pub fn read_total_token_erc721(contract_address:&String)->Result<i64, Box<dyn st
 pub fn mint_token_official(contract_address:&String,
                             account_key:&String,
                             private_key:&String,
-                            owner_id:&String,
+                            owner_creds:&String,
+                            owner_name:&String,
+                            owner_email:&String,
                             ipfs:&String)->Result<(i32,String, u128), Box<dyn std::error::Error>>{
         let c_path = "./contract/db";
         let contract_path = match rock_storage::open_db(c_path) {
@@ -1403,7 +1384,7 @@ pub fn mint_token_official(contract_address:&String,
                         panic!("Failed to create SecretKey: {:?}", e);
                     }
                 };
-                let result = contract.mint_token_dynamic(&contract_path, &contract_info,account_key,&contract_address.to_string(),owner_id,ipfs);
+                let result = contract.mint_token_dynamic(&contract_path, &contract_info,account_key,&contract_address.to_string(),owner_creds,owner_name,owner_email,ipfs);
                 let _ = public_txn::Txn::sign_and_submit_transaction(account_key,txn_hash.clone(),&the_official_private_key);
                 match result {
                     Ok(token_id) => {
@@ -1481,7 +1462,7 @@ pub fn read_contract(contract_address: &String) -> Result<PublicSmartContract, B
 //         }
 //     }
 // }
-pub fn read_id(contract_address:&String,id:&i32)->Result<(String,String,String), Box<dyn std::error::Error>>{
+pub fn read_id(contract_address:&String,id:&i32)->Result<(String,String,String,String,String), Box<dyn std::error::Error>>{
     let c_path = "./contract/db";
     let contract_path = match rock_storage::open_db(c_path) {
         Ok(path) => path,
@@ -1572,18 +1553,44 @@ pub fn read_id(contract_address:&String,id:&i32)->Result<(String,String,String),
             println!("Error calling get_owner_ptr: {:?}", e);
             Box::<dyn std::error::Error>::from(e)
         })?; 
-    let get_owner_of_len_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_of_len")?;
-    let owner_of_len_result = get_owner_of_len_call.call(&mut store, *id)
+
+    let get_owner_email_len_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_email_len")?;
+    let owner_email_len_result = get_owner_email_len_call.call(&mut store, *id)
         .map_err(|e| {
-            println!("Error calling get_owner_of_len: {:?}", e);
+            println!("Error calling get_owner_email_len_call: {:?}", e);
             Box::<dyn std::error::Error>::from(e)
         })?;
-    let get_owner_of_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_of_ptr")?;
-    let owner_of_ptr_result = get_owner_of_ptr_call.call(&mut store, *id)
+    let get_owner_email_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_email_ptr")?;
+    let owner_email_ptr_result = get_owner_email_ptr_call.call(&mut store, *id)
         .map_err(|e| {
-            println!("Error calling get_owner_of_ptr: {:?}", e);
+            println!("Error calling get_owner_email_ptr_call: {:?}", e);
             Box::<dyn std::error::Error>::from(e)
         })?;
+    let get_owner_creds_len_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_creds_len")?;
+    let owner_creds_len_result = get_owner_creds_len_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_creds_len_call: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let get_owner_creds_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_creds_ptr")?;
+    let owner_creds_ptr_result = get_owner_creds_ptr_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_creds_len_call: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let get_owner_name_len_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_name_len")?;
+    let owner_name_len_result = get_owner_name_len_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_name_len_call: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let get_owner_name_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_name_ptr")?;
+    let owner_name_ptr_result = get_owner_name_ptr_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling name: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    //Second section
     let ipfs_start = ipfs_ptr_result as usize;
     let ipfs_end = ipfs_start + ipfs_len_result as usize;
     let ipfs_data_bytes = wasm_memory.data(&store)[ipfs_start..ipfs_end].to_vec();
@@ -1604,19 +1611,37 @@ pub fn read_id(contract_address:&String,id:&i32)->Result<(String,String,String),
 
     
     // Do similar for `get_owner_of_ptr` and `get_owner_of_len` if needed
-    let owner_of_data_start = owner_of_ptr_result as usize;
-    let owner_of_data_end = owner_of_data_start + owner_of_len_result as usize;
-    let owner_of_data_bytes = wasm_memory.data(&store)[owner_of_data_start..owner_of_data_end].to_vec();
-    let owner_of_data_string = String::from_utf8(owner_of_data_bytes)
+    let owner_email_data_start = owner_email_ptr_result as usize;
+    let owner_email_data_end = owner_email_data_start + owner_email_len_result as usize;
+    let owner_email_data_bytes = wasm_memory.data(&store)[owner_email_data_start..owner_email_data_end].to_vec();
+    let owner_email_data_string = String::from_utf8(owner_email_data_bytes)
         .map_err(|e| {
             println!("Error converting owner data bytes to String: {:?}", e);
             Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
         })?;
 
-    
+    //Name section
+    let owner_name_data_start = owner_name_ptr_result as usize;
+    let owner_name_data_end = owner_name_data_start + owner_name_len_result as usize;
+    let owner_name_data_bytes = wasm_memory.data(&store)[owner_name_data_start..owner_name_data_end].to_vec();
+    let owner_name_data_string = String::from_utf8(owner_name_data_bytes)
+        .map_err(|e| {
+            println!("Error converting owner name bytes to String: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
+        })?;
 
+    //Creds section
+    let owner_creds_data_start = owner_creds_ptr_result as usize;
+    let owner_creds_data_end = owner_creds_data_start + owner_creds_len_result as usize;
+    let owner_creds_data_bytes = wasm_memory.data(&store)[owner_creds_data_start..owner_creds_data_end].to_vec();
+    let owner_creds_data_string = String::from_utf8(owner_creds_data_bytes)
+        .map_err(|e| {
+            println!("Error converting owner creds bytes to String: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
+        })?;
+    
     // Finally, return the collected data
-    Ok((owner_data_string, ipfs_data_string, owner_of_data_string))
+    Ok((owner_data_string, ipfs_data_string,owner_name_data_string,owner_creds_data_string, owner_email_data_string))
 
 }
 

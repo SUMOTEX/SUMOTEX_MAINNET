@@ -85,7 +85,9 @@ pub struct MintTokenInfo {
     caller_address: String,
     caller_private_key:String,
     ipfs_detail:String,
-    owner_id:String
+    owner_email:String,
+    owner_name:String,
+    owner_creds:String
 }
 #[derive(serde::Deserialize, Debug)]
 pub struct ReadTokenInfo {  
@@ -271,8 +273,10 @@ fn mint_token_contract(post_data: Json<MintTokenInfo>)-> Json<serde_json::Value>
     let owner_address = &post_data.caller_address;
     let owner_private_key = &post_data.caller_private_key;
     let ipfs= &post_data.ipfs_detail;
-    let owner_id = &post_data.owner_id;
-    match smart_contract::mint_token_official(&contract_address, &owner_address,&owner_private_key,&owner_id,&ipfs) {
+    let owner_email = &post_data.owner_email;
+    let owner_name = &post_data.owner_name;
+    let owner_creds = &post_data.owner_creds;
+    match smart_contract::mint_token_official(&contract_address, &owner_address,&owner_private_key,&owner_creds,&owner_name,&owner_email,&ipfs) {
         Ok((token_id,txn_hash,gas_cost)) => {
             let response_body = json!({"token_id": token_id.to_string(),
                                         "txn_hash":txn_hash,
@@ -292,8 +296,8 @@ fn read_token_contract(post_data: Json<ReadTokenInfo>)-> Json<serde_json::Value>
     let contract_address = &post_data.contract_address;
     let token_id = &post_data.token_id;
     match smart_contract::read_id(&contract_address, token_id) {
-        Ok((token_owner,ipfs_data,owned_id)) => {
-            let response_body = json!({"owner_address": token_owner,"ipfs":ipfs_data,"owner_id":owned_id});
+        Ok((token_owner,ipfs_data,owner_name,owner_creds,owned_email)) => {
+            let response_body = json!({"owner_address": token_owner,"ipfs":ipfs_data,"name":owner_name,"credential":owner_creds,"owner_email":owned_email});
             Json(json!({"jsonrpc": "1.0",  "result": response_body}))
         },
         Err(e) => {
