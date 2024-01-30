@@ -47,7 +47,9 @@ impl App {
             node_verifier:Some(vec!["".to_string()].into()),
 
         };
-
+        let db_path = "./public_blockchain/db";
+        let db_handle = rock_storage::open_db(db_path)?;
+        let _ = rock_storage::put_to_db(block_db,"epoch", &json);
         self.blocks.push(genesis_block);
 
     }
