@@ -13,7 +13,7 @@ impl App {
     pub fn new() -> Self {
         Self { blocks: vec![]}
     }
-    pub fn initialize_from_storage(&mut self) -> Result<Self, Box<dyn std::error::Error>> {
+    pub fn initialize_from_storage(&mut self) -> Result<(), Box<dyn std::error::Error>> {
 
         // Try to load the latest block from storage
         match public_block::get_latest_block_hash() {
@@ -27,7 +27,7 @@ impl App {
                 self.genesis();  // Creating a genesis block if loading failed
             }
         }
-        Ok(app)
+        Ok(())
     }
     pub fn get_blocks(&self)->Vec<public_block::Block>{
         self.blocks.clone()
