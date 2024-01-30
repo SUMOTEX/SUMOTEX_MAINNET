@@ -2,6 +2,7 @@ use chrono::prelude::*;
 use log::{info,warn};
 use log::{error};
 use crate::public_block;
+use crate::rock_storage;
 
 #[derive(Debug,Clone)]
 pub struct App {
@@ -48,8 +49,16 @@ impl App {
 
         };
         let db_path = "./public_blockchain/db";
-        let db_handle = rock_storage::open_db(db_path)?;
-        let _ = rock_storage::put_to_db(block_db,"epoch", &json);
+        let db_handle = match rock_storage::open_db(db_path) {
+            Ok(handle) => handle,
+            Err(_) => {
+                error!("Failed to open database");
+                return; // or handle the error as appropriate
+            }
+        };
+        
+        let json = serde_json::to_string(&genesis_block).expect("can jsonify request");
+        let _ = rock_storage::put_to_db(&db_handle,"epoch", &json);
         self.blocks.push(genesis_block);
 
     }
