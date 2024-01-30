@@ -19,7 +19,6 @@ use crate::public_app::App;
 use crate::public_txn::Txn;
 use crate::pbft::PBFTNode;
 use crate::rock_storage::StoragePath;
-
 use libp2p::PeerId;
 use libp2p::identity::{Keypair as IdentityKeypair};
 type MySwarm = Swarm<AppBehaviour>;

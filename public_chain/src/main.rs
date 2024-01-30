@@ -249,7 +249,7 @@ async fn main() {
                 Some(_) => {
                     println!("Initialization event.");
                     let peers = p2p::get_list_peers(&swarm_public_net);
-                    swarm_public_net.behaviour_mut().app.genesis();
+                    swarm_public_net.behaviour_mut().app.initialize_from_storage();
                     println!("Storage Path: {:?}",swarm_public_net.behaviour().storage_path.get_blocks());
                     info!("Connected nodes: {}", peers.len());
                     if !peers.is_empty() {

@@ -1159,7 +1159,13 @@ pub fn create_erc721_contract_official(call_address:&str,private_key:&str,contra
                 module_path: "./sample721.wasm".to_string(),
                 pub_key:public_key.to_string(),
             };
-            let the_gas_cost = gas_calculator::calculate_gas_for_contract_creation("./sample721.wasm");
+            let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation("./sample721.wasm") {
+                Ok(gas_cost) => gas_cost as u128, // Convert u64 to u128
+                Err(e) => {
+                    // Handle the error, maybe log it and/or return from the function
+                    return Err(e.into());
+                }
+            };
             let mut contract = WasmContract::new("./sample721.wasm",&contract_db)?;
             let functions = contract.exported_functions();
         
@@ -1263,8 +1269,12 @@ pub fn create_contract_official(
                     Val::I32(symbol_len as i32),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
                 ],
             };
-            let the_gas_cost  = gas_calculator::calculate_gas_for_contract_creation(&wasm_file_path); // Use the file path
-
+            let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&wasm_file_path) {
+                Ok(gas_cost) => gas_cost as u128, // Convert u64 to u128
+                Err(e) => {
+                    return Err(e.into());
+                }
+            };
             let result = public_txn::Txn::create_and_prepare_transaction(
                 TransactionType::ContractCreation,
                 call_address.to_string(),
