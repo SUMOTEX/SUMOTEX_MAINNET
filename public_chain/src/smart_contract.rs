@@ -1252,7 +1252,7 @@ pub fn create_contract_official(
                     Val::I32(symbol_len as i32),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
                 ],
             };
-            println!("Before gas cost");
+            .map_err(|e| format!("Error decoding base64-encoded Wasm data: {}", e))?;
             let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&wasm_data) {
                 Ok(gas_cost) => gas_cost as u128, // Convert u64 to u128
                 Err(e) => {
@@ -1363,7 +1363,12 @@ pub fn mint_token_official(contract_address:&String,
         };
 
         let the_memory = create_memory(contract.get_store())?;
-
+        let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&wasm_data) {
+            Ok(gas_cost) => gas_cost as u128, // Convert u64 to u128
+            Err(e) => {
+                return Err(e.into());
+            }
+        };
         let txn = public_txn::Txn::create_and_prepare_transaction(
             TransactionType::ContractInteraction,
             account_key.to_string(),
@@ -1404,11 +1409,6 @@ pub fn mint_token_official(contract_address:&String,
                 Err(txn_err.into())
             }
         }
-        // let read_result = contract.read_owner_token(contract_path, &contract_info,&contract_address.to_string(),token_id);
-        // if let Err(e) = read_result {
-        //     println!("Error after minting, could not read token owner: {}", e);
-        //     return Err(e);
-        // }    
     }
     
 pub fn read_contract(contract_address: &String) -> Result<PublicSmartContract, Box<dyn std::error::Error>> {

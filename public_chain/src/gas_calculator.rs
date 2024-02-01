@@ -5,7 +5,7 @@ use std::fs::File;
 use std::io::Read; 
 // Define average gas costs for various operations as constants.
 // These values are placeholders and should be adjusted based on actual gas costs in your blockchain environment.
-const GAS_COST_SIMPLE_TRANSFER: u64 = 21000;
+const GAS_COST_SIMPLE_TRANSFER: u64 = 210000;
 const GAS_COST_CONTRACT_CREATION: u64 = 32000;
 const GAS_COST_CONTRACT_INTERACTION: u64 = 45000;
 const GAS_COST_TOKEN_TRANSFER: u64 = 50000;
