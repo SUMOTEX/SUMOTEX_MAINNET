@@ -1363,7 +1363,7 @@ pub fn mint_token_official(contract_address:&String,
         };
 
         let the_memory = create_memory(contract.get_store())?;
-        let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&wasm_data) {
+        let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&[]) {
             Ok(gas_cost) => gas_cost as u128, // Convert u64 to u128
             Err(e) => {
                 return Err(e.into());
@@ -1373,7 +1373,7 @@ pub fn mint_token_official(contract_address:&String,
             TransactionType::ContractInteraction,
             account_key.to_string(),
             contract_address.to_string(),
-            1000);
+            the_gas_cost);
         match txn {
             Ok((txn_hash,gas_cost,new_txn)) => {
                 let private_key_bytes = match hex::decode(&private_key) {
