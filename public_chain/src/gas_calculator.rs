@@ -58,8 +58,97 @@ fn opcode_gas_costs() -> HashMap<String, u64> {
     map.insert("I32LeU".to_string(), 2);      // Example cost for I32LeU
     map.insert("I32GeS".to_string(), 2);      // Example cost for I32GeS
     map.insert("I32GeU".to_string(), 2);      // Example cost for I32GeU
+    map.insert("I64Add".to_string(), 3);       // Example cost for I64Add
+    map.insert("I64Sub".to_string(), 3);       // Example cost for I64Sub
+    map.insert("I64Mul".to_string(), 3);       // Example cost for I64Mul
+    map.insert("I64DivS".to_string(), 5);      // Example cost for I64DivS
+    map.insert("I64DivU".to_string(), 5);      // Example cost for I64DivU
+    map.insert("I64RemS".to_string(), 5);      // Example cost for I64RemS
+    map.insert("I64RemU".to_string(), 5);      // Example cost for I64RemU
+    map.insert("I64And".to_string(), 3);       // Example cost for I64And
+    map.insert("I64Or".to_string(), 3);        // Example cost for I64Or
+    map.insert("I64Xor".to_string(), 3);       // Example cost for I64Xor
+    map.insert("I64Shl".to_string(), 3);       // Example cost for I64Shl
+    map.insert("I64ShrS".to_string(), 3);      // Example cost for I64ShrS
+    map.insert("I64ShrU".to_string(), 3);      // Example cost for I64ShrU
+    map.insert("I64Eqz".to_string(), 2);       // Example cost for I64Eqz
+    map.insert("I64Eq".to_string(), 2);        // Example cost for I64Eq
+    map.insert("I64Ne".to_string(), 2);        // Example cost for I64Ne
+    map.insert("I64LtS".to_string(), 2);       // Example cost for I64LtS
+    map.insert("I64LtU".to_string(), 2);       // Example cost for I64LtU
+    map.insert("I64GtS".to_string(), 2);       // Example cost for I64GtS
+    map.insert("I64GtU".to_string(), 2);       // Example cost for I64GtU
+    map.insert("I64LeS".to_string(), 2);       // Example cost for I64LeS
+    map.insert("I64LeU".to_string(), 2);       // Example cost for I64LeU
+    map.insert("I64GeS".to_string(), 2);       // Example cost for I64GeS
+    map.insert("I64GeU".to_string(), 2);       // Example cost for I64GeU
 
-    // ... Add other opcodes and their gas costs
+    // Control flow operations
+    map.insert("Unreachable".to_string(), 1);
+    map.insert("Nop".to_string(), 1);
+    map.insert("Block".to_string(), 2);
+    map.insert("Loop".to_string(), 2);
+    map.insert("If".to_string(), 2);
+    map.insert("Else".to_string(), 1);
+    map.insert("End".to_string(), 1);
+    map.insert("Br".to_string(), 5);
+    map.insert("BrIf".to_string(), 5);
+    map.insert("BrTable".to_string(), 6);
+    map.insert("Return".to_string(), 5);
+    map.insert("Call".to_string(), 10);
+    map.insert("CallIndirect".to_string(), 8);
+
+    // Local variables
+    map.insert("LocalGet".to_string(), 2);
+    map.insert("LocalSet".to_string(), 2);
+    map.insert("LocalTee".to_string(), 2);
+
+    // Global variables
+    map.insert("GlobalGet".to_string(), 3);
+    map.insert("GlobalSet".to_string(), 3);
+
+    // Memory operations
+    map.insert("I32Load".to_string(), 3);
+    map.insert("I64Load".to_string(), 4);
+    map.insert("F32Load".to_string(), 3);
+    map.insert("F64Load".to_string(), 4);
+    map.insert("I32Load8S".to_string(), 3);
+    map.insert("I32Load8U".to_string(), 3);
+    map.insert("I32Load16S".to_string(), 3);
+    map.insert("I32Load16U".to_string(), 3);
+    map.insert("I64Load8S".to_string(), 4);
+    map.insert("I64Load8U".to_string(), 4);
+    map.insert("I64Load16S".to_string(), 4);
+    map.insert("I64Load16U".to_string(), 4);
+    map.insert("I64Load32S".to_string(), 4);
+    map.insert("I64Load32U".to_string(), 4);
+    map.insert("I32Store".to_string(), 4);
+    map.insert("I64Store".to_string(), 5);
+    map.insert("F32Store".to_string(), 4);
+    map.insert("F64Store".to_string(), 5);
+    map.insert("I32Store8".to_string(), 4);
+    map.insert("I32Store16".to_string(), 4);
+    map.insert("I64Store8".to_string(), 5);
+    map.insert("I64Store16".to_string(), 5);
+    map.insert("I64Store32".to_string(), 5);
+    map.insert("MemorySize".to_string(), 2);
+    map.insert("MemoryGrow".to_string(), 10);
+
+    // Numeric instructions
+    map.insert("I32Const".to_string(), 2);
+    map.insert("I64Const".to_string(), 2);
+    map.insert("F32Const".to_string(), 2);
+    map.insert("F64Const".to_string(), 2);
+    map.insert("I32Eqz".to_string(), 2);
+    map.insert("I32Eq".to_string(), 2);
+    // Conversion operations
+    map.insert("I32WrapI64".to_string(), 2);
+    map.insert("I32TruncF32S".to_string(), 3);
+    map.insert("I32TruncF32U".to_string(), 3);
+    map.insert("I32TruncF64S".to_string(), 3);
+    map.insert("I32TruncF64U".to_string(), 3);
+    map.insert("I64ExtendI32S".to_string(), 2);
+    map.insert("I64ExtendI32U".to_string(), 2);
     map
 }
 
