@@ -118,7 +118,7 @@ pub struct TransferTokenInfo {
 }
 #[derive(serde::Deserialize, Debug)]
 pub struct TxnIdInfo {
-    txn_hash: String,
+    txn_hash: String
 }
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct SignedTransaction {

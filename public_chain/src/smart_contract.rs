@@ -1252,7 +1252,6 @@ pub fn create_contract_official(
                     Val::I32(symbol_len as i32),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
                 ],
             };
-            .map_err(|e| format!("Error decoding base64-encoded Wasm data: {}", e))?;
             let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&wasm_data) {
                 Ok(gas_cost) => gas_cost as u128, // Convert u64 to u128
                 Err(e) => {
@@ -1342,12 +1341,12 @@ pub fn read_total_token_erc721(contract_address:&String)->Result<i64, Box<dyn st
 }
 
 pub fn mint_token_official(contract_address:&String,
-                            account_key:&String,
+    owner_address:&String,
                             private_key:&String,
                             owner_creds:&String,
                             owner_name:&String,
                             owner_email:&String,
-                            ipfs:&String)->Result<(i32,String, u128), Box<dyn std::error::Error>>{
+                            ipfs_hash:&String)->Result<(i32,String, u128), Box<dyn std::error::Error>>{
         let c_path = "./contract/db";
         let contract_path = match rock_storage::open_db(c_path) {
             Ok(path) => path,
@@ -1355,27 +1354,174 @@ pub fn mint_token_official(contract_address:&String,
                 // Handle the error, maybe log it, and then decide what to do next
                 panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
             }
-        };
+        };  
         let mut contract = WasmContract::new(contract_address,&contract_path)?;
-        let contract_info = ContractInfo {
-            module_path: "./sample721.wasm".to_string(),
-            pub_key:contract_address.to_string(),
-        };
+        let engine = Engine::default();
+        let mut linker = Linker::new(&engine);
+        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+        let mut store = Store::new(&engine, wasi);
+        let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address).unwrap_or_default();
+        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+            .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+        let module_result = Module::new(&engine, &contract.wasm_file);
 
-        let the_memory = create_memory(contract.get_store())?;
-        let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&[]) {
+        // Handle the result to extract the Module or return an error
+        let module = match module_result {
+            Ok(module) => module,
+            Err(e) => return Err(e.into()), // Convert the error and return if there's an issue creating the Module
+        };
+        
+
+        let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&contract.wasm_file) {
             Ok(gas_cost) => gas_cost as u128, // Convert u64 to u128
             Err(e) => {
                 return Err(e.into());
             }
         };
-        let txn = public_txn::Txn::create_and_prepare_transaction(
-            TransactionType::ContractInteraction,
-            account_key.to_string(),
-            contract_address.to_string(),
-            the_gas_cost);
-        match txn {
-            Ok((txn_hash,gas_cost,new_txn)) => {
+
+        println!("Attempting to instantiate the WebAssembly module...");
+        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+        let link = linker.instantiate(&mut store, &module)?;
+        let instance = linker.instantiate(&mut store, &module)?;
+        // ... (Your operations using token_instance)
+    
+        println!("Fetching WebAssembly memory...");
+        //let wasm_memory = contract.instance.get_memory(&mut store,"memory").ok_or_else(|| "Failed to find `memory` export")?;
+        let wasm_memory = link.get_memory(&mut store, "memory")
+            .ok_or_else(|| "Failed to find `memory` export")?;
+        let saved_data = contract.wasm_memory;
+        let saved_data_length = saved_data.len() as u64;
+        let current_memory_size_bytes = wasm_memory.data_size(&store) as u64;
+        if saved_data.len() > wasm_memory.data_size(&store) {
+            // If not, calculate how many additional memory pages are needed
+            // Calculate the number of additional pages needed, rounding up
+            let additional_pages_needed = ((saved_data_length + (64 * 1024 - 1)) / (64 * 1024)) - (current_memory_size_bytes / (64 * 1024));
+            // Attempt to grow the WebAssembly memory by the required number of pages
+            if saved_data_length > current_memory_size_bytes {
+                wasm_memory.grow(&mut store, additional_pages_needed).map_err(|_| "Failed to grow memory")?;
+            }
+        }
+        // Print the exported functions
+        // for export in module.exports() {
+        //     if let ExternType::Func(func_type) = export.ty() {
+        //         println!("Exported function: {} with type {:?}", export.name(), func_type);
+        //     }
+        // }
+        
+        // After ensuring the memory is large enough, copy the saved data into the WebAssembly memory within bounds
+        wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
+
+        let mint_func = link.get_typed_func::<(i32, i32, i32,i32,i32,i32,i32,i32,i32,i32), u32>(&mut store, "mint")?;
+
+
+        let new_data_offset = saved_data.len() as i32;
+        let owner_data_bytes = owner_address.as_bytes().len() as i32;
+        let ipfs_data_bytes = ipfs_hash.as_bytes().len() as i32;
+        let owner_email_data_bytes = owner_email.as_bytes().len() as i32; 
+        let owner_name_data_bytes = owner_name.as_bytes().len() as i32; 
+        let owner_creds_data_bytes = owner_creds.as_bytes().len() as i32; 
+        let required_memory_size_bytes = 
+            new_data_offset + 
+            owner_data_bytes + 
+            ipfs_data_bytes + 
+            owner_email_data_bytes +
+            owner_name_data_bytes +
+            owner_creds_data_bytes ;      
+        let mut current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
+        println!("New data offset: {:?}", new_data_offset);
+        println!("Owner data bytes: {:?}", owner_data_bytes);
+        println!("Owner Email bytes: {:?}", owner_email_data_bytes);
+        println!("Owner Name bytes: {:?}", owner_name_data_bytes);
+        println!("Owner Creds bytes: {:?}", owner_creds_data_bytes);
+        println!("IPFS data bytes: {:?}", ipfs_data_bytes);
+        println!("Required memory size bytes: {:?}", required_memory_size_bytes);
+        println!("Current memory size bytes: {:?}", current_memory_size_bytes);
+        // Check if we need more memory pages and grow memory if needed
+        while required_memory_size_bytes > current_memory_size_bytes {
+            // Calculate how many more pages are needed, rounding up
+            let additional_pages_needed = ((required_memory_size_bytes - current_memory_size_bytes + (64 * 1024 - 1)) / (64 * 1024)) as u32;
+        
+            // Attempt to grow the memory
+            if wasm_memory.grow(&mut store, additional_pages_needed as u64).is_err() {
+                // Handle the error if memory growth fails
+                return Err("Failed to grow memory".into());
+            }
+            // Update the current memory size
+            current_memory_size_bytes = wasm_memory.data_size(&mut store) as i32;
+        }
+        println!("New memory size bytes: {:?}", current_memory_size_bytes);
+        // We need to limit the scope of the memory view so that we can mutably borrow `store` again later
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            // Ensure the new data offset is within the bounds of the current memory size
+            if new_data_offset as usize >= memory_view.len() {
+                return Err("New data offset is out of the current memory bounds.".into());
+            }
+        } // `memory_view` goes out of scope here, so we can mutably borrow `store` again
+
+
+        let (name_ptr, name_len) = write_data_to_memory(&wasm_memory, owner_address, new_data_offset, &mut store)?;
+        println!("Owner data pointer: {:?}, length: {:?}", name_ptr, name_len);
+        let ipfs_memory_offset = name_ptr + name_len;
+
+        // Check that the IPFS data fits within memory bounds
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            if ipfs_memory_offset as usize + ipfs_data_bytes as usize > memory_view.len() {
+                return Err("IPFS data offset or length is out of the current memory bounds.".into());
+            }
+        } // The scope of memory_view ends here
+        
+        // Write the IPFS hash
+        let (ipfs_ptr, ipfs_len) = write_data_to_memory(&wasm_memory, ipfs_hash, ipfs_memory_offset, &mut store)?;
+
+        let owner_email_memory_offset =  ipfs_ptr+ipfs_len;
+        // Check that the IPFS data fits within memory bounds
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            if owner_email_memory_offset as usize + owner_email_data_bytes as usize > memory_view.len() {
+                return Err("OWNER ID data offset or length is out of the current memory bounds.".into());
+            }
+        } // The scope of memory_view ends here
+        
+        let (owner_email_ptr,owner_email_len)= write_data_to_memory(&wasm_memory,owner_email,owner_email_memory_offset, &mut store)?;
+
+        let owner_name_memory_offset =  owner_email_ptr+owner_email_len;
+        // Check that the IPFS data fits within memory bounds
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            if owner_name_memory_offset as usize + owner_name_data_bytes as usize > memory_view.len() {
+                return Err("owner name data offset or length is out of the current memory bounds.".into());
+            }
+        } // The scope of memory_view ends here
+        
+        let (owner_name_ptr,owner_name_len)= write_data_to_memory(&wasm_memory,owner_name,owner_name_memory_offset, &mut store)?;
+
+        let owner_creds_memory_offset =  owner_name_ptr+owner_name_len;
+        // Check that the IPFS data fits within memory bounds
+        {
+            let memory_view = wasm_memory.data_mut(&mut store);
+            if owner_creds_memory_offset as usize + owner_creds_data_bytes as usize > memory_view.len() {
+                return Err("owner name data offset or length is out of the current memory bounds.".into());
+            }
+        } // The scope of memory_view ends here
+        
+        let (owner_creds_ptr,owner_creds_len)= write_data_to_memory(&wasm_memory,owner_creds,owner_creds_memory_offset, &mut store)?;
+
+        let mint_result = mint_func.call(&mut store, (
+            name_ptr as i32,
+            name_len as i32,
+            owner_creds_ptr as i32,
+            owner_creds_len as i32,
+            owner_name_ptr as i32,
+            owner_name_len as i32,
+            owner_email_ptr as i32,
+            owner_email_len as i32,
+            ipfs_ptr as i32,
+            ipfs_len as i32,
+        ));
+        match mint_result {
+            Ok(token_id) => {
                 let private_key_bytes = match hex::decode(&private_key) {
                     Ok(bytes) => bytes,
                     Err(e) => {
@@ -1389,44 +1535,44 @@ pub fn mint_token_official(contract_address:&String,
                         panic!("Failed to create SecretKey: {:?}", e);
                     }
                 };
-                let result = contract.mint_token_dynamic(&contract_path, &contract_info,account_key,&contract_address.to_string(),owner_creds,owner_name,owner_email,ipfs);
-                let _ = public_txn::Txn::sign_and_submit_transaction(account_key,txn_hash.clone(),&the_official_private_key);
-                match result {
-                    Ok(token_id) => {
-                        println!("Mint: {}", token_id);
-                        return Ok((token_id, txn_hash.clone(), gas_cost));
-                    }
+                let txn = public_txn::Txn::create_and_prepare_transaction(
+                    TransactionType::ContractInteraction,
+                    owner_address.to_string(),
+                    contract_address.to_string(),
+                    the_gas_cost);
+                match txn {
+                    Ok((txn_hash,gas_cost,new_txn))=>{
+                        let _ = public_txn::Txn::sign_and_submit_transaction(owner_address,txn_hash.clone(),&the_official_private_key);
+                                println!("Mint: {}", token_id);
+                                let updated_data = wasm_memory.data(&mut store);
+                                let updated_byte_vector: Vec<u8> = updated_data.to_vec();
+                                if saved_data == updated_data.to_vec() {
+                                    println!("No change in the WebAssembly memory after mint operation.");
+                                } else {
+                                    println!("WebAssembly memory updated after mint operation.");
+                                }
+                                contract.nonce+=1;
+                                contract.wasm_memory = wasm_memory.data(&mut store).to_vec(); // Update this only if the WASM memory state is relevant
+                                let updated_serialized_contract = serde_json::to_vec(&contract)?;
+                                rock_storage::put_to_db(&contract_path, &contract_address, &updated_serialized_contract)?;        
+                                println!("Token ID value: {:?}", token_id);
+                                //Ok(token_id);
+                                return Ok((token_id as i32, txn_hash.clone(), the_gas_cost));
+                            }
                     Err(e) => {
-                        println!("Error minting token: {}", e);
-                        Err(e)
+                        // Handle the error, for example, by logging or panicking
+                        panic!("Failed to serialize transaction: {}", e);
+                        return Err(e.into());
                     }
                 }
-            }
-            Err(txn_err) => {
-                println!("Error creating transaction: {}", txn_err);
-                // Handle the error case for transaction creation.
-                // You might want to perform cleanup or other actions.
-                Err(txn_err.into())
+
+            },
+            Err(e) => {
+                println!("Mint function failed: {}", e);
+                // handle the error
+                Err(e.into())
             }
         }
-    }
-    
-pub fn read_contract(contract_address: &String) -> Result<PublicSmartContract, Box<dyn std::error::Error>> {
-        let c_path = "./contract/db";
-        let contract_path = rock_storage::open_db(c_path)
-            .map_err(|e| format!("Failed to open database: {:?}", e))?;
-    
-        let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address)
-            .ok_or_else(|| format!("Contract not found for address: {:?}", contract_address))?;
-    
-        if serialized_contract.is_empty() {
-            return Err("Contract data is empty".into());
-        }
-    
-        let contract: PublicSmartContract = serde_json::from_slice(&serialized_contract)
-            .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
-    
-        Ok(contract)
     }
     
 // pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<(String,String), Box<dyn std::error::Error>>{
@@ -1749,7 +1895,21 @@ pub fn call_contract_function(
             }
         }
     }
+}
+pub fn read_contract(contract_address: &String) -> Result<PublicSmartContract, Box<dyn std::error::Error>> {
+    let c_path = "./contract/db";
+    let contract_path = rock_storage::open_db(c_path)
+        .map_err(|e| format!("Failed to open database: {:?}", e))?;
 
+    let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address)
+        .ok_or_else(|| format!("Contract not found for address: {:?}", contract_address))?;
 
+    if serialized_contract.is_empty() {
+        return Err("Contract data is empty".into());
+    }
 
+    let contract: PublicSmartContract = serde_json::from_slice(&serialized_contract)
+        .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+
+    Ok(contract)
 }
