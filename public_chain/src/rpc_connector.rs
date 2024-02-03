@@ -56,9 +56,7 @@ pub struct GenericContractInfo {
     caller_address:String,
     private_key: String,
     function_name:String,
-    args_values:String,
-    args_input: String,
-    args_output: String
+    args_input_values:String,
 }
 #[derive(serde::Deserialize, Debug)]
 pub struct ReadContractInfo {
@@ -462,10 +460,8 @@ fn generic_smart_contract_function_call(post_data: Json<GenericContractInfo>)-> 
         let call_address = &post_data.caller_address;
         let private_key = &post_data.private_key;
         let function_name = &post_data.function_name;
-        let args_input_values = &post_data.args_values;
-        let args_input = &post_data.args_input;
-        let args_output = &post_data.args_output;
-        match smart_contract::call_contract_function(&contract_address,&call_address, &private_key,&function_name,&args_input_values,&args_input,&args_output) {
+        let args_input_values = &post_data.args_input_values;
+        match smart_contract::call_contract_function(&contract_address,&call_address, &private_key,&function_name,&args_input_values) {
             Ok(result_map) => {
                 let response_body = json!({
                     "contract_address": contract_address,

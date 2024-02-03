@@ -635,7 +635,6 @@ impl WasmContract {
                 println!("Exported function: {} with type {:?}", export.name(), func_type);
             }
         }
-        
         // After ensuring the memory is large enough, copy the saved data into the WebAssembly memory within bounds
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
 
@@ -1303,12 +1302,6 @@ pub fn mint_token_official(contract_address:&String,
         };
         
 
-        let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&contract.wasm_file) {
-            Ok(gas_cost) => gas_cost as u128, // Convert u64 to u128
-            Err(e) => {
-                return Err(e.into());
-            }
-        };
 
         println!("Attempting to instantiate the WebAssembly module...");
         wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
@@ -1466,6 +1459,13 @@ pub fn mint_token_official(contract_address:&String,
                         panic!("Failed to create SecretKey: {:?}", e);
                     }
                 };
+                let updated_wasm = wasm_memory.data(&mut store);
+                let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&updated_wasm) {
+                    Ok(gas_cost) => gas_cost as u128, // Convert u64 to u128
+                    Err(e) => {
+                        return Err(e.into());
+                    }
+                };
                 let txn = public_txn::Txn::create_and_prepare_transaction(
                     TransactionType::ContractInteraction,
                     owner_address.to_string(),
@@ -1506,39 +1506,6 @@ pub fn mint_token_official(contract_address:&String,
         }
     }
     
-// pub fn read_token_by_id(contract_address:&String,id:&i32)->Result<(String,String), Box<dyn std::error::Error>>{
-//     let c_path = "./contract/db";
-//     let a_path = "./account/db";
-//     let contract_path = match rock_storage::open_db(c_path) {
-//         Ok(path) => path,
-//         Err(e) => {
-//             // Handle the error, maybe log it, and then decide what to do next
-//             panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
-//         }
-//     };
-//     let contract = WasmContract::new("./sample721.wasm")?;
-//     let contract_info = ContractInfo {
-//         module_path: "./sample721.wasm".to_string(),
-//         pub_key:contract_address.to_string(),
-//     };
-//     let read_result = contract.read_owner_token(&contract_path, &contract_info,&contract_address.to_string(),*id);
-//     match read_result {
-//         Ok(read_items) => {
-//             let read_ipfs = match contract.read_ipfs_token(&contract_path, &contract_info, &contract_address.to_string(), *id) {
-//                 Ok(ipfs_data) => ipfs_data,
-//                 Err(e) => {
-//                     println!("Error reading IPFS data: {}", e);
-//                     "default value or error info".to_string() // Provide a default value or error information
-//                 }
-//             };
-//             Ok((read_items, read_ipfs)) // Use `read_items` here instead of `read_item`
-//         }
-//         Err(e) => {
-//             println!("Error after minting, could not read token owner: {}", e);
-//             Err(e.into())
-//         }
-//     }
-// }
 pub fn read_id(contract_address:&String,id:&i32)->Result<(String,String,String,String,String), Box<dyn std::error::Error>>{
     let c_path = "./contract/db";
     let contract_path = match rock_storage::open_db(c_path) {
@@ -1727,31 +1694,48 @@ pub fn call_contract_function(
     account_key: &String,
     private_key: &String,
     function_name: &String,
-    args_input_values:&String,
-    args_input:  &String,
-    args_output: &String,
+    args_input_values: &String,
 ) -> Result<(), Box<dyn std::error::Error>> {
-    let c_path = "./contract/db";
+
     let a_path = "./account/db";
+    let c_path = "./contract/db";
     let contract_path = match rock_storage::open_db(c_path) {
         Ok(path) => path,
         Err(e) => {
-            panic!("Failed to open database: {:?}", e);
+            // Handle the error, maybe log it, and then decide what to do next
+            panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
         }
-    };
+    };  
+    let mut contract = WasmContract::new(contract_address,&contract_path)?;
+    let engine = Engine::default();
+    let mut linker = Linker::new(&engine);
+    let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+    let mut store = Store::new(&engine, wasi);
+    let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address).unwrap_or_default();
+    let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+        .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
 
-    let mut contract = WasmContract::new("./sample721.wasm",&contract_path)?;
-    let contract_info = ContractInfo {
-        module_path: "./sample721.wasm".to_string(),
-        pub_key: contract_address.to_string(),
-    };
-    let the_memory = create_memory(contract.get_store())?;
+    let module = Module::new(&engine, &contract.wasm_file)?;
+    wasmtime_wasi::add_to_linker(&mut linker, |ctx| ctx)?;
+
+    let instance = linker.instantiate(&mut store, &module)?;
+
+    // Deserialize args_input_values from JSON string to Vec<Val>
+    let args: Vec<Val> = parse_args_input_values(args_input_values)?;
+
+    let the_memory = create_memory(&mut store)?;
     let _account_data = match account::get_account_no_swarm(&account_key) {
         Ok(Some(acc)) => acc,
         Ok(None) => return Err("Account not found".into()), // or handle this case as needed
         Err(e) => return Err(e.into()), // error while fetching account
     };
-    if args_input.len()>0 {
+    if args_input_values.len()>0 {
+        // let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&them) {
+        //     Ok(gas_cost) => gas_cost as u128, // Convert u64 to u128
+        //     Err(e) => {
+        //         return Err(e.into());
+        //     }
+        // };
         let txn = public_txn::Txn::create_and_prepare_transaction(
             TransactionType::ContractInteraction,
             account_key.to_string(),
@@ -1775,27 +1759,24 @@ pub fn call_contract_function(
                 };
     
                 let _ = public_txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
-    
-                let result = contract.call_function(
-                    &contract_path,
-                    &contract_info,
-                    account_key,
-                    &contract_address.to_string(),
-                    function_name,
-                    args_input_values,
-                    args_input,
-                    args_output
-                );
-    
-                match result {
-                    Ok(result_map) => {
-                        println!("Function {} result: {:?}", function_name, result_map);
-                        Ok(())
+                      // Call the specified contract function
+                let func = instance.get_func(&mut store, function_name)
+                    .ok_or_else(|| format!("Function '{}' not found", function_name))?;
+                let mut results = vec![Val::I32(0); func.ty(&store).results().len()];
+                if let Some(func) = instance.get_func(&mut store, function_name) {
+                    match func.call(&mut store, &args, &mut []) {
+                        Ok(_) => {
+                            println!("Function call '{}' was successful.", function_name);
+                            Ok(())
+                        },
+                        Err(e) => Err(e.into())
                     }
-                    Err(e) => {
-                        println!("Error calling function {}: {}", function_name, e);
-                        Err(e)
-                    }
+                } else {
+                    // Use anyhow::Error for convenience
+                    Err(anyhow::Error::new(std::io::Error::new(
+                        std::io::ErrorKind::NotFound,
+                        format!("Function {} not found in contract", function_name),
+                    )).into())
                 }
             }
             Err(txn_err) => {
@@ -1804,28 +1785,42 @@ pub fn call_contract_function(
             }
         }
     }else{
-        let result = contract.call_function(
-            &contract_path,
-            &contract_info,
-            account_key,
-            &contract_address.to_string(),
-            function_name,
-            args_input_values,
-            args_input,
-            args_output
-        );
+        Ok(())
+        // let result = contract.call_function(
+        //     &contract_path,
+        //     &contract_info,
+        //     account_key,
+        //     &contract_address.to_string(),
+        //     function_name,
+        //     args_input_values,
+        //     args_input,
+        //     args_output
+        // );
 
-        match result {
-            Ok(result_map) => {
-                println!("Function {} result: {:?}", function_name, result_map);
-                Ok(())
-            }
-            Err(e) => {
-                println!("Error calling function {}: {}", function_name, e);
-                Err(e)
-            }
+        // match result {
+        //     Ok(result_map) => {
+        //         println!("Function {} result: {:?}", function_name, result_map);
+        //         Ok(())
+        //     }
+        //     Err(e) => {
+        //         println!("Error calling function {}: {}", function_name, e);
+        //         Err(e)
+        //     }
+        // }
+    }
+}
+fn parse_args_input_values(args_input_values: &str) -> Result<Vec<Val>, Box<dyn std::error::Error>> {
+    let args_json: Vec<serde_json::Value> = serde_json::from_str(args_input_values)?;
+    let mut args = Vec::new();
+
+    for arg_json in args_json {
+        if let Some(i) = arg_json.as_i64() {
+            args.push(Val::I64(i));
+        } else {
+            return Err("Unsupported argument type".into());
         }
     }
+    Ok(args)
 }
 pub fn read_contract(contract_address: &String) -> Result<PublicSmartContract, Box<dyn std::error::Error>> {
     let c_path = "./contract/db";
