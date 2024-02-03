@@ -24,7 +24,7 @@ pub async fn tcp_client(message:Message) -> Result<(),io::Error> {
     let bytes_read = reader.read(&mut buf).await?;
 
     // Optionally convert the received bytes back to a string
-    let received_string = String::from_utf8_lossy(&buf[0..bytes_read]);
+    let _ = String::from_utf8_lossy(&buf[0..bytes_read]);
     // if message.title=="GENESIS"{
     //     println!("Received: {:?}", message);
     //     if let Some(publisher) = Publisher::get(){

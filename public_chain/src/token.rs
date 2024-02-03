@@ -1,13 +1,6 @@
-use secp256k1::{Secp256k1, PublicKey, SecretKey};
-use libp2p::{
-    swarm::{Swarm},
-};
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
-use secp256k1::Message;
 use secp256k1::Error as Secp256k1Error;
-use crate::p2p::AppBehaviour;
-use crate::rock_storage;
 
 // Token structure
 #[derive(Serialize, Deserialize, Debug, Clone)]
