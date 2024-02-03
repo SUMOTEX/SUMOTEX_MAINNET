@@ -220,28 +220,6 @@ fn sign_transaction(transaction_signed_data: Json<TransactionSignedInfo>) -> Jso
         }
     }
 }
-// // Route to handle RPC requests.
-#[post("/create-nft-contract", data = "<post_data>")]
-fn create_nft_contract(post_data: Json<ContractInfo>)-> Json<serde_json::Value> {
-    println!("create_nft_contract");
-    let call_address = &post_data.call_address;
-    let private_key = &post_data.private_key;
-    let contract_name = &post_data.contract_name;
-    let contract_symbol = &post_data.contract_symbol;
-    match smart_contract::create_erc721_contract_official(&call_address, &private_key,contract_name,contract_symbol) {
-        Ok((contract_address,txn_hash,gas_cost,body)) => {
-            let response_body = json!({"contract_address": contract_address,
-                                        "txn_hash":txn_hash,
-                                        "gas_cost":gas_cost,
-                                        });
-            Json(json!({"jsonrpc": "1.0", "result": response_body}))
-        },
-        Err(e) => {
-            error!("Error creating contract: {:?}", e);
-            Json(json!({"jsonrpc": "1.0", "result": "error"}))
-        }
-    }
-}
 
 #[post("/create-contract", data = "<post_data>")]
 fn create_contract(post_data: Json<GenericContractCreationInfo>)-> Json<serde_json::Value> {
@@ -619,7 +597,6 @@ pub async fn start_rpc() {
     //.manage(swarm) // Add the swarm to the application state
     .configure(rocket_config)
     .mount("/", routes![
-                        create_nft_contract,
                         create_transaction,
                         sign_transaction,
                         create_wallet,
