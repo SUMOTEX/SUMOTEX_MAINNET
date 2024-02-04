@@ -142,7 +142,7 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
         }
         Ok(())
     }
-pub fn handle_create_block_pbft(app: App, transactions: Vec<String>) -> Block {
+pub fn handle_create_block_pbft(app: App, transactions: Vec<String>,leader:&String) -> Block {
     let app = app.blocks.last().expect("There should be at least one block");
     let latest_block = app;
     let block = Block::new(
@@ -151,8 +151,7 @@ pub fn handle_create_block_pbft(app: App, transactions: Vec<String>) -> Block {
         transactions,
         None,
         None,
-        //TODO add verifier for block
-        [" ".to_string()].to_vec(),
+        [leader.to_string()].to_vec(),
     );
     block
 }
