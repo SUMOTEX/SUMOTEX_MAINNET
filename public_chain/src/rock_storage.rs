@@ -131,7 +131,7 @@ pub fn get_all_from_db(db: &DB) -> Vec<(String, String)> {
     let mut results = Vec::new();
 
     // Create an iterator over the whole database
-    let mut iter = db.iterator(IteratorMode::Start);
+    let  iter = db.iterator(IteratorMode::Start);
 
     for (key, value) in iter {
         let key_str = String::from_utf8(key.to_vec()).unwrap();

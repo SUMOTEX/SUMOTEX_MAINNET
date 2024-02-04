@@ -1,5 +1,5 @@
 use libp2p::{
-    swarm::{Swarm},
+    swarm::{Swarm}
 };
 
 use log::{error, info};
@@ -43,11 +43,6 @@ use rocksdb::SingleThreaded;
 type MySwarm = Swarm<AppBehaviour>;
 
 
-// enum CustomEvent {
-//     ReceivedRequest(PeerId, Vec<u8>),
-//     ReceivedResponse(PeerId, Vec<u8>),
-//     // ... potentially other custom events specific to your application
-// }
 
 pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::error::Error>>{
     let paths = [
@@ -153,6 +148,7 @@ async fn main() {
         "/ip4/0.0.0.0/tcp/8095",
         "/ip4/0.0.0.0/tcp/8096",
         "/ip4/0.0.0.0/tcp/8097",
+        "/ip4/0.0.0.0/tcp/8098",
         // ... other addresses
         ];
 
@@ -170,6 +166,7 @@ async fn main() {
         "127.0.0.1:8099",
         "127.0.0.1:8100",
         "127.0.0.1:8101",
+        "127.0.0.1:8102",
         ];
     //create storage
     remove_lock_file();

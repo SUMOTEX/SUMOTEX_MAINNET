@@ -217,63 +217,7 @@ impl WasmContract {
             module,
         })
     }
-    pub fn call(
-        &mut self,
-        contract_path:&DBWithThreadMode<SingleThreaded>,
-        contract_info: &ContractInfo,
-        wasm_params: &WasmParams,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let engine = Engine::default();
-        let mut linker = Linker::new(&engine);
-        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-        let mut store = Store::new(&engine, wasi);
-        
-        let module = Module::from_file(&engine, &contract_info.module_path)?;
-        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
-        let link = linker.instantiate(&mut store, &module)?;
-
-        let wasm_memory = link
-            .get_memory(&mut store, "memory")
-            .ok_or_else(|| "Failed to find `memory` export")?;
-
-        let data = wasm_memory.data(&mut store);
-        let byte_vector: Vec<u8> = data.to_vec();
-        let args_tuple = (
-            match &wasm_params.args[0] {
-                Val::I32(val) => *val,
-                _ => return Err("Failed to unwrap i32 from argument 1".into()),
-            },
-            match &wasm_params.args[1] {
-                Val::I32(val) => *val,
-                _ => return Err("Failed to unwrap i32 from argument 2".into()),
-            },
-            match &wasm_params.args[2] {
-                Val::I32(val) => *val,
-                _ => return Err("Failed to unwrap i32 from argument 3".into()),
-            },
-            match &wasm_params.args[3] {
-                Val::I32(val) => *val,
-                _ => return Err("Failed to unwrap i32 from argument 4".into()),
-            },
-            match &wasm_params.args[4] {
-                Val::I32(val) => *val,
-                _ => return Err("Failed to unwrap i32 from argument 5".into()),
-            },
-            match &wasm_params.args[5] {
-                Val::I64(val) => *val,
-                _ => return Err("Failed to unwrap i64 from argument 6".into()),
-            },
-        );
-        //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
-        let initialise_func = link.get_typed_func::<(i32, i32, i32, i32, i32, i64), ()>(&mut store, &wasm_params.name)?;
-        let result = initialise_func.call(&mut store,  args_tuple)?;
-
-        println!("Initialize: {:?}",result);
-        let updated_data = wasm_memory.data(&mut store);
-        let updated_byte_vector: Vec<u8> = updated_data.to_vec();
-        rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &updated_byte_vector)?;
-        Ok(())
-    }       
+    
     pub fn call_function(
         &mut self,
         contract_path: &DBWithThreadMode<SingleThreaded>,

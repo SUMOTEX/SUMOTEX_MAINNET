@@ -2,6 +2,7 @@ use libp2p::{
     core::upgrade,
     noise::{Keypair, NoiseConfig, X25519Spec},
     mplex,
+    identity::{self, ed25519},
     tcp::TokioTcpConfig,
     swarm::{Swarm,SwarmBuilder},
 };
@@ -9,7 +10,7 @@ use tokio::{
     sync::mpsc,
      spawn,
 };
-
+use std::{fs, io,path::Path,error::Error};
 use libp2p::Transport;
 use log::{ info};
 use crate::p2p::PEER_ID;
@@ -39,6 +40,31 @@ pub fn get_global_swarm_public_net() -> Arc<Mutex<Option<Swarm<AppBehaviour>>>> 
     Arc::clone(&GLOBAL_SWARM_PUBLIC_NET)
 }
 
+fn generate_and_save_key_if_not_exists(file_path: &str) ->  Result<(), Box<dyn Error>> {
+    // Check if the key file already exists
+    if Path::new(file_path).exists() {
+        // Read the secret key from the file
+        // let secret_key_bytes = fs::read(file_path)?;
+        // let secret_key = identity::ed25519::SecretKey::from_bytes(&mut secret_key_bytes)
+        //     .map_err(|_| io::Error::new(io::ErrorKind::InvalidData, "Unable to decode the secret key"))?;
+        // let public_key = ed25519::PublicKey::from(&secret_key);
+        // // Construct an Ed25519 keypair
+        // let keypair = ed25519::Keypair { secret: secret_key, public: public_key };
+        // Ok(IdentityKeypair::Ed25519(keypair))
+    } else {
+        // Generate a new Ed25519 keypair
+        let key = IdentityKeypair::generate_ed25519();
+        if let IdentityKeypair::Ed25519(ed_key) = &key {
+            // Extract the secret key bytes
+            let secret = ed_key.secret();
+            // Now you can take a reference to `secret` without it being dropped
+            let secret_key_bytes = secret.as_ref();
+            // Write the secret key bytes to the file
+            fs::write(file_path, secret_key_bytes)?;
+        }
+    }
+    return Ok(());
+}
 
 pub async fn create_public_swarm(app: App,storage:StoragePath) {
     // Create and initialize your swarm here
@@ -49,6 +75,7 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
         .into_authentic(&KEYS)
         .expect("can create auth keys");
     // Convert to AuthenticKeypair
+    let keypair = generate_and_save_key_if_not_exists("/Users/leowyennhan/Desktop/sumotex_mainnet/chain/public_chain/key_storage");
     let key_public_net = IdentityKeypair::generate_ed25519();
     let local_peer_id_net1 = PeerId::from(key_public_net.public());
 

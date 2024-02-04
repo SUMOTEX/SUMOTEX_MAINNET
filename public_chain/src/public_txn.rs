@@ -174,9 +174,6 @@ impl Txn {
             //let the_outcome:bool= verkle_tree.node_exists_with_root(hash_array,);
     }   
 
-    pub fn generate_fake_signature() -> Vec<u8> {
-        vec![0u8; 64] // Assuming a 64-byte signature for illustrative purposes.
-    }
     pub fn get_transaction_by_id(txn_hash: &str) -> Result<PublicTxn, Box<dyn std::error::Error>> {
         let db_path = "./transactions/db";
         let db_handle = rock_storage::open_db(db_path)?;
