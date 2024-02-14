@@ -2,6 +2,7 @@ use std::collections::HashMap;
 use libp2p::{
     swarm::{Swarm},
 };
+use log::{info, debug, error};
 use std::fs;
 use std::fs::File;
 use std::io::Write;
@@ -12,6 +13,7 @@ use serde_json::Value;
 use crate::p2p::AppBehaviour;
 use secp256k1::{Secp256k1, PublicKey, SecretKey};
 use crate::rock_storage;
+use std::error::Error;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
 use wasmtime::*;
@@ -79,8 +81,6 @@ struct FunctionInfo {
     inputs: Vec<Parameter>,
     outputs: Vec<Parameter>,
 }
-
-
 
 impl PublicSmartContract {
     // Creates a new PublicSmartContract
@@ -676,7 +676,7 @@ impl WasmContract {
             if owner_creds_memory_offset as usize + owner_creds_data_bytes as usize > memory_view.len() {
                 return Err("owner name data offset or length is out of the current memory bounds.".into());
             }
-        } // The scope of memory_view ends here
+        }
         
         let (owner_creds_ptr,owner_creds_len)= write_data_to_memory(&wasm_memory,owner_creds,owner_creds_memory_offset, &mut store)?;
 
@@ -830,61 +830,6 @@ impl WasmContract {
             },
         }        
     }
-    pub fn call_721(
-        &mut self,
-        contract_path:&DBWithThreadMode<SingleThreaded>,
-        contract_info: &ContractInfo,
-        wasm_params: &WasmParams,
-    ) -> Result<(), Box<dyn std::error::Error>> {
-        let engine = Engine::default();
-        let mut linker = Linker::new(&engine);
-        let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-        let mut store = Store::new(&engine, wasi);
-        
-        let module = Module::from_file(&engine, &contract_info.module_path)?;
-        wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
-        let link = linker.instantiate(&mut store, &module)?;
-
-        let wasm_memory = link
-            .get_memory(&mut store, "memory")
-            .ok_or_else(|| "Failed to find `memory` export")?;
-
-        let data = wasm_memory.data(&mut store);
-        let byte_vector: Vec<u8> = data.to_vec();
-
-        //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
-        let args_tuple = (
-            match &wasm_params.args[0] {
-                Val::I32(val) => *val,
-                _ => return Err("Failed to unwrap i32 from argument 1".into()),
-            },
-            match &wasm_params.args[1] {
-                Val::I32(val) => *val,
-                _ => return Err("Failed to unwrap i32 from argument 2".into()),
-            },
-            match &wasm_params.args[2] {
-                Val::I32(val) => *val,
-                _ => return Err("Failed to unwrap i32 from argument 3".into()),
-            },
-            match &wasm_params.args[3] {
-                Val::I32(val) => *val,
-                _ => return Err("Failed to unwrap i32 from argument 4".into()),
-            },
-        );   
-        let initialise_func = link.get_typed_func::<(i32, i32, i32, i32),()>(&mut store, &wasm_params.name)?;
-
-        let result = initialise_func.call(&mut store,  args_tuple)?;
-        //println!("Initialize: {:?}",result);
-        let updated_data = wasm_memory.data(&mut store);
-        let updated_byte_vector: Vec<u8> = updated_data.to_vec();
-        let mut file = File::open(contract_info.module_path.clone())?;
-        let mut wasm_contents = Vec::new();
-        file.read_to_end(&mut wasm_contents)?;
-        let contract = PublicSmartContract::new(contract_info.pub_key.clone(),wasm_contents,updated_byte_vector);
-        let serialized_contract = serde_json::to_vec(&contract)?;
-        rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &serialized_contract)?;
-        Ok(())
-    } 
     pub fn read_ipfs_token(
         &self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
@@ -1024,6 +969,33 @@ pub fn write_data_to_memory(memory: &Memory, input: &str, offset: i32, store: &m
 
     Ok((offset, input_bytes.len() as i32))
 }
+pub fn check_data_to_memory(
+    memory: &Memory, 
+    input: &str, 
+    offset: i32, 
+    store: &mut Store<WasiCtx>
+) -> Result<(i32, i32, u64), Box<dyn std::error::Error>> {
+    let input_bytes = input.as_bytes();
+    // Calculate the end position where the input bytes would be written
+    let end_position = offset as usize + input_bytes.len();
+
+    // Retrieve the current size of the WebAssembly memory in bytes
+    // Use a reference to `store` for `data_size` to avoid moving `store`
+    let current_memory_size_bytes = memory.data_size(&*store);
+
+
+    // Calculate the current number of pages
+    let current_pages = memory.size(&*store) as u64; // Cast to u64 to match types explicitly if needed
+
+    // Check if the end position exceeds the current memory size in bytes
+    if end_position > current_memory_size_bytes {
+        let required_pages = ((end_position + (65536 - 1)) / 65536) as u64;
+        let additional_pages_needed = required_pages.saturating_sub(current_pages);
+        Ok((offset, input_bytes.len() as i32, required_pages as u64)) // Cast to u32, assuming it's safe to do so
+    } else {
+        Ok((offset, input_bytes.len() as i32, 0))
+    }
+}
 
 fn val_to_param_value(val: Val) -> ParamValue {
     match val {
@@ -1098,7 +1070,6 @@ pub fn create_contract_official(
             wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
             let link = linker.instantiate(&mut store, &module)?;
 
-
             for export in module.exports() {
                 if let ExternType::Func(func_type) = export.ty() {
                     println!("Function Name: {}", export.name());
@@ -1108,21 +1079,19 @@ pub fn create_contract_official(
                     println!("Function Signature: {:?}", func_type);
                 }
             }
-            println!("Contract");
             let the_memory = link.get_memory(&mut store, "memory")
             .ok_or_else(|| "Failed to find `memory` export")?;
             let owner_memory_offset = 0;
             let (name_ptr, name_len) = write_data_to_memory(&the_memory, contract_name,owner_memory_offset,&mut store)?;
             let ipfs_memory_offset = name_ptr + name_len;
             let (symbol_ptr, symbol_len) = write_data_to_memory(&the_memory, contract_symbol, ipfs_memory_offset,&mut store)?;
-        
-            let wasm_params = WasmParams {                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                    
+            let wasm_params = WasmParams {          
                 name: "initialize".to_string(),
                 args: vec![
                     Val::I32(name_ptr as i32),
                     Val::I32(name_len as i32),
                     Val::I32(symbol_ptr as i32),
-                    Val::I32(symbol_len as i32),                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                                          
+                    Val::I32(symbol_len as i32),                                                                                                                                                                                                                                                     
                 ],
             };
             let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&wasm_data) {
@@ -1281,6 +1250,373 @@ pub fn mint_token_official(contract_address:&String,
         }
     }
 }
+
+pub fn read_id(contract_address:&String,id:&i32)->Result<(String,String,String,String,String), Box<dyn Error>>{
+    let c_path = "./contract/db";
+    let contract_path = match rock_storage::open_db(c_path) {
+        Ok(path) => path,
+        Err(e) => {
+            // Handle the error, maybe log it, and then decide what to do next
+            panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+        }
+    };
+    let engine = Engine::default();
+    let mut linker = Linker::new(&engine);
+    let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+    let mut store = Store::new(&engine, wasi);
+    let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address).unwrap_or_default();
+    let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+        .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+    let module = Module::new(&engine, &contract.wasm_file)
+    .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
+    let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+    // Assuming `module` is successfully created as shown in your provided code.
+    // for export in module.exports() {
+    //     if let ExternType::Func(func_type) = export.ty() {
+    //         println!("Function Name: {}", export.name());
+    //         // If you want to print the function signature as well, you can do so here.
+    //         // This is optional and can be complex because you'll need to interpret
+    //         // the types (e.g., parameters and return types).
+    //         println!("Function Signature: {:?}", func_type);
+    //     }
+    // }
+
+    println!("Attempting to instantiate the WebAssembly module...");
+    wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
+    let link = linker.instantiate(&mut store, &module)?;
+    // ... (Your operations using token_instance)
+
+    let wasm_memory = link.get_memory(&mut store, "memory")
+        .ok_or_else(|| "Failed to find `memory` export")?;
+    let saved_data = contract.wasm_memory;
+    // 2.2. Set this memory state into the WebAssembly module's memory.
+    let current_memory_size = wasm_memory.data_size(&store); // Current memory size in bytes
+    // Convert `current_memory_size` from `usize` to `u64` for the calculation.
+    let current_memory_size_pages = (current_memory_size as u64) / (64 * 1024);
+    let required_pages = (saved_data.len() as u64 + (64 * 1024 - 1)) / (64 * 1024);
+    let additional_pages_needed = if required_pages > current_memory_size_pages {
+        required_pages - current_memory_size_pages
+    } else {
+        0  // No additional pages are needed.
+    };
+
+    if additional_pages_needed > 0 {
+        wasm_memory.grow(&mut store, additional_pages_needed as u64).map_err(|_| "Failed to grow memory")?;
+    }
+
+    if saved_data.len() > wasm_memory.data(&mut store).len() {
+        return Err("Saved data is larger than the available WASM memory.".into());
+    }
+    wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data); 
+    let memory_data = wasm_memory.data(&store);
+    // // Assuming the memory content is ASCII text
+    // if let Ok(text) = std::str::from_utf8(&memory_data) {
+    //     println!("Memory Contents: {}", text);
+    // } else {
+    //     // If the memory contains binary data, you can print it as bytes
+    //     println!("Memory Contents (as bytes)");
+    // }
+    let ipfs_ptr_call = link.get_typed_func::<i32,i32>(&mut store, "get_ipfs_ptr")?;
+    let ipfs_ptr_result = ipfs_ptr_call.call(&mut store,  *id)
+        .map_err(|e| {
+            println!("Error Reading IPFS ptr data: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) // Convert the error to a Box<dyn std::error::Error>
+        })?;
+    let ipfs_len_call= link.get_typed_func::<i32,i32>(&mut store, "get_ipfs_len")?;
+    let ipfs_len_result = ipfs_len_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error IPFS len data: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) // Convert the error to a Box<dyn std::error::Error>
+        })?;
+
+    let get_owner_len_call = link.get_typed_func::<i32, i64>(&mut store, "get_owner_len")?;
+    let owner_len_result = get_owner_len_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_len: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let get_owner_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_ptr")?;
+    let owner_ptr_result = get_owner_ptr_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_ptr: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?; 
+
+    let get_owner_email_len_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_email_len")?;
+    let owner_email_len_result = get_owner_email_len_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_email_len_call: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let get_owner_email_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_email_ptr")?;
+    let owner_email_ptr_result = get_owner_email_ptr_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_email_ptr_call: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let get_owner_creds_len_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_creds_len")?;
+    let owner_creds_len_result = get_owner_creds_len_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_creds_len_call: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let get_owner_creds_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_creds_ptr")?;
+    let owner_creds_ptr_result = get_owner_creds_ptr_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_creds_len_call: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let get_owner_name_len_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_name_len")?;
+    let owner_name_len_result = get_owner_name_len_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling get_owner_name_len_call: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    let get_owner_name_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_name_ptr")?;
+    let owner_name_ptr_result = get_owner_name_ptr_call.call(&mut store, *id)
+        .map_err(|e| {
+            println!("Error calling name: {:?}", e);
+            Box::<dyn std::error::Error>::from(e)
+        })?;
+    //Second section
+    let ipfs_start = ipfs_ptr_result as usize;
+    let ipfs_end = ipfs_start + ipfs_len_result as usize;
+    let ipfs_data_bytes = wasm_memory.data(&store)[ipfs_start..ipfs_end].to_vec();
+    let ipfs_data_string = String::from_utf8(ipfs_data_bytes)
+        .map_err(|e| {
+            println!("Error converting ipfs data bytes to String: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
+        })?;
+    // Use owner_ptr_result and owner_len_result to access the owner data in Wasm memory
+    let owner_data_start = owner_ptr_result as usize;
+    let owner_data_end = owner_data_start + owner_len_result as usize;
+    let owner_data_bytes = wasm_memory.data(&store)[owner_data_start..owner_data_end].to_vec();
+    let owner_data_string = String::from_utf8(owner_data_bytes)
+        .map_err(|e| {
+            println!("Error converting owner data bytes to String: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
+        })?;
+
+    
+    // Do similar for `get_owner_of_ptr` and `get_owner_of_len` if needed
+    let owner_email_data_start = owner_email_ptr_result as usize;
+    let owner_email_data_end = owner_email_data_start + owner_email_len_result as usize;
+    let owner_email_data_bytes = wasm_memory.data(&store)[owner_email_data_start..owner_email_data_end].to_vec();
+    let owner_email_data_string = String::from_utf8(owner_email_data_bytes)
+        .map_err(|e| {
+            println!("Error converting owner data bytes to String: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
+        })?;
+
+    //Name section
+    let owner_name_data_start = owner_name_ptr_result as usize;
+    let owner_name_data_end = owner_name_data_start + owner_name_len_result as usize;
+    let owner_name_data_bytes = wasm_memory.data(&store)[owner_name_data_start..owner_name_data_end].to_vec();
+    let owner_name_data_string = String::from_utf8(owner_name_data_bytes)
+        .map_err(|e| {
+            println!("Error converting owner name bytes to String: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
+        })?;
+
+    //Creds section
+    let owner_creds_data_start = owner_creds_ptr_result as usize;
+    let owner_creds_data_end = owner_creds_data_start + owner_creds_len_result as usize;
+    let owner_creds_data_bytes = wasm_memory.data(&store)[owner_creds_data_start..owner_creds_data_end].to_vec();
+    let owner_creds_data_string = String::from_utf8(owner_creds_data_bytes)
+        .map_err(|e| {
+            println!("Error converting owner creds bytes to String: {:?}", e);
+            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
+        })?;
+    
+    // Finally, return the collected data
+    Ok((owner_data_string, ipfs_data_string,owner_name_data_string,owner_creds_data_string, owner_email_data_string))
+
+}
+
+pub fn call_contract_function(
+    contract_address: &String,
+    account_key: &String,
+    private_key: &String,
+    function_name: &String,
+    args_input_values: &[Value],
+) -> Result<String, Box<dyn std::error::Error>> {
+    let a_path = "./account/db";
+    let c_path = "./contract/db";
+    let contract_path = match rock_storage::open_db(c_path) {
+        Ok(path) => path,
+        Err(e) => {
+            // Handle the error, maybe log it, and then decide what to do next
+            panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+        }
+    };  
+    let _account_data = match account::get_account_no_swarm(&account_key) {
+        Ok(Some(acc)) => acc,
+        Ok(None) => return Err("Account not found".into()), // or handle this case as needed
+        Err(e) => return Err(e.into()), // error while fetching account
+    };
+    //Initialize
+    let engine = Engine::default();
+    let mut linker = Linker::new(&engine);
+    let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+    let mut store = Store::new(&engine, wasi);
+    let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address).unwrap_or_default();
+    let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+        .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+    let module = Module::new(&engine, &contract.wasm_file)?;
+    wasmtime_wasi::add_to_linker(&mut linker, |ctx| ctx)?;
+    let instance = linker.instantiate(&mut store, &module)?;
+
+    let wasm_memory = instance.get_memory(&mut store, "memory")
+        .ok_or_else(|| "Failed to find `memory` export")?;
+
+    println!("WASM Memory {:?}", wasm_memory);
+    let saved_data = contract.wasm_memory;
+    let saved_data_length = saved_data.len() as u64;
+    let current_memory_size_bytes = wasm_memory.data_size(&store) as u64;
+    println!("Current memory size before any operation: {} bytes", current_memory_size_bytes);
+    if saved_data.len() > wasm_memory.data_size(&store) {
+        // If not, calculate how many additional memory pages are needed
+        // Calculate the number of additional pages needed, rounding up
+        let additional_pages_needed = ((saved_data_length + (64 * 1024 - 1)) / (64 * 1024)) - (current_memory_size_bytes / (64 * 1024));
+        // Attempt to grow the WebAssembly memory by the required number of pages
+        if saved_data_length > current_memory_size_bytes {
+            wasm_memory.grow(&mut store, additional_pages_needed).map_err(|_| "Failed to grow memory")?;
+        }
+    }
+    println!("POST MEMORY GROWING");
+    // After ensuring the memory is large enough, copy the saved data into the WebAssembly memory within bounds
+    wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
+    let the_data_offset = saved_data.len() as i32;
+    let mut current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
+    println!("POST current_memory_size_bytes GROWING");
+    let func = instance.get_func(&mut store, function_name)
+        .ok_or_else(|| format!("Function '{}' not found", function_name))?;
+
+    let (args,required_memory_size_bytes,additional_pages_bytes) = args_input_values_to_wasm_vals(&instance,&mut store,&wasm_memory,the_data_offset,args_input_values)?;
+    wasm_memory.grow(&mut store, additional_pages_bytes as u64)
+    .map_err(|_| "Failed to grow memory")?;
+
+    println!("Calling contract function '{}' with required memory size: {} bytes, additional pages bytes: {} bytes", function_name, required_memory_size_bytes,additional_pages_bytes);
+    println!("New memory size after attempting growth: {} bytes", wasm_memory.data_size(&store));
+    let function_cost = 1000; 
+
+    // Call the specified contract function
+    let mut results = vec![Val::I32(0); func.ty(&store).results().len()];
+    if let Some(func) = instance.get_func(&mut store, function_name) {
+        match func.call(&mut store, &args, &mut results) {
+            Ok(_) => {
+                let updated_data = wasm_memory.data(&mut store).to_vec();
+                let updated_byte_vector = updated_data.clone();
+                // Calculate the gas cost after converting memory_bytes_used to u64
+                let the_gas_cost: u128 = gas_calculator::calculate_gas_for_contract_interaction(required_memory_size_bytes as u64, function_cost) as u128;
+                // Create and prepare the transaction
+                let (txn_hash, _gas_cost, _new_txn) = public_txn::Txn::create_and_prepare_transaction(
+                    TransactionType::ContractInteraction,
+                    account_key.to_string(),
+                    contract_address.to_string(),
+                    the_gas_cost,
+                )?;
+                let private_key_bytes = match hex::decode(&private_key) {
+                    Ok(bytes) => bytes,
+                    Err(e) => {
+                        panic!("Failed to decode private key: {:?}", e);
+                    }
+                };
+                let the_official_private_key = match SecretKey::from_slice(&private_key_bytes) {
+                    Ok(key) => key,
+                    Err(e) => {
+                        panic!("Failed to create SecretKey: {:?}", e);
+                    }
+                };
+                let _ = public_txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
+                contract.wasm_memory = wasm_memory.data(&mut store).to_vec(); // Update this only if the WASM memory state is relevant
+                let updated_serialized_contract = serde_json::to_vec(&contract)?;
+                rock_storage::put_to_db(&contract_path, &contract_address, &updated_serialized_contract)?;      
+                let result_json = results_to_json(&results);              
+                Ok(result_json?)
+            },
+            Err(e) => Err(e.into())
+        }
+    } else {
+        // Use anyhow::Error for convenience
+        Err(anyhow::Error::new(std::io::Error::new(
+            std::io::ErrorKind::NotFound,
+            format!("Function {} not found in contract", function_name),
+        )).into())
+    }  
+}
+fn args_input_values_to_wasm_vals(
+    instance: &Instance,
+    store: &mut Store<WasiCtx>,
+    wasm_memory: &Memory,
+    data_offset: i32,
+    args_input_values: &[Value],
+) -> Result<(Vec<Val>, i32,u64), String> {
+    let mut wasm_vals = Vec::new();
+    let mut new_data_offset = data_offset;
+    let mut new_pages_required =0u64;
+    for value in args_input_values {
+        match value {
+            Value::Number(num) => {
+                if let Some(val) = num.as_f64() {
+                    wasm_vals.push(Val::I32(val as i32));
+                } else {
+                    return Err("Failed to convert number to f64".into());
+                }
+            },
+            Value::String(val) => {
+                match check_data_to_memory(wasm_memory, &val, new_data_offset,store) {
+                    Ok((val_ptr, val_len,additional_page)) => {
+                        new_data_offset += val_len; // Update new_data_offset for the next iteration
+                        // Check if memory needs to be grown
+                        new_pages_required = additional_page;
+                        wasm_vals.push(Val::I32(val_ptr)); // Push pointer
+                        wasm_vals.push(Val::I32(val_len)); // Push length
+                    },
+                    Err(e) => return Err(format!("Failed to write data to memory: {}", e)),
+                }
+            },
+            Value::Null => {}, // Handle Null case
+            Value::Bool(val) => {}, // Handle Bool case
+            Value::Array(_) => {}, // Handle Array case
+            _ => {}, // Handle any other cases here
+        }
+    }
+    Ok((wasm_vals, new_data_offset,new_pages_required))
+}
+
+
+// Converts the function output values to a JSON representation
+fn results_to_json(results: &[Val]) -> Result<String> {
+    // Example implementation, needs to be customized based on actual output types
+    let output: Vec<Value> = results.iter().map(|val| match val {
+        Val::I32(i) => Value::Number((*i).into()),
+        // Handle other Val types as needed
+        _ => Value::Null, // Placeholder for unsupported types
+    }).collect();
+
+    serde_json::to_string(&output).context("Serializing output values to JSON failed")
+}
+
+pub fn read_contract(contract_address: &String) -> Result<PublicSmartContract, Box<dyn std::error::Error>> {
+    let c_path = "./contract/db";
+    let contract_path = rock_storage::open_db(c_path)
+        .map_err(|e| format!("Failed to open database: {:?}", e))?;
+
+    let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address)
+        .ok_or_else(|| format!("Contract not found for address: {:?}", contract_address))?;
+
+    if serialized_contract.is_empty() {
+        return Err("Contract data is empty".into());
+    }
+
+    let contract: PublicSmartContract = serde_json::from_slice(&serialized_contract)
+        .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
+
+    Ok(contract)
+}
+
+
 // pub fn mint_token_official(contract_address:&String,
 //                             owner_address:&String,
 //                             private_key:&String,
@@ -1506,329 +1842,3 @@ pub fn mint_token_official(contract_address:&String,
 //         }
 //     }
     
-pub fn read_id(contract_address:&String,id:&i32)->Result<(String,String,String,String,String), Box<dyn std::error::Error>>{
-    let c_path = "./contract/db";
-    let contract_path = match rock_storage::open_db(c_path) {
-        Ok(path) => path,
-        Err(e) => {
-            // Handle the error, maybe log it, and then decide what to do next
-            panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
-        }
-    };
-    let engine = Engine::default();
-    let mut linker = Linker::new(&engine);
-    let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-    let mut store = Store::new(&engine, wasi);
-    let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address).unwrap_or_default();
-    let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
-        .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
-    let module = Module::new(&engine, &contract.wasm_file)
-    .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
-    let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-    let mut store = Store::new(&engine, wasi);
-    // Assuming `module` is successfully created as shown in your provided code.
-    // for export in module.exports() {
-    //     if let ExternType::Func(func_type) = export.ty() {
-    //         println!("Function Name: {}", export.name());
-    //         // If you want to print the function signature as well, you can do so here.
-    //         // This is optional and can be complex because you'll need to interpret
-    //         // the types (e.g., parameters and return types).
-    //         println!("Function Signature: {:?}", func_type);
-    //     }
-    // }
-
-    println!("Attempting to instantiate the WebAssembly module...");
-    wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
-    let link = linker.instantiate(&mut store, &module)?;
-    // ... (Your operations using token_instance)
-
-    let wasm_memory = link.get_memory(&mut store, "memory")
-        .ok_or_else(|| "Failed to find `memory` export")?;
-    let saved_data = contract.wasm_memory;
-    // 2.2. Set this memory state into the WebAssembly module's memory.
-    let current_memory_size = wasm_memory.data_size(&store); // Current memory size in bytes
-    // Convert `current_memory_size` from `usize` to `u64` for the calculation.
-    let current_memory_size_pages = (current_memory_size as u64) / (64 * 1024);
-    let required_pages = (saved_data.len() as u64 + (64 * 1024 - 1)) / (64 * 1024);
-    let additional_pages_needed = if required_pages > current_memory_size_pages {
-        required_pages - current_memory_size_pages
-    } else {
-        0  // No additional pages are needed.
-    };
-
-    if additional_pages_needed > 0 {
-        wasm_memory.grow(&mut store, additional_pages_needed as u64).map_err(|_| "Failed to grow memory")?;
-    }
-
-    if saved_data.len() > wasm_memory.data(&mut store).len() {
-        return Err("Saved data is larger than the available WASM memory.".into());
-    }
-    wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data); 
-    let memory_data = wasm_memory.data(&store);
-    // // Assuming the memory content is ASCII text
-    // if let Ok(text) = std::str::from_utf8(&memory_data) {
-    //     println!("Memory Contents: {}", text);
-    // } else {
-    //     // If the memory contains binary data, you can print it as bytes
-    //     println!("Memory Contents (as bytes)");
-    // }
-    let ipfs_ptr_call = link.get_typed_func::<i32,i32>(&mut store, "get_ipfs_ptr")?;
-    let ipfs_ptr_result = ipfs_ptr_call.call(&mut store,  *id)
-        .map_err(|e| {
-            println!("Error Reading IPFS ptr data: {:?}", e);
-            Box::<dyn std::error::Error>::from(e) // Convert the error to a Box<dyn std::error::Error>
-        })?;
-    let ipfs_len_call= link.get_typed_func::<i32,i32>(&mut store, "get_ipfs_len")?;
-    let ipfs_len_result = ipfs_len_call.call(&mut store, *id)
-        .map_err(|e| {
-            println!("Error IPFS len data: {:?}", e);
-            Box::<dyn std::error::Error>::from(e) // Convert the error to a Box<dyn std::error::Error>
-        })?;
-
-    let get_owner_len_call = link.get_typed_func::<i32, i64>(&mut store, "get_owner_len")?;
-    let owner_len_result = get_owner_len_call.call(&mut store, *id)
-        .map_err(|e| {
-            println!("Error calling get_owner_len: {:?}", e);
-            Box::<dyn std::error::Error>::from(e)
-        })?;
-    let get_owner_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_ptr")?;
-    let owner_ptr_result = get_owner_ptr_call.call(&mut store, *id)
-        .map_err(|e| {
-            println!("Error calling get_owner_ptr: {:?}", e);
-            Box::<dyn std::error::Error>::from(e)
-        })?; 
-
-    let get_owner_email_len_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_email_len")?;
-    let owner_email_len_result = get_owner_email_len_call.call(&mut store, *id)
-        .map_err(|e| {
-            println!("Error calling get_owner_email_len_call: {:?}", e);
-            Box::<dyn std::error::Error>::from(e)
-        })?;
-    let get_owner_email_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_email_ptr")?;
-    let owner_email_ptr_result = get_owner_email_ptr_call.call(&mut store, *id)
-        .map_err(|e| {
-            println!("Error calling get_owner_email_ptr_call: {:?}", e);
-            Box::<dyn std::error::Error>::from(e)
-        })?;
-    let get_owner_creds_len_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_creds_len")?;
-    let owner_creds_len_result = get_owner_creds_len_call.call(&mut store, *id)
-        .map_err(|e| {
-            println!("Error calling get_owner_creds_len_call: {:?}", e);
-            Box::<dyn std::error::Error>::from(e)
-        })?;
-    let get_owner_creds_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_creds_ptr")?;
-    let owner_creds_ptr_result = get_owner_creds_ptr_call.call(&mut store, *id)
-        .map_err(|e| {
-            println!("Error calling get_owner_creds_len_call: {:?}", e);
-            Box::<dyn std::error::Error>::from(e)
-        })?;
-    let get_owner_name_len_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_name_len")?;
-    let owner_name_len_result = get_owner_name_len_call.call(&mut store, *id)
-        .map_err(|e| {
-            println!("Error calling get_owner_name_len_call: {:?}", e);
-            Box::<dyn std::error::Error>::from(e)
-        })?;
-    let get_owner_name_ptr_call = link.get_typed_func::<i32, i32>(&mut store, "get_owner_name_ptr")?;
-    let owner_name_ptr_result = get_owner_name_ptr_call.call(&mut store, *id)
-        .map_err(|e| {
-            println!("Error calling name: {:?}", e);
-            Box::<dyn std::error::Error>::from(e)
-        })?;
-    //Second section
-    let ipfs_start = ipfs_ptr_result as usize;
-    let ipfs_end = ipfs_start + ipfs_len_result as usize;
-    let ipfs_data_bytes = wasm_memory.data(&store)[ipfs_start..ipfs_end].to_vec();
-    let ipfs_data_string = String::from_utf8(ipfs_data_bytes)
-        .map_err(|e| {
-            println!("Error converting ipfs data bytes to String: {:?}", e);
-            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
-        })?;
-    // Use owner_ptr_result and owner_len_result to access the owner data in Wasm memory
-    let owner_data_start = owner_ptr_result as usize;
-    let owner_data_end = owner_data_start + owner_len_result as usize;
-    let owner_data_bytes = wasm_memory.data(&store)[owner_data_start..owner_data_end].to_vec();
-    let owner_data_string = String::from_utf8(owner_data_bytes)
-        .map_err(|e| {
-            println!("Error converting owner data bytes to String: {:?}", e);
-            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
-        })?;
-
-    
-    // Do similar for `get_owner_of_ptr` and `get_owner_of_len` if needed
-    let owner_email_data_start = owner_email_ptr_result as usize;
-    let owner_email_data_end = owner_email_data_start + owner_email_len_result as usize;
-    let owner_email_data_bytes = wasm_memory.data(&store)[owner_email_data_start..owner_email_data_end].to_vec();
-    let owner_email_data_string = String::from_utf8(owner_email_data_bytes)
-        .map_err(|e| {
-            println!("Error converting owner data bytes to String: {:?}", e);
-            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
-        })?;
-
-    //Name section
-    let owner_name_data_start = owner_name_ptr_result as usize;
-    let owner_name_data_end = owner_name_data_start + owner_name_len_result as usize;
-    let owner_name_data_bytes = wasm_memory.data(&store)[owner_name_data_start..owner_name_data_end].to_vec();
-    let owner_name_data_string = String::from_utf8(owner_name_data_bytes)
-        .map_err(|e| {
-            println!("Error converting owner name bytes to String: {:?}", e);
-            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
-        })?;
-
-    //Creds section
-    let owner_creds_data_start = owner_creds_ptr_result as usize;
-    let owner_creds_data_end = owner_creds_data_start + owner_creds_len_result as usize;
-    let owner_creds_data_bytes = wasm_memory.data(&store)[owner_creds_data_start..owner_creds_data_end].to_vec();
-    let owner_creds_data_string = String::from_utf8(owner_creds_data_bytes)
-        .map_err(|e| {
-            println!("Error converting owner creds bytes to String: {:?}", e);
-            Box::<dyn std::error::Error>::from(e) as Box<dyn std::error::Error> // Explicitly cast the error
-        })?;
-    
-    // Finally, return the collected data
-    Ok((owner_data_string, ipfs_data_string,owner_name_data_string,owner_creds_data_string, owner_email_data_string))
-
-}
-
-pub fn call_contract_function(
-    contract_address: &String,
-    account_key: &String,
-    private_key: &String,
-    function_name: &String,
-    args_input_values: &String,
-) -> Result<String, Box<dyn std::error::Error>> {
-    let a_path = "./account/db";
-    let c_path = "./contract/db";
-    let contract_path = match rock_storage::open_db(c_path) {
-        Ok(path) => path,
-        Err(e) => {
-            // Handle the error, maybe log it, and then decide what to do next
-            panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
-        }
-    };  
-    let _account_data = match account::get_account_no_swarm(&account_key) {
-        Ok(Some(acc)) => acc,
-        Ok(None) => return Err("Account not found".into()), // or handle this case as needed
-        Err(e) => return Err(e.into()), // error while fetching account
-    };
-    //Initialize
-    let engine = Engine::default();
-    let mut linker = Linker::new(&engine);
-    let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-    let mut store = Store::new(&engine, wasi);
-    let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address).unwrap_or_default();
-    let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
-        .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
-
-    let module = Module::new(&engine, &contract.wasm_file)?;
-    wasmtime_wasi::add_to_linker(&mut linker, |ctx| ctx)?;
-    let link = linker.instantiate(&mut store, &module)?;
-    let instance = linker.instantiate(&mut store, &module)?;
-
-    // Deserialize args_input_values from JSON string to Vec<Val>
-    let args: Vec<Val> = parse_args_input_values(args_input_values)?;
-    let the_memory = create_memory(&mut store)?;
-
-    // Record the initial memory size in pages (WebAssembly memory is measured in 64KiB pages)
-    let memory_before = instance.get_memory(&mut store, "memory").expect("Memory export not found");
-    let initial_memory_pages = memory_before.size(&store);
-    let initial_memory_size = memory_before.data_size(&store);
-
-    let func = instance.get_func(&mut store, function_name)
-        .ok_or_else(|| format!("Function '{}' not found", function_name))?;
-
-    let function_cost = 1000; 
-
-    // Call the specified contract function
-    let mut results = vec![Val::I32(0); func.ty(&store).results().len()];
-    if let Some(func) = instance.get_func(&mut store, function_name) {
-        match func.call(&mut store, &args, &mut results) {
-            Ok(_) => {
-                let memory_after = instance.get_memory(&mut store, "memory").expect("Memory export not found after call");
-                let final_memory_size = memory_after.size(&store);
-                let memory_bytes_used = final_memory_size as u64 - initial_memory_pages as u64; // Convert initial_memory_pages to u64
-                let wasm_memory = link.get_memory(&mut store, "memory")
-                    .ok_or_else(|| "Failed to find `memory` export")?;
-                let updated_data = wasm_memory.data(&mut store).to_vec();
-                let updated_byte_vector = updated_data.clone();
-                
-                // Calculate the gas cost after converting memory_bytes_used to u64
-                let the_gas_cost: u128 = gas_calculator::calculate_gas_for_contract_interaction(memory_bytes_used as u64, function_cost) as u128;
-                
-                // Create and prepare the transaction
-                let (txn_hash, _gas_cost, _new_txn) = public_txn::Txn::create_and_prepare_transaction(
-                    TransactionType::ContractInteraction,
-                    account_key.to_string(),
-                    contract_address.to_string(),
-                    the_gas_cost,
-                )?;
-                let private_key_bytes = match hex::decode(&private_key) {
-                    Ok(bytes) => bytes,
-                    Err(e) => {
-                        panic!("Failed to decode private key: {:?}", e);
-                    }
-                };
-                let the_official_private_key = match SecretKey::from_slice(&private_key_bytes) {
-                    Ok(key) => key,
-                    Err(e) => {
-                        panic!("Failed to create SecretKey: {:?}", e);
-                    }
-                };
-                let _ = public_txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
-                contract.wasm_memory = wasm_memory.data(&mut store).to_vec(); // Update this only if the WASM memory state is relevant
-                let updated_serialized_contract = serde_json::to_vec(&contract)?;
-                rock_storage::put_to_db(&contract_path, &contract_address, &updated_serialized_contract)?;      
-                let result_json = results_to_json(&results);              
-                Ok(result_json?)
-            },
-            Err(e) => Err(e.into())
-        }
-    } else {
-        // Use anyhow::Error for convenience
-        Err(anyhow::Error::new(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("Function {} not found in contract", function_name),
-        )).into())
-    }
-        
-}
-// Converts the function output values to a JSON representation
-fn results_to_json(results: &[Val]) -> Result<String> {
-    // Example implementation, needs to be customized based on actual output types
-    let output: Vec<Value> = results.iter().map(|val| match val {
-        Val::I32(i) => Value::Number((*i).into()),
-        // Handle other Val types as needed
-        _ => Value::Null, // Placeholder for unsupported types
-    }).collect();
-
-    serde_json::to_string(&output).context("Serializing output values to JSON failed")
-}
-fn parse_args_input_values(args_input_values: &str) -> Result<Vec<Val>, Box<dyn std::error::Error>> {
-    let args_json: Vec<serde_json::Value> = serde_json::from_str(args_input_values)?;
-    let mut args = Vec::new();
-
-    for arg_json in args_json {
-        if let Some(i) = arg_json.as_i64() {
-            args.push(Val::I64(i));
-        } else {
-            return Err("Unsupported argument type".into());
-        }
-    }
-    Ok(args)
-}
-pub fn read_contract(contract_address: &String) -> Result<PublicSmartContract, Box<dyn std::error::Error>> {
-    let c_path = "./contract/db";
-    let contract_path = rock_storage::open_db(c_path)
-        .map_err(|e| format!("Failed to open database: {:?}", e))?;
-
-    let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address)
-        .ok_or_else(|| format!("Contract not found for address: {:?}", contract_address))?;
-
-    if serialized_contract.is_empty() {
-        return Err("Contract data is empty".into());
-    }
-
-    let contract: PublicSmartContract = serde_json::from_slice(&serialized_contract)
-        .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
-
-    Ok(contract)
-}

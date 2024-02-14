@@ -56,7 +56,7 @@ pub struct GenericContractInfo {
     caller_address:String,
     private_key: String,
     function_name:String,
-    args_input_values:String,
+    args_input_values:Vec<serde_json::Value>,
 }
 #[derive(serde::Deserialize, Debug)]
 pub struct ReadContractInfo {
