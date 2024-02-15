@@ -1469,11 +1469,9 @@ pub fn call_contract_function(
     let wasm_memory = instance.get_memory(&mut store, "memory")
         .ok_or_else(|| "Failed to find `memory` export")?;
 
-    println!("WASM Memory {:?}", wasm_memory);
     let saved_data = contract.wasm_memory;
     let saved_data_length = saved_data.len() as u64;
     let current_memory_size_bytes = wasm_memory.data_size(&store) as u64;
-    println!("Current memory size before any operation: {} bytes", current_memory_size_bytes);
     if saved_data.len() > wasm_memory.data_size(&store) {
         // If not, calculate how many additional memory pages are needed
         // Calculate the number of additional pages needed, rounding up
@@ -1483,12 +1481,10 @@ pub fn call_contract_function(
             wasm_memory.grow(&mut store, additional_pages_needed).map_err(|_| "Failed to grow memory")?;
         }
     }
-    println!("POST MEMORY GROWING");
     // After ensuring the memory is large enough, copy the saved data into the WebAssembly memory within bounds
     wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
     let the_data_offset = saved_data.len() as i32;
     let mut current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
-    println!("POST current_memory_size_bytes GROWING");
     let func = instance.get_func(&mut store, function_name)
         .ok_or_else(|| format!("Function '{}' not found", function_name))?;
 
@@ -1497,53 +1493,70 @@ pub fn call_contract_function(
     .map_err(|_| "Failed to grow memory")?;
 
     println!("Calling contract function '{}' with required memory size: {} bytes, additional pages bytes: {} bytes", function_name, required_memory_size_bytes,additional_pages_bytes);
-    println!("New memory size after attempting growth: {} bytes", wasm_memory.data_size(&store));
-    let function_cost = 1000; 
-
-    // Call the specified contract function
+    let function_cost = 1500; 
     let mut results = vec![Val::I32(0); func.ty(&store).results().len()];
-    if let Some(func) = instance.get_func(&mut store, function_name) {
-        match func.call(&mut store, &args, &mut results) {
-            Ok(_) => {
-                let updated_data = wasm_memory.data(&mut store).to_vec();
-                let updated_byte_vector = updated_data.clone();
-                // Calculate the gas cost after converting memory_bytes_used to u64
-                let the_gas_cost: u128 = gas_calculator::calculate_gas_for_contract_interaction(required_memory_size_bytes as u64, function_cost) as u128;
-                // Create and prepare the transaction
-                let (txn_hash, _gas_cost, _new_txn) = public_txn::Txn::create_and_prepare_transaction(
-                    TransactionType::ContractInteraction,
-                    account_key.to_string(),
-                    contract_address.to_string(),
-                    the_gas_cost,
-                )?;
-                let private_key_bytes = match hex::decode(&private_key) {
-                    Ok(bytes) => bytes,
-                    Err(e) => {
-                        panic!("Failed to decode private key: {:?}", e);
-                    }
-                };
-                let the_official_private_key = match SecretKey::from_slice(&private_key_bytes) {
-                    Ok(key) => key,
-                    Err(e) => {
-                        panic!("Failed to create SecretKey: {:?}", e);
-                    }
-                };
-                let _ = public_txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
-                contract.wasm_memory = wasm_memory.data(&mut store).to_vec(); // Update this only if the WASM memory state is relevant
-                let updated_serialized_contract = serde_json::to_vec(&contract)?;
-                rock_storage::put_to_db(&contract_path, &contract_address, &updated_serialized_contract)?;      
-                let result_json = results_to_json(&results);              
-                Ok(result_json?)
-            },
-            Err(e) => Err(e.into())
+    if args_input_values.len()>=1{
+        if let Some(func) = instance.get_func(&mut store, function_name) {
+            match func.call(&mut store, &args, &mut results) {
+                Ok(_) => {
+                    let updated_data = wasm_memory.data(&mut store).to_vec();
+                    let updated_byte_vector = updated_data.clone();
+                    // Calculate the gas cost after converting memory_bytes_used to u64
+                    let the_gas_cost: u128 = gas_calculator::calculate_gas_for_contract_interaction(required_memory_size_bytes as u64, function_cost) as u128;
+                    // Create and prepare the transaction
+                    let (txn_hash, _gas_cost, _new_txn) = public_txn::Txn::create_and_prepare_transaction(
+                        TransactionType::ContractInteraction,
+                        account_key.to_string(),
+                        contract_address.to_string(),
+                        the_gas_cost,
+                    )?;
+                    let private_key_bytes = match hex::decode(&private_key) {
+                        Ok(bytes) => bytes,
+                        Err(e) => {
+                            panic!("Failed to decode private key: {:?}", e);
+                        }
+                    };
+                    let the_official_private_key = match SecretKey::from_slice(&private_key_bytes) {
+                        Ok(key) => key,
+                        Err(e) => {
+                            panic!("Failed to create SecretKey: {:?}", e);
+                        }
+                    };
+                    let _ = public_txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
+                    contract.wasm_memory = wasm_memory.data(&mut store).to_vec(); // Update this only if the WASM memory state is relevant
+                    let updated_serialized_contract = serde_json::to_vec(&contract)?;
+                    rock_storage::put_to_db(&contract_path, &contract_address, &updated_serialized_contract)?;      
+                    let result_json = results_to_json(&results);              
+                    return Ok(result_json?);
+                },
+                Err(e) => Err(e.into())
+            }
+        } else {
+            // Use anyhow::Error for convenience
+            Err(anyhow::Error::new(std::io::Error::new(
+                std::io::ErrorKind::NotFound,
+                format!("Function {} not found in contract", function_name),
+            )).into())
+        }                                                                                                                                               
+    }else{
+        if let Some(func) = instance.get_func(&mut store, function_name) {
+            match func.call(&mut store, &args, &mut results) {
+                Ok(_) => {
+                    let updated_data = wasm_memory.data(&mut store).to_vec();
+                    let updated_byte_vector = updated_data.clone();
+                    contract.wasm_memory = wasm_memory.data(&mut store).to_vec(); // Update this only if the WASM memory state is relevant
+                    let updated_serialized_contract = serde_json::to_vec(&contract)?;
+                    rock_storage::put_to_db(&contract_path, &contract_address, &updated_serialized_contract)?;      
+                    let result_json = results_to_json(&results);              
+                    Ok(result_json?)
+                },
+                Err(e) => Err(e.into())
+            }
+        }else{
+            Ok(("".to_string()))
         }
-    } else {
-        // Use anyhow::Error for convenience
-        Err(anyhow::Error::new(std::io::Error::new(
-            std::io::ErrorKind::NotFound,
-            format!("Function {} not found in contract", function_name),
-        )).into())
-    }  
+    }   
+
 }
 fn args_input_values_to_wasm_vals(
     instance: &Instance,
