@@ -198,6 +198,7 @@ async fn main() {
 
     let mut stdin = BufReader::new(stdin()).lines();
     let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    
+    //WHITE-LABEL PRODUCT: CHANGE OF CHAIN
     let mut gas_token = token::SMTXToken::new("SUMOTEX".to_string(), "SMTX".to_string(), 18, 1000000000000000000);
     if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
         //rpc_connector::set_global_swarm_public_net(swarm_public_net);

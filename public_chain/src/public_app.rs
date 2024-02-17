@@ -37,6 +37,7 @@ impl App {
             id: 0,
             timestamp: Utc::now().timestamp(),
             previous_hash: String::from("00Genesis"),
+            private_node:Some(String::from("")),
             private_hash:Some(String::from("")),
             //root_account:Some(String::from("")),
             transactions:Some(vec!["".to_string()].into()),

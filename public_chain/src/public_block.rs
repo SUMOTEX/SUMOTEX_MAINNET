@@ -24,6 +24,7 @@ pub struct Block {
     pub id: u64,
     pub public_hash: String,
     pub previous_hash: String,
+    pub private_node:Option<String>,
     pub private_hash:Option<String>,
     pub transactions:Option<Vec<String>>, // determine txn
     pub timestamp: i64,
@@ -151,21 +152,24 @@ pub fn handle_create_block_pbft(app: App, transactions: Vec<String>,leader:&Stri
         transactions,
         None,
         None,
+        None,
         [leader.to_string()].to_vec(),
     );
     block
 }
 
-pub fn handle_create_block_private_chain(app:App,private_hash:Option<String>,txn:Option<Vec<String>>,root:Option<String>)-> Block{
+pub fn handle_create_block_private_chain(app:App,private_hash:Option<String>,private_node:Option<String>,txn:Option<Vec<String>>,root:Option<String>)-> Block{
     let app = app.blocks.last().expect("There should be at least one block");
     let latest_block = app;
     let transaction = txn.unwrap_or_else(|| vec!["".to_string()]);
     let root_acc = root.unwrap_or_else(|| "".to_string()); // Use default if None
     let p_hash = private_hash.unwrap_or_else(||"".to_string());
+    let p_node = private_node.unwrap_or_else(||"".to_string());
     let block = Block::new(
         latest_block.id +1,
         latest_block.public_hash.clone(),
         transaction,
+        Some(p_node.clone()),
         Some(p_hash.clone()),
         Some(root_acc),
         [" ".to_string()].to_vec(),
@@ -193,16 +197,18 @@ pub fn get_latest_block_hash()-> Result<Block, Box<dyn std::error::Error>>{
 }
 
 impl Block {
-    pub fn new(id: u64, previous_hash: String, txn:Vec<String>, private_hash: Option<String>,root:Option<String>,verified_node:Vec<String>) -> Self {
+    pub fn new(id: u64, previous_hash: String, txn:Vec<String>,private_node:Option<String>, private_hash: Option<String>,root:Option<String>,verified_node:Vec<String>) -> Self {
         let now = Utc::now();
         let txn_item = txn;
         let root_acc = root.unwrap_or_else(|| "".to_string()); // Use default if None
         let private_hash = private_hash.unwrap_or_else(|| "".to_string()); // Use default if None
+        let private_node = private_node.unwrap_or_else(|| "".to_string()); // Use default if None
         let (nonce, public_hash) = mine_block(id, now.timestamp(), &previous_hash);
         Self {
             id,
             public_hash,
             previous_hash,
+            private_node:Some(private_node),
             private_hash: Some(private_hash),
             //root_account:Some(root_acc),
             transactions:Some(txn_item),
