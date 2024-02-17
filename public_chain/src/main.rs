@@ -359,7 +359,6 @@ async fn main() {
                         p2p::EventType::Input(line) => match line.as_str() {
                             "ls p" => p2p::handle_print_peers(&swarm_public_net),
                             cmd if cmd.starts_with("ls b") => p2p::handle_print_chain(&swarm_public_net),
-                            cmd if cmd.starts_with("ls t") => p2p::handle_print_txn(&swarm_public_net),
                             cmd if cmd.starts_with("ls rt") => p2p::handle_print_raw_txn(&swarm_public_net),
                             _ => error!("unknown command"),  
                         },

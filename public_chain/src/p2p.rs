@@ -168,8 +168,6 @@ pub fn get_peer_id() -> String {
     format!("{}", PEER_ID.clone())
 }
 
-
-
 const REQUIRED_VERIFICATIONS: usize = 3; // Example value, adjust as needed
 static mut LEADER: Option<String> = None;
 
