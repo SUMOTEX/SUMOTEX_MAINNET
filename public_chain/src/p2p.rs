@@ -215,7 +215,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
                         for txn in block.transactions{
                             if let Some(first_txn_id) = txn.first().cloned() {
-                                Txn::update_transaction_status(&first_txn_id,3);
+                                let _ = Txn::update_transaction_status(&first_txn_id,3);
                                 mempool.remove_transaction_by_id(first_txn_id);
                             } 
                         }

@@ -251,10 +251,8 @@ async fn main() {
             let recv_result = init_rcv.recv().await;
             match recv_result {
                 Some(_) => {
-                    println!("Initialization event.");
                     let peers = p2p::get_list_peers(&swarm_public_net);
-                    swarm_public_net.behaviour_mut().app.initialize_from_storage();
-                    println!("Storage Path: {:?}",swarm_public_net.behaviour().storage_path.get_blocks());
+                    let _ = swarm_public_net.behaviour_mut().app.initialize_from_storage();
                     info!("Connected nodes: {}", peers.len());
                     if !peers.is_empty() {
                         let req = p2p::LocalChainRequest {
