@@ -184,12 +184,12 @@ pub fn get_latest_block_hash()-> Result<Block, Box<dyn std::error::Error>>{
 
     match block_path {
         Ok(db_handle) => {
-            match rock_storage::get_from_db(&db_handle, "epoch") {
+            match rock_storage::get_from_db(&db_handle, "latest_block") {
                 Some(data) => {
                     let block: Block = serde_json::from_str(&data)?;
                     Ok(block)
                 }
-                None => Err("Epoch not found".to_string().into()),
+                None => Err("Latest block not found".to_string().into()),
             }
         }
         Err(e) => Err(e.to_string().into()),

@@ -46,19 +46,15 @@ where
     deserializer.deserialize_any(StringOrU128Visitor)
 }
 
-pub fn get_node_pub_account() -> String {
+pub fn get_node_pub_account() -> Result<String, Box<dyn std::error::Error>> {
     let db_path = "./node/db";
-    let node_path = match rock_storage::open_db(db_path) {
-        Ok(path) => path,
-        Err(e) => {
-        // Handle the error, maybe log it, and then decide what to do next
-        panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
-        }
-    };
-    let node_account = rock_storage::get_from_db(&node_path, "node_id".to_string());
-    return node_account.expect("fail to convert to string");
-}
+    let node_path = rock_storage::open_db(db_path)?;
 
+    match rock_storage::get_from_db(&node_path, "node_id") {
+        Some(node_account) => Ok(node_account),
+        None => Err("Node account not found in the database".into()),
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Txn{
@@ -354,7 +350,7 @@ impl Txn {
         
         if txn.txn_type == TransactionType::SimpleTransfer {
             println!("Handling SimpleTransfer");
-            let node_account_key = get_node_pub_account();
+            let node_account_key = get_node_pub_account()?;
             account::Account::transfer(&txn.caller_address, &txn.to_address, txn.value);
             account::Account::transfer(&txn.caller_address, &node_account_key, txn.gas_cost);
             println!("SimpleTransfer handled successfully.");

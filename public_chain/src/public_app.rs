@@ -54,11 +54,9 @@ impl App {
                 return; // or handle the error as appropriate
             }
         };
-        
         let json = serde_json::to_string(&genesis_block).expect("can jsonify request");
-        let _ = rock_storage::put_to_db(&db_handle,"epoch", &json);
+        let _ = rock_storage::put_to_db(&db_handle,"latest_block", &json);
         self.blocks.push(genesis_block);
-
     }
     pub fn try_add_block(&mut self, block: public_block::Block) {
         let latest_block = self.blocks.last().expect("there is at least one block");

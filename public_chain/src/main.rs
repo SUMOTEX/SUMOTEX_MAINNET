@@ -221,7 +221,7 @@ async fn main() {
                 info!("No more TCP Ports!");
             }
         }
-        let the_address = Multiaddr::from_str("/ip4/0.0.0.0/tcp/8083").expect("Failed to parse multiaddr");
+        //let the_address = Multiaddr::from_str("/ip4/0.0.0.0/tcp/8083").expect("Failed to parse multiaddr");
         loop {
             if let Some(port) = whitelisted_peers.pop() {
                 let address_str = format!("{}",port);

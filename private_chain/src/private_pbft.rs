@@ -210,7 +210,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                             } 
                         }
                         let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &json);
-                        let _ = rock_storage::put_to_db(block_db,"epoch", &json);
+                        let _ = rock_storage::put_to_db(block_db,"latest_block", &json);
                     },
                     Err(err) => {
                         error!(
@@ -421,7 +421,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     }
                                     let json = serde_json::to_string(&block).expect("can jsonify request");
                                     let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &json);
-                                    let _ = rock_storage::put_to_db(block_db,"epoch", &json);
+                                    let _ = rock_storage::put_to_db(block_db,"latest_block", &json);
 
 
                                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
@@ -448,7 +448,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 self.app.blocks.push(created_block);
                 publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                 }
-
             } else if msg.topics[0]==Topic::new("hybrid_block_creation")  {
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
