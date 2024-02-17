@@ -46,36 +46,18 @@ where
     deserializer.deserialize_any(StringOrU128Visitor)
 }
 
-// fn deserialize_string_to_u128<'de, D>(deserializer: D) -> Result<u128, D::Error>
-// where
-//     D: serde::Deserializer<'de>,
-// {
-//     struct StringOrU128Visitor;
-
-//     impl<'de> serde::de::Visitor<'de> for StringOrU128Visitor {
-//         type Value = u128;
-
-//         fn expecting(&self, formatter: &mut std::fmt::Formatter) -> std::fmt::Result {
-//             formatter.write_str("a string or an integer")
-//         }
-
-//         fn visit_u128<E>(self, value: u128) -> Result<Self::Value, E>
-//         where
-//             E: serde::de::Error,
-//         {
-//             Ok(value as u128)
-//         }
-
-//         fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-//         where
-//             E: serde::de::Error,
-//         {
-//             value.parse::<u128>().map_err(serde::de::Error::custom)
-//         }
-//     }
-
-//     deserializer.deserialize_any(StringOrU128Visitor)
-// }
+pub fn get_node_pub_account() -> String {
+    let db_path = "./node/db";
+    let node_path = match rock_storage::open_db(db_path) {
+        Ok(path) => path,
+        Err(e) => {
+        // Handle the error, maybe log it, and then decide what to do next
+        panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+        }
+    };
+    let node_account = rock_storage::get_from_db(&node_path, "node_id".to_string());
+    return node_account.expect("fail to convert to string");
+}
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -369,10 +351,12 @@ impl Txn {
         Ok(())
     }
     pub fn handle_post_complete_block(txn: PublicTxn) -> Result<(), Box<dyn std::error::Error>> {
-    
+        
         if txn.txn_type == TransactionType::SimpleTransfer {
             println!("Handling SimpleTransfer");
+            let node_account_key = get_node_pub_account();
             account::Account::transfer(&txn.caller_address, &txn.to_address, txn.value);
+            account::Account::transfer(&txn.caller_address, &node_account_key, txn.gas_cost);
             println!("SimpleTransfer handled successfully.");
         }
     

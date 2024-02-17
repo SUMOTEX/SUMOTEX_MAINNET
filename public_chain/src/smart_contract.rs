@@ -1553,7 +1553,7 @@ pub fn call_contract_function(
                 Err(e) => Err(e.into())
             }
         }else{
-            Ok(("".to_string()))
+            Ok("".to_string())
         }
     }   
 

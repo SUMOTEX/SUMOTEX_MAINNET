@@ -50,6 +50,7 @@ pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::er
         "./account",
         "./transactions",
         "./contract",
+        "./node"
     ];
 
     for path in &paths {
@@ -70,17 +71,18 @@ pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::er
 
     let db_public_block =open_or_create_storage("./public_blockchain")?;
     let db_account = open_or_create_storage("./account")?;
+    let db_node = open_or_create_storage("./node")?;
     let db_transactions =open_or_create_storage("./transactions")?;
     let db_contract = open_or_create_storage("./contract")?;
-
     let the_storage = rock_storage::StoragePath {
         blocks: db_public_block,
         account: db_account,
         transactions: db_transactions,
         contract: db_contract,
+        node:db_node
     };
 
-    println!("Storage initialized for blocks, accounts, contracts, and transactions");
+    println!("Storage initialized for blocks, accounts, contracts, node and transactions");
     Ok(the_storage)
 
 }
@@ -113,6 +115,10 @@ pub fn remove_lock_file() {
     }
     let lock_path_4 = "./transactions/LOCK";
     if let Err(e) = fs::remove_file(lock_path_4) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+    let lock_path_5 = "./node/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_5) {
         eprintln!("Error removing lock file: {:?}", e);
     }
 }
@@ -257,15 +263,24 @@ async fn main() {
                                 .expect("at least one peer")
                                 .to_string(),
                         };
-
+                        let (pub_key,private_key)=account::create_account().expect("Failed to create account");
+                        let n_path = "./node/db";
+                        
+                        let node_path = match rock_storage::open_db(n_path) {
+                            Ok(path) => path,
+                            Err(e) => {
+                                // Handle the error, maybe log it, and then decide what to do next
+                                panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+                            }
+                        };
+                        let _ = rock_storage::put_to_db(&node_path,"node_id",&pub_key.clone().to_string());
                         let json = serde_json::to_string(&req).expect("can jsonify request");
                         swarm_public_net
                             .behaviour_mut()
                             .floodsub
                             .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
                     }
-                    init_received = true;  // Set flag to true, so this block won't execute again
-                    // Now you can return Some(p2p::EventType::Init) or do something else
+                    init_received = true;
                 },
                 None => {
                     // Handle the case where recv_result is None, perhaps breaking the loop or continuing
@@ -332,8 +347,6 @@ async fn main() {
                             let topic = libp2p::floodsub::Topic::new(topic_str);
                             let message_json = serde_json::to_string(&message).expect("can jsonify message");
                             let peers = p2p::get_list_peers(&swarm_public_net);
-                            // println!("Number of: {:?}",peers.len());
-                            // println!("PBFT Node number of views for consensus {:?}",pbft_node_views);
                             swarm_public_net.behaviour_mut().floodsub.publish(topic,message_json.as_bytes())
                         }
                         p2p::EventType::PublishBlock(title,message)=>{
@@ -348,9 +361,6 @@ async fn main() {
                             cmd if cmd.starts_with("ls b") => p2p::handle_print_chain(&swarm_public_net),
                             cmd if cmd.starts_with("ls t") => p2p::handle_print_txn(&swarm_public_net),
                             cmd if cmd.starts_with("ls rt") => p2p::handle_print_raw_txn(&swarm_public_net),
-                            // cmd if cmd.starts_with("create txn")=> pbft::pbft_pre_message_handler(cmd, swarm_public_net),
-                            //cmd if cmd.starts_with("create acc")=> account::create_account(cmd, swarm_public_net),
-                            //cmd if cmd.starts_with("acc d")=> account::get_account(cmd, swarm_public_net),
                             _ => error!("unknown command"),  
                         },
                     }

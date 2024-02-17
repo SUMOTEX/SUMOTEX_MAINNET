@@ -10,15 +10,16 @@ pub struct StoragePath {
     pub blocks: DB,
     pub transactions: DB,
     pub account:DB,
-    pub contract:DB
+    pub contract:DB,
+    pub node:DB
 }
 const BLOCKS_DB_PATH: &str = "./blocks/db";
 const TRANSACTIONS_DB_PATH: &str = "./transactions/db";
 const ACCOUNT_DB_PATH: &str = "./account/db";
 const CONTRACT_DB_PATH: &str = "./contract/db";
-
+const NODE_DB_PATH: &str = "./node/db";
 impl StoragePath {
-    pub fn new(block_path:DB,txn_path:DB,account_path:DB,contract_path:DB) -> Self {
+    pub fn new(block_path:DB,txn_path:DB,account_path:DB,contract_path:DB,node_path:DB) -> Self {
         let blocks = match create_storage(BLOCKS_DB_PATH) {
             Ok(db) => db,
             Err(e) => {
@@ -51,12 +52,20 @@ impl StoragePath {
                 panic!("Failed to create contract storage: {}", e);
             }
         };
+        let node = match create_storage(NODE_DB_PATH) {
+            Ok(db) => db,
+            Err(e) => {
+                // Handle error
+                panic!("Failed to create node storage: {}", e);
+            }
+        };
     
         Self {
             blocks,
             transactions,
             account,
             contract,
+            node,
         }
     }
     pub fn get_blocks(&self) -> &DB {
@@ -73,6 +82,9 @@ impl StoragePath {
 
     pub fn get_contract(&self) -> &DB {
         &self.contract
+    }
+    pub fn get_node(&self) -> &DB {
+        &self.node
     }
 }
 
