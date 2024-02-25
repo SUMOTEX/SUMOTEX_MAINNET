@@ -26,6 +26,8 @@ use rocket::data::ByteUnit;
 use rocket::config::{Config};
 use rocket_okapi::{openapi, routes_with_openapi, JsonSchema};
 use rocket_okapi::swagger_ui::{make_swagger_ui, SwaggerUIConfig};
+use rocket_okapi::swagger_ui::DocExpansion;
+use rocket_okapi::swagger_ui::DefaultModelRendering;
 
 
 #[derive(Debug,serde::Serialize, serde::Deserialize)]

@@ -1,7 +1,7 @@
 use libp2p::{
     swarm::{Swarm}
 };
-
+use local_ip_address::local_ip;
 use log::{error, info};
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
@@ -133,6 +133,24 @@ async fn block_producer() {
         sleep(Duration::from_secs(20)).await; // Adjust the interval as needed
     }
 }
+// #[derive(Default)]
+// struct WhitelistedPeers {
+//     peers: Arc<Mutex<Vec<Multiaddr>>>,
+// }
+
+// impl WhitelistedPeers {
+//     // Method to add a new whitelisted peer
+//     fn add_peer(&self, address: Multiaddr) {
+//         let mut peers = self.peers.lock().unwrap();
+//         peers.push(address);
+//     }
+
+//     // Method to get the current list of whitelisted peers
+//     fn get_peers(&self) -> Vec<Multiaddr> {
+//         let peers = self.peers.lock().unwrap();
+//         peers.clone()
+//     }
+// }
 
 #[tokio::main]
 async fn main() {
@@ -174,6 +192,13 @@ async fn main() {
         "127.0.0.1:8101",
         "127.0.0.1:8102",
         ];
+    //let whitelisted_peers = WhitelistedPeers::default();
+    let my_local_ip = local_ip().unwrap();
+    // Add initial whitelisted peers (if any)
+    println!("This is my local IP address: {:?}", my_local_ip);
+    let binding = my_local_ip.to_string();
+    whitelisted_peers.push(&binding);
+
     //create storage
     remove_lock_file();
     let the_storage = create_pub_storage().expect("Failed to create storage");
@@ -241,7 +266,6 @@ async fn main() {
                         info!("Failed to listen on {:?}. Reason: {:?}", the_address, e);
                     }
                     }
-                
             } else {
                 info!("No more Whitelisted Peers!");
             }
