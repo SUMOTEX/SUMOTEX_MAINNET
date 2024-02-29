@@ -46,19 +46,15 @@ where
     deserializer.deserialize_any(StringOrU128Visitor)
 }
 
-pub fn get_node_pub_account() -> String {
+pub fn get_node_pub_account() -> Result<String, Box<dyn std::error::Error>> {
     let db_path = "./node/db";
-    let node_path = match rock_storage::open_db(db_path) {
-        Ok(path) => path,
-        Err(e) => {
-        // Handle the error, maybe log it, and then decide what to do next
-        panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
-        }
-    };
-    let node_account = rock_storage::get_from_db(&node_path, "node_id".to_string());
-    return node_account.expect("fail to convert to string");
-}
+    let node_path = rock_storage::open_db(db_path)?;
 
+    match rock_storage::get_from_db(&node_path, "node_id") {
+        Some(node_account) => Ok(node_account),
+        None => Err("Node account not found in the database".into()),
+    }
+}
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Txn{
@@ -74,7 +70,7 @@ pub enum TransactionType {
 }
 
 #[derive(Serialize, Deserialize, Debug, Clone)]
-pub struct PrivateTxn{
+pub struct PublicTxn{
     pub txn_hash: String,
     pub txn_type: TransactionType,  // Added field for transaction type
     pub nonce:i64,
@@ -108,7 +104,7 @@ impl TransactionType {
     }
 }
 
-impl PrivateTxn {
+impl PublicTxn {
     pub fn set_status(&mut self, new_status: i64) {
         self.status = new_status;
     }
@@ -135,7 +131,7 @@ impl Txn {
             let hash_array: [u8; 32] = hashed_root.try_into().expect("Slice has incorrect length");
             let mut sorted_items = BTreeMap::new();
             for (inner_key, inner_value) in txn_hash.iter() {
-                let deserialized_data:PrivateTxn = serde_json::from_str(&inner_value).expect("Deserialization failed");
+                let deserialized_data:PublicTxn = serde_json::from_str(&inner_value).expect("Deserialization failed");
                 sorted_items.insert(deserialized_data.nonce, deserialized_data);
             }
             for (_, item) in sorted_items.iter() {
@@ -156,14 +152,14 @@ impl Txn {
             //let the_outcome:bool= verkle_tree.node_exists_with_root(hash_array,);
     }   
 
-    pub fn get_transaction_by_id(txn_hash: &str) -> Result<PrivateTxn, Box<dyn std::error::Error>> {
+    pub fn get_transaction_by_id(txn_hash: &str) -> Result<PublicTxn, Box<dyn std::error::Error>> {
         let db_path = "./transactions/db";
         let db_handle = rock_storage::open_db(db_path)?;
 
         let txn_data = rock_storage::get_from_db(&db_handle, txn_hash.to_string())
             .ok_or("Transaction not found")?; // Handle missing transactions appropriately
  
-        let transaction: PrivateTxn = serde_json::from_str(&txn_data)?;
+        let transaction: PublicTxn = serde_json::from_str(&txn_data)?;
 
         Ok(transaction)
     }
@@ -174,7 +170,7 @@ impl Txn {
         let txn_data = rock_storage::get_from_db(&db_handle, txn_hash.to_string())
             .ok_or("Transaction not found")?; // Handle missing transactions appropriately
  
-        let transaction: PrivateTxn = serde_json::from_str(&txn_data)?;
+        let transaction: PublicTxn = serde_json::from_str(&txn_data)?;
         if transaction.status==2 {
             Ok(true)
         }else{
@@ -187,7 +183,7 @@ impl Txn {
         caller_address: String,
         to_address: String,
         computed_value: u128
-    ) -> Result<(String,u128, PrivateTxn), Box<dyn std::error::Error>> {
+    ) -> Result<(String,u128, PublicTxn), Box<dyn std::error::Error>> {
         let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
         match transaction_type {
             TransactionType::ContractCreation => {
@@ -219,7 +215,7 @@ impl Txn {
             
                 let gas_cost = computed_value;  // Example gas cost, adjust as needed
     
-                let new_txn = PrivateTxn {
+                let new_txn = PublicTxn {
                     txn_type: transaction_type,
                     caller_address,
                     to_address,
@@ -261,7 +257,7 @@ impl Txn {
         let mut transaction_serialize_string = rock_storage::get_from_db(&db_handle, txn_hash_hex.clone())
         .ok_or("Transaction not found")?;  // Replace with an
         println!("{}",transaction_serialize_string);
-        let deserialized_txn: Result<PrivateTxn, serde_json::Error> = serde_json::from_str(&transaction_serialize_string);
+        let deserialized_txn: Result<PublicTxn, serde_json::Error> = serde_json::from_str(&transaction_serialize_string);
         match deserialized_txn {
             Ok(txn) => {
                 let hash_bytes = hex::decode(txn_hash_hex.clone())?;
@@ -337,7 +333,7 @@ impl Txn {
         let txn_data = rock_storage::get_from_db(&db_handle, txn_hash.to_string())
             .ok_or("Transaction not found")?; // Handle missing transactions appropriately
 
-        let mut transaction: PrivateTxn = serde_json::from_str(&txn_data)?;
+        let mut transaction: PublicTxn = serde_json::from_str(&txn_data)?;
         println!("Transaction {:?}",transaction);
         // Update the transaction status
         transaction.set_status(new_status);
@@ -350,11 +346,11 @@ impl Txn {
         }
         Ok(())
     }
-    pub fn handle_post_complete_block(txn: PrivateTxn) -> Result<(), Box<dyn std::error::Error>> {
+    pub fn handle_post_complete_block(txn: PublicTxn) -> Result<(), Box<dyn std::error::Error>> {
         
         if txn.txn_type == TransactionType::SimpleTransfer {
             println!("Handling SimpleTransfer");
-            let node_account_key = get_node_pub_account();
+            let node_account_key = get_node_pub_account()?;
             account::Account::transfer(&txn.caller_address, &txn.to_address, txn.value);
             account::Account::transfer(&txn.caller_address, &node_account_key, txn.gas_cost);
             println!("SimpleTransfer handled successfully.");
@@ -369,7 +365,7 @@ impl Txn {
         to_address: &str,
         computed_value: u128,
         current_timestamp: i64
-    ) -> Result<(String, u128, PrivateTxn), Box<dyn std::error::Error>> {
+    ) -> Result<(String, u128, PublicTxn), Box<dyn std::error::Error>> {
         // Handle the contract-specific logic here
         // For example, you might have different steps or calculations for contract transactions
     
@@ -398,7 +394,7 @@ impl Txn {
         };
         
         let nonce = account.get_nonce();
-        let new_txn = PrivateTxn {
+        let new_txn = PublicTxn {
             txn_type: transaction_type,
             caller_address: caller_address.to_string(),
             to_address: to_address.to_string(),
@@ -426,7 +422,7 @@ impl Txn {
     }
     pub fn get_transactions_by_caller(
         caller_address: &str,
-    ) -> Result<Vec<PrivateTxn>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<PublicTxn>, Box<dyn std::error::Error>> {
         // Open the database handle
         let path = "./transactions/db";
         let transaction_path = rock_storage::open_db(path);
@@ -468,7 +464,7 @@ impl Txn {
     }
     pub fn get_transactions_by_sender(
         sender_address: &str,
-    ) -> Result<Vec<PrivateTxn>, Box<dyn std::error::Error>> {
+    ) -> Result<Vec<PublicTxn>, Box<dyn std::error::Error>> {
         // Open the database handle
         let path = "./transactions/db";
         let transaction_path = rock_storage::open_db(path);
@@ -483,7 +479,7 @@ impl Txn {
                     match result {
                         (txn_hash, _) => {
                             if let Some(txn_data) = rock_storage::get_from_db(&db_handle, txn_hash.clone()) {
-                                if let Ok(transaction) = serde_json::from_str::<PrivateTxn>(&txn_data) {
+                                if let Ok(transaction) = serde_json::from_str::<PublicTxn>(&txn_data) {
                                     // Check if the caller_address matches
                                     if transaction.to_address == sender_address {
                                         transactions.push(transaction);

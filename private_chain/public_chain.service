@@ -1,0 +1,11 @@
+[Unit]
+Description=SUMOTEX Public Chain
+After=network.target
+
+[Service]
+ExecStart=/sumotex_mainnet/chain/public_chain
+WorkingDirectory=/sumotex_mainnet/chain/public_chain
+Restart=always
+
+[Install]
+WantedBy=multi-user.target

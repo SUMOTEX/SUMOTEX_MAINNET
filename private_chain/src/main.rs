@@ -1,88 +1,148 @@
-use chrono::prelude::*;
 use libp2p::{
-    core::{
-        upgrade::{self},
-    },
-    mplex,
-    identity, noise,
-    noise::{Keypair, NoiseConfig, X25519Spec},
-    swarm::{Swarm,SwarmBuilder},
-    tcp::TokioTcpConfig,
-    Transport,
-    PeerId,
+    swarm::{Swarm}
 };
-use tokio::net::TcpStream;
-use tokio::io::{self, AsyncReadExt, AsyncWriteExt};
-use std::io::Result;
-use libp2p::kad::record::store::MemoryStore;
-use libp2p::kad::{
-    record::Key, AddProviderOk, GetProvidersOk, GetRecordOk, Kademlia, KademliaEvent, PeerRecord,
-    PutRecordOk, QueryResult, Record,Quorum
-};
-use crate::verkle_tree::VerkleTree;
+use local_ip_address::local_ip;
 use log::{error, info};
-use serde::{Deserialize, Serialize};
-use sha2::{Sha256};
-use std::time::Duration;
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
     select, spawn,
     sync::mpsc,
-    time::sleep,
+    time::sleep
 };
-use std::collections::HashMap;
-use std::str::FromStr;
+use std::path::Path;
+use std::fs;
 use libp2p::Multiaddr;
+use std::str::FromStr;
+use tokio::time::{Duration};
 use libp2p::futures::StreamExt;
 mod verkle_tree;
-mod private_p2p;
+mod p2p;
+mod swarm;
 mod publisher;
-mod private_block;
-mod private_pbft;
-mod account_root;
-mod private_transactions;
-mod private_app;
-mod private_swarm;
+mod block;
+mod pbft;
+mod app;
+mod txn;
 mod bridge;
+mod rock_storage;
 mod api;
+mod account;
+mod smart_contract;
 mod rpc_connector;
+mod gas_calculator;
+mod txn_pool;
+mod token;
 use bridge::accept_loop;
-use tokio::net::TcpListener;
+use crate::app::App;
+use std::sync::{RwLock, Arc};
 use publisher::Publisher;
-use crate::account_root::AccountRoot;
+use tokio::net::TcpListener;
+use crate::p2p::AppBehaviour;
+use rocksdb::DBWithThreadMode;
+use rocksdb::SingleThreaded;
+type MySwarm = Swarm<AppBehaviour>;
 
 
+pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::error::Error>>{
+    let paths = [
+        "./blockchain",
+        "./account",
+        "./transactions",
+        "./contract",
+        "./node"
+    ];
 
+    for path in &paths {
+        if !Path::new(path).exists() {
+            fs::create_dir_all(path)?;
+            println!("Directory {:?} created.", path);
+        } else {
+            eprintln!("Directory {:?} already exists.", path);
+        }
+    }
+    for path in &paths {
+        if !Path::new(path).exists() {
+            rock_storage::create_storage(path)?;
+        } else {
+            eprintln!("Directory {:?} already exists.", path);
+        }
+    }
 
-use common::common::SMTXBridge;
-enum CustomEvent {
-    ReceivedRequest(PeerId, Vec<u8>),
-    ReceivedResponse(PeerId, Vec<u8>),
-    // ... potentially other custom events specific to your application
+    let db_block =open_or_create_storage("./blockchain")?;
+    let db_account = open_or_create_storage("./account")?;
+    let db_node = open_or_create_storage("./node")?;
+    let db_transactions =open_or_create_storage("./transactions")?;
+    let db_contract = open_or_create_storage("./contract")?;
+    let the_storage = rock_storage::StoragePath {
+        blocks: db_block,
+        account: db_account,
+        transactions: db_transactions,
+        contract: db_contract,
+        node:db_node
+    };
+
+    println!("Storage initialized for blocks, accounts, contracts, node and transactions");
+    Ok(the_storage)
+
 }
 
-
-
-#[allow(clippy::large_enum_variant)]
-enum MyBehaviourEvent {
-    Kademlia(KademliaEvent),
+fn open_or_create_storage(path: &str) -> Result<DBWithThreadMode<SingleThreaded>, Box<dyn std::error::Error>> {
+    rock_storage::create_storage(path)?;
+    if !Path::new(path).exists() {
+        rock_storage::create_storage(path)?;
+        println!("Database at path {:?} created.", path);
+    } else {
+        eprintln!("Database at path {:?} already exists.", path);
+    }
+    Ok(rock_storage::open_storage(path)?)
 }
-
-impl From<KademliaEvent> for MyBehaviourEvent {
-    fn from(event: KademliaEvent) -> Self {
-        MyBehaviourEvent::Kademlia(event)
+fn db_extract(db: Arc<RwLock<DBWithThreadMode<SingleThreaded>>>) -> DBWithThreadMode<SingleThreaded> {
+    Arc::try_unwrap(db).unwrap().into_inner().unwrap()
+}
+pub fn remove_lock_file() {
+    let lock_path = "./blockchain/LOCK";
+    if let Err(e) = fs::remove_file(lock_path) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+    let lock_path_2 = "./account/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_2) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+    let lock_path_3 = "./contract/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_3) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+    let lock_path_4 = "./transactions/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_4) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+    let lock_path_5 = "./node/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_5) {
+        eprintln!("Error removing lock file: {:?}", e);
     }
 }
 
 
+async fn block_producer() {
+    loop {
+        // Your periodic function logic goes here
+        let _ = block::pbft_pre_message_block_create_scheduler();
 
+        // Sleep for the specified interval
+        sleep(Duration::from_secs(20)).await; // Adjust the interval as needed
+    }
+}
 
 
 #[tokio::main]
 async fn main() {
-
     pretty_env_logger::init();
-    info!("Peer Id: {}", private_p2p::PEER_ID.clone());
+    //     let mut whitelisted_peers = vec![
+    //     "/ip4/46.137.235.97/tcp/8081",
+    //     "/ip4/13.228.172.186/tcp/8082",
+    //     // Add more whitelisted peers as needed
+    // ];
+
     let mut whitelisted_peers = vec![
         "/ip4/0.0.0.0/tcp/8081",
         "/ip4/0.0.0.0/tcp/8082",
@@ -92,232 +152,231 @@ async fn main() {
         "/ip4/0.0.0.0/tcp/8086",
         "/ip4/0.0.0.0/tcp/8087",
         "/ip4/0.0.0.0/tcp/8089",
+        "/ip4/0.0.0.0/tcp/8090",
+        "/ip4/0.0.0.0/tcp/8091",
+        "/ip4/0.0.0.0/tcp/8092",
+        "/ip4/0.0.0.0/tcp/8093",
+        "/ip4/0.0.0.0/tcp/8094",
+        "/ip4/0.0.0.0/tcp/8095",
+        "/ip4/0.0.0.0/tcp/8096",
+        "/ip4/0.0.0.0/tcp/8097",
+        "/ip4/0.0.0.0/tcp/8098",
         // ... other addresses
         ];
-    
+
     let mut whitelisted_listener = vec![
-        "127.0.0.1:8088",
         "127.0.0.1:8089",
         "127.0.0.1:8090",
-        "127.0.0.1:8090",
         "127.0.0.1:8091",
-        "127.0.0.1:8090",
         "127.0.0.1:8092",
         "127.0.0.1:8093",
         "127.0.0.1:8094",
         "127.0.0.1:8095",
-        // ... other addresses
+        "127.0.0.1:8096",
+        "127.0.0.1:8097",
+        "127.0.0.1:8098",
+        "127.0.0.1:8099",
+        "127.0.0.1:8100",
+        "127.0.0.1:8101",
+        "127.0.0.1:8102",
         ];
-    //PRIVATE
-    let (response_private_sender, mut response_private_rcv) = mpsc::unbounded_channel();
-    let (init_private_sender, mut init_private_rcv) = mpsc::unbounded_channel();
-    let (private_tx, mut _private_rx): (mpsc::UnboundedSender<String>, mpsc::UnboundedReceiver<String>) = mpsc::unbounded_channel();    //bridge sender
+    //let whitelisted_peers = WhitelistedPeers::default();
+    let my_local_ip = local_ip().unwrap();
+    // Add initial whitelisted peers (if any)
+    println!("This is my local IP address: {:?}", my_local_ip);
+    let binding = my_local_ip.to_string();
+    whitelisted_peers.push(&binding);
+
+    //create storage
+    remove_lock_file();
+    let the_storage = create_pub_storage().expect("Failed to create storage");
+    //info!("Peer Id: {}", p2p::PEER_ID.clone());
+    let (response_sender, mut response_rcv) = mpsc::unbounded_channel();
+    let (init_sender, mut init_rcv) = mpsc::unbounded_channel();
     let (publisher, mut publish_receiver, mut publish_bytes_receiver): (Publisher, mpsc::UnboundedReceiver<(String, String)>, mpsc::UnboundedReceiver<(String, Vec<u8>)>) = Publisher::new();
-
-
     Publisher::set(publisher);
-    let auth_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&private_p2p::KEYS)
-        .expect("can create auth keys");
+    let app = App::new();
+    swarm::create_public_swarm(app.clone(),the_storage).await;
+    // Lock the swarm and access it
+    println!("Before RPC server");
+    let rpc_runner = tokio::spawn( async{
+        rpc_connector::start_rpc().await
+    });
+    tokio::spawn(block_producer());
+    // let rpc_runner = tokio::task::spawn_local(async {
+    //     rpc_connector::start_rpc().await
+    // });    
+    println!("After RPC server");
+    let swarm_mutex = swarm::get_global_swarm_public_net();
 
-    // Create and initialize your swarm here
-    const SMTX_TESTNET_PROTOCOL: &str = "smtxtestnet/1.0.0";
-    const SMTX_TESTNET_PROTOCOL_BYTES: &[u8] = b"/smtxtestnet/1.0.0";
-    info!("Private Network Peer Id: {}", private_p2p::PEER_ID.clone());
-
-    let auth_keys = Keypair::<X25519Spec>::new()
-        .into_authentic(&private_p2p::KEYS)
-        .expect("can create auth keys");
-    // Convert to AuthenticKeypair
-    let transp = TokioTcpConfig::new()
-        .upgrade(upgrade::Version::V1)
-        .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
-        .multiplex(mplex::MplexConfig::new())
-        .boxed();
-    // Create a swarm to manage peers and events.
-
-    
-    // Create a Kademlia behaviour.
-    let store = MemoryStore::new(private_p2p::PEER_ID.clone());
-    let kademlia = Kademlia::new(private_p2p::PEER_ID.clone(), store);
-
-
-    let mut swarm_private_net = private_swarm::create_private_swarm(private_tx.clone()).await;
     let mut stdin = BufReader::new(stdin()).lines();
-    //TODO: Make the publicnet validators dynamics connection randomised
-    let public_chain_peer_id = "12D3KooWSHD7vtVa4zCiTNEjUt3o1zL4FMVZkPzjFUEVipkDQoPi".to_string();
-    let public_net_addr: Multiaddr = format!("/ip4/0.0.0.0/tcp/8088/p2p/{}",public_chain_peer_id).parse().unwrap();
-    // swarm_private_net.dial_addr(public_net_addr).expect("Failed to dial Public SMTX");
-    // let remote_peer_id = PeerId::from_str(&public_chain_peer_id).expect("Failed to pass PeerId");
-    let target_peer_id:PeerId = "QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z".parse().unwrap();
-    let target_peer_addr: Multiaddr = format!("/ip4/104.131.131.82/tcp/4001/p2p/{}", target_peer_id).parse().unwrap();
-
-    // Connect to the target
-    Swarm::dial_addr(&mut swarm_private_net, target_peer_addr).expect("Failed to dial");
-    let peer_id = "QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z";
-    // The key we want to put/get in the DHT
-    let key_bytes = private_p2p::PEER_ID.clone().to_bytes();
-    let kad_key = Key::new(&key_bytes);
-
-    // Put a record to DHT
-    let record = Record {
-        key: kad_key.clone(),
-        value: b"some_value".to_vec(),
-        publisher: Some(private_p2p::PEER_ID.clone()),
-        expires: None,
-    };
-    // Create a Multiaddress for the bootstrap node. Replace with the actual address.
-    //let bootstrap_addr: Multiaddr = "/ip4/104.131.131.82/tcp/4001/p2p/QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z".parse().unwrap();
-    //let bootstrap_peer_id = "QmSoLnSGccFuZQJzRadHn95W2CrSFmZuTdDWP8HXaHca9z".parse().unwrap();
-    // Bootstrap by connecting to the known peer.
-    //Swarm::dial_addr(&mut swarm_private_net, bootstrap_addr.clone()).expect("Failed to dial bootstrap node");
-    //swarm_private_net.behaviour_mut().kademlia.add_address(&bootstrap_peer_id, bootstrap_addr.clone());
-
-    //swarm_private_net.behaviour_mut().kademlia.put_record(record, Quorum::One);
-
-    // Get a record from DHT
-    //let the_record = swarm_private_net.behaviour_mut().kademlia.get_record(&kad_key, Quorum::One);
-    //let vec_u8_key=kad_key.to_vec(); // Assuming to_vec_u8() is a method that returns Option<Vec<u8>>
-    //swarm_private_net.behaviour_mut().kademlia.get_closest_peers(vec_u8_key);
-    // Inform the swarm to send a message to the dialed peer.
-    loop {
-        if let Some(port) = whitelisted_listener.pop() {
-            match TcpListener::bind(&port).await {
-                Ok(listener) => {
-                    // Loop to listen
-                    let accept_loop_task = tokio::spawn(async {
-                        accept_loop(listener).await;
-                    });
-                    break;
+    let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    
+    //WHITE-LABEL PRODUCT: CHANGE OF CHAIN
+    let mut gas_token = token::SMTXToken::new("SUMOTEX".to_string(), "SMTX".to_string(), 18, 1000000000000000000);
+    if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
+        //rpc_connector::set_global_swarm_public_net(swarm_public_net);
+        loop {
+            if let Some(port) = whitelisted_listener.pop() {
+                match TcpListener::bind(&port).await {
+                    Ok(listener) => {
+                        // Loop to listen
+                        let accept_loop_task = tokio::spawn(async {
+                            accept_loop(listener).await;
+                        });
+                        println!("TCP Port: {:?}",port);
+                        break;
+                    }
+                    Err(e) => {
+                        info!("Failed to bind to {}: {}", port, e);
+                    }
                 }
-                Err(e) => {
-                    info!("Failed to bind to {}: {}", port, e);
+            } else {
+                info!("No more TCP Ports!");
+            }
+        }
+        //let the_address = Multiaddr::from_str("/ip4/0.0.0.0/tcp/8083").expect("Failed to parse multiaddr");
+        loop {
+            if let Some(port) = whitelisted_peers.pop() {
+                let address_str = format!("{}",port);
+                let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");        
+                //Loop  to listen
+                match Swarm::listen_on( swarm_public_net, the_address.clone()) {
+                    Ok(_) => {
+                        info!("Listening on {:?}", the_address.clone());
+                        spawn(async move {
+                            sleep(Duration::from_secs(1)).await;
+                            info!("sending init event");
+                            init_sender.send(true).expect("can send init event");
+                        });
+                        break;
+                    },
+                    Err(e) => {
+                        info!("Failed to listen on {:?}. Reason: {:?}", the_address, e);
+                    }
+                    }
+            } else {
+                info!("No more Whitelisted Peers!");
+            }
+        }
+        let mut init_received = false;  // flag to track if Init event is processed
+        if !init_received {
+            let recv_result = init_rcv.recv().await;
+            match recv_result {
+                Some(_) => {
+                    let peers = p2p::get_list_peers(&swarm_public_net);
+                    let _ = swarm_public_net.behaviour_mut().app.initialize_from_storage();
+                    info!("Connected nodes: {}", peers.len());
+                    if !peers.is_empty() {
+                        let req = p2p::LocalChainRequest {
+                            from_peer_id: peers
+                                .iter()
+                                .last()
+                                .expect("at least one peer")
+                                .to_string(),
+                        };
+                        let (pub_key,private_key)=account::create_account().expect("Failed to create account");
+                        let n_path = "./node/db";
+                        
+                        let node_path = match rock_storage::open_db(n_path) {
+                            Ok(path) => path,
+                            Err(e) => {
+                                // Handle the error, maybe log it, and then decide what to do next
+                                panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
+                            }
+                        };
+                        let _ = rock_storage::put_to_db(&node_path,"node_id",&pub_key.clone().to_string());
+                        let json = serde_json::to_string(&req).expect("can jsonify request");
+                        swarm_public_net
+                            .behaviour_mut()
+                            .floodsub
+                            .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
+                    }
+                    init_received = true;
+                },
+                None => {
+                    // Handle the case where recv_result is None, perhaps breaking the loop or continuing
+                },
+            }
+        }
+        loop {
+            let public_evt = 
+                select! {
+                    line = stdin.next_line() => Some(p2p::EventType::Input(line.expect("can get line").expect("can read line from stdin"))),
+                    response = response_rcv.recv() => {
+                        Some(p2p::EventType::LocalChainResponse(response.expect("response exists")))
+                    },
+                    event = swarm_public_net.select_next_some() => {
+                        let api_app =swarm_public_net.behaviour_mut().app.clone();
+                        rpc_connector::add_api_blocks(api_app.clone());
+                        None
+                    }
+                    publish = publish_receiver.recv() => {
+                        let (title, message) = publish.clone().expect("Publish exists");
+                        let api_app =swarm_public_net.behaviour_mut().app.clone();
+                        rpc_connector::add_api_blocks(api_app.clone());
+                        info!("Publish Swarm Event: {:?}", title);
+                        Some(p2p::EventType::Publish(title, message))
+                    },
+                    publish_block = publish_bytes_receiver.recv()=>{
+                        let (title, message) = publish_block.clone().expect("Publish Block exists");
+                        let api_app =swarm_public_net.behaviour_mut().app.clone();
+                        rpc_connector::add_api_blocks(api_app.clone());
+                        Some(p2p::EventType::PublishBlock(title, message.into()))
+                    }
+                };
+                if let Some(event) = public_evt {
+                    match event {
+                        p2p::EventType::Init => {
+                            let peers = p2p::get_list_peers(&swarm_public_net);
+                            swarm_public_net.behaviour_mut().app.genesis();
+                            info!("Connected nodes: {}", peers.len());
+                            if !peers.is_empty() {
+                                let req = p2p::LocalChainRequest {
+                                    from_peer_id: peers
+                                        .iter()
+                                        .last()
+                                        .expect("at least one peer")
+                                        .to_string(),
+                                };
+                                let json = serde_json::to_string(&req).expect("can jsonify request");
+                                swarm_public_net
+                                    .behaviour_mut()
+                                    .floodsub
+                                    .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
+                            }
+                        }
+                        p2p::EventType::LocalChainResponse(resp) => {
+                            let json = serde_json::to_string(&resp).expect("can jsonify response");
+                            swarm_public_net
+                                .behaviour_mut()
+                                .floodsub
+                                .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
+                        }
+                        p2p::EventType::Publish(title,message)=>{
+                            let title_json = serde_json::to_string(&title).expect("can jsonify title");
+                            let topic_str = title_json.trim_matches('"');
+                            let topic = libp2p::floodsub::Topic::new(topic_str);
+                            let message_json = serde_json::to_string(&message).expect("can jsonify message");
+                            let peers = p2p::get_list_peers(&swarm_public_net);
+                            swarm_public_net.behaviour_mut().floodsub.publish(topic,message_json.as_bytes())
+                        }
+                        p2p::EventType::PublishBlock(title,message)=>{
+                            let title_json = serde_json::to_string(&title).expect("can jsonify title");
+                            let topic_str = title_json.trim_matches('"');
+                            let topic = libp2p::floodsub::Topic::new(topic_str);
+                            let message_json = serde_json::to_string(&message).expect("can jsonify message");
+                            swarm_public_net.behaviour_mut().floodsub.publish(topic,message)
+                        }
+                        p2p::EventType::Input(line) => match line.as_str() {
+                            "ls p" => p2p::handle_print_peers(&swarm_public_net),
+                            cmd if cmd.starts_with("ls b") => p2p::handle_print_chain(&swarm_public_net),
+                            cmd if cmd.starts_with("ls rt") => p2p::handle_print_raw_txn(&swarm_public_net),
+                            _ => error!("unknown command"),  
+                        },
+                    }
                 }
             }
         } else {
-            info!("No more ports to pop!");
-        }
-    }
-    loop {
-        if let Some(port) = whitelisted_peers.pop() {
-            let address_str = format!("{}",port);
-            let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");        
-            info!("{:?}", the_address.clone());
-            match Swarm::listen_on(&mut swarm_private_net, the_address.clone()) {
-                Ok(_) => {
-                    info!("Listening on {:?}", the_address.clone());
-                    spawn(async move {
-                        sleep(Duration::from_secs(1)).await;
-                        info!("sending init event");
-                        init_private_sender.send(true).expect("can send init event");
-                    });
-                    break;
-                },
-                Err(e) => {
-                    info!("Failed to listen on {:?}. Reason: {:?}", the_address, e);
-                }
-                }
-            
-        } else {
-            info!("No more ports to pop!");
-        }
-    }
-    let mut init_received = false;  // flag to track if Init event is processed
-
-    if !init_received {
-        let recv_result = init_private_rcv.recv().await;
-        match recv_result {
-            Some(_) => {
-                println!("Initialization event received.");
-                init_received = true;  // Set flag to true, so this block won't execute again
-                private_p2p::EventType::Init;
-                // Now you can return Some(p2p::EventType::Init) or do something else
-            },
-            None => {
-                // Handle the case where recv_result is None, perhaps breaking the loop or continuing
-            },
-        }
-    }
-    loop {
-        let private_evt = 
-            select! {
-                line = stdin.next_line() => 
-                    Some(private_p2p::EventType::Input(line.expect("can get line").expect("can read line from stdin"))),
-                response = response_private_rcv.recv() => {
-                    Some(private_p2p::EventType::LocalChainResponse(response.expect("response exists")))
-                },
-                // _init = init_private_rcv.recv() => {
-                //     info!("Private Block Setup");
-                //     Some(private_p2p::EventType::Init)  
-                // }
-                event = swarm_private_net.select_next_some() => {
-                    let api_app =swarm_private_net.behaviour_mut().app.clone();
-                    rpc_connector::add_api_blocks(api_app.clone());
-                    let api_task = tokio::task::spawn_blocking(move || {
-                        api::private_api(); // Assuming this is a blocking function
-                    });
-                    None
-                },
-                publish = publish_receiver.recv() => {
-                    let (title, message) = publish.clone().expect("Publish exists");
-                    info!("Publish Swarm Event: {:?}", title);
-                    Some(private_p2p::EventType::Publish(title, message))
-                },
-            };
-            if let Some(event) = private_evt {
-                match event {
-                    private_p2p::EventType::Init => {
-                        let peers = private_p2p::get_list_peers(&swarm_private_net);
-                        info!("Connected nodes: {}", peers.len());
-                        //private_p2p::handle_start_chain(&mut swarm_private_net);
-                        if !peers.is_empty() {
-                            let req = private_p2p::PrivateLocalChainRequest {
-                                from_peer_id: peers
-                                    .iter()
-                                    .last()
-                                    .expect("at least 2 peer")
-                                    .to_string(),
-                            };
-                            
-                            let json = serde_json::to_string(&req).expect("can jsonify request");
-                            swarm_private_net
-                                .behaviour_mut()
-                                .floodsub
-                                .publish(private_p2p::CHAIN_TOPIC.clone(), json.as_bytes());
-                        }
-                    }
-                    private_p2p::EventType::Kademlia(resp)=>{
-                        //let json = KademliaEvent::from_slice(resp).expect("can jsonify response");
-                        println!("KADEMLIA {:?}",resp);
-                    }
-                    private_p2p::EventType::LocalChainResponse(resp) => {
-                        let json = serde_json::to_string(&resp).expect("can jsonify response");
-                        swarm_private_net
-                            .behaviour_mut()
-                            .floodsub
-                            .publish(private_p2p::CHAIN_TOPIC.clone(), json.as_bytes());
-                    }
-                    private_p2p::EventType::Publish(title,message)=>{
-                        let title_json = serde_json::to_string(&title).expect("can jsonify title");
-                        let topic_str = title_json.trim_matches('"');
-                        let topic = libp2p::floodsub::Topic::new(topic_str);
-                        let message_json = serde_json::to_string(&message).expect("can jsonify message");
-                        let peers = private_p2p::get_list_peers(&swarm_private_net);
-                        // println!("Number of NODES: {:?}",peers.len());
-                        // println!("PBFT Node number of views for consensus {:?}",pbft_node_views);
-                        swarm_private_net.behaviour_mut().floodsub.publish(topic,message_json.as_bytes())
-                    }
-                    private_p2p::EventType::PublishBlock(title,message)=>{
-                        let title_json = serde_json::to_string(&title).expect("can jsonify title");
-                    }
-                    private_p2p::EventType::Input(line) => match line.as_str() {
-                        "ls p" => private_p2p::handle_print_peers(&swarm_private_net),
-                        "start"=>private_p2p::handle_start_chain(&mut swarm_private_net).await,
-                        cmd if cmd.starts_with("ls b") => private_p2p::handle_print_chain(&swarm_private_net),
-                        cmd if cmd.starts_with("create txn")=> private_pbft::pbft_pre_message_handler(cmd, &mut swarm_private_net),
-                        _ => error!("unknown command"),  
-                    },
-                }
-        }
+            panic!("Swarm not initialized");
         }
 }

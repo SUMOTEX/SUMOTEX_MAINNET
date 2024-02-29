@@ -16,18 +16,18 @@ use once_cell::sync::Lazy;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 use serde_json::{Value};
-use crate::public_app::App;
+use crate::app::App;
 use crate::pbft::PBFTNode;
-use crate::public_block::Block;
-use crate::public_txn::Txn;
+use crate::block::Block;
+use crate::txn::Txn;
 use crate::rock_storage::StoragePath;
-use crate::public_block;
-use crate::public_txn;
+use crate::block;
+use crate::txn;
 use crate::pbft;
 use crate::rock_storage;
 use crate::txn_pool;
-use crate::private_txn::PrivateTxn;
-use crate::public_block::handle_create_block_pbft;
+use crate::txn::PublicTxn;
+use crate::block::handle_create_block_pbft;
 
 // main.rs
 use crate::publisher::Publisher;
@@ -108,7 +108,7 @@ impl AppBehaviour {
             init_sender,
         };
         behaviour.floodsub.subscribe(CHAIN_TOPIC.clone());
-        behaviour.floodsub.subscribe(public_block::BLOCK_TOPIC.clone());
+        behaviour.floodsub.subscribe(block::BLOCK_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_PBFT_PREPREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_PBFT_PREPARED_TOPIC.clone());
         behaviour.floodsub.subscribe(BLOCK_PBFT_COMMIT_TOPIC.clone());
@@ -200,17 +200,26 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     Ok(block) => {
                         info!("Received new block from {}", msg.source.to_string());
                         self.app.try_add_block(block.clone());
-                        let block_db = self.storage_path.get_blocks();
+                        let path = "./blockchain/db";
+                        // Open the database and handle the Result
+                        let block_db = match rock_storage::open_db(path) {
+                            Ok(db) => db,
+                            Err(_) => {
+                                eprintln!("Failed to open database");
+                                return; // This exits the `inject_event` function early.
+                            }
+                        };
                         let json = serde_json::to_string(&block).expect("can jsonify request");
+                        let _ = rock_storage::put_to_db(&block_db, block.public_hash.clone(), &json);
+                        let _ = rock_storage::put_to_db(&block_db,"latest_block", &json);
                         let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
                         for txn in block.transactions{
                             if let Some(first_txn_id) = txn.first().cloned() {
-                                Txn::update_transaction_status(&first_txn_id,3);
+                                let _ = Txn::update_transaction_status(&first_txn_id,3);
                                 mempool.remove_transaction_by_id(first_txn_id);
                             } 
                         }
-                        let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &json);
-                        let _ = rock_storage::put_to_db(block_db,"latest_block", &json);
+
                     },
                     Err(err) => {
                         error!(
@@ -315,36 +324,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                 };
             }
-            //   else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
-            //     println!("Block Received");
-            //     let received_serialized_data = msg.data.clone();
-            //     let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
-            //     let the_pbft_hash = self.pbft.get_hash_id();
-            //     if let Some((first_key, inner_value)) = deserialized_data.iter().next() {
-            //         unsafe {
-            //             LEADER = Some(first_key.to_string());
-            //             println!("Leader set to: {:?}", LEADER);
-            //         }
-            //         let serialised_dictionary = serde_json::to_vec(&deserialized_data).unwrap();
-            //         // Here, use `all_valid_txn_hashes` as needed
-            //         self.pbft.increment_verification(&the_pbft_hash);
-            //         for (peer_id, inner_value) in deserialized_data.iter() {
-            //             for (key, inner_map) in inner_value.iter() {
-            //                 let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
-            //                 for (txn_hash, _) in inner_map.iter() {
-            //                     public_txn::Txn::update_transaction_status(&txn_hash,2);
-            //                     mempool.remove_transaction_by_id(txn_hash.to_string());
-            //                 }
-            //             }
-            //         }
-            //         if let Some(publisher) = Publisher::get() {
-            //                 let received_serialized_data = msg.data;
-            //                 publisher.publish_block("block_pbft_prepared".to_string(), received_serialized_data);
-            //         }
-            //     } else {
-            //         println!("The outer HashMap is empty");
-            //     }
-            // }
             else if msg.topics[0]==Topic::new("block_pbft_pre_prepared"){
                 let received_serialized_data = msg.data;
                 let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
@@ -387,11 +366,9 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                 let is_leader = unsafe { LEADER.as_ref() }.map(|leader| leader == &local_peer_id).unwrap_or(false);
                                 let the_leader = unsafe { LEADER.as_ref() }.unwrap();
                                 //if is_leader{
-                                    println!("LEADER found");
                                     let created_block = handle_create_block_pbft(self.app.clone(), transactions,the_leader);
                                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
                                     //self.app.try_add_block(created_block.clone());
-                                    let block_db = self.storage_path.get_blocks();
                                     publisher.publish_block("block_pbft_commit".to_string(),json.as_bytes().to_vec())
                                 //}
                         }
@@ -403,7 +380,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 }
             }else if msg.topics[0]==Topic::new("block_pbft_commit"){
                 let local_peer_id = get_peer_id();
-                println!("Local Peer ID {:?} Leader: {:?}", local_peer_id, unsafe { LEADER.as_ref() });
+                // println!("Local Peer ID {:?} Leader: {:?}", local_peer_id, unsafe { LEADER.as_ref() });
                 //let is_leader = unsafe { LEADER.as_ref() == Some(&local_peer_id) };
                 let is_leader = unsafe { LEADER.as_ref() }.map(|leader| leader == &local_peer_id).unwrap_or(false);
                         match serde_json::from_slice::<Block>(&msg.data) {
@@ -412,18 +389,24 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     info!("Received new block from {}", msg.source.to_string());
                                     let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
                                     self.app.try_add_block(block.clone());
-                                    let block_db = self.storage_path.get_blocks();
+                                    let path = "./blockchain/db";
+                                    // Open the database and handle the Result
+                                    let block_db = match rock_storage::open_db(path) {
+                                        Ok(db) => db,
+                                        Err(_) => {
+                                            eprintln!("Failed to open database");
+                                            return; // This exits the `inject_event` function early.
+                                        }
+                                    };             
+                                    let json = serde_json::to_string(&block).expect("can jsonify request");
+                                    let _ = rock_storage::put_to_db(&block_db, block.public_hash.clone(), &json);
+                                    let _ = rock_storage::put_to_db(&block_db,"latest_block", &json);
                                     for txn_hash in &block.transactions {
                                         if let Some(first_txn_id) = txn_hash.first().cloned() {
                                             Txn::update_transaction_status(&first_txn_id,3);
                                             mempool.remove_transaction_by_id(first_txn_id);
                                         } 
                                     }
-                                    let json = serde_json::to_string(&block).expect("can jsonify request");
-                                    let _ = rock_storage::put_to_db(block_db, block.public_hash.clone(), &json);
-                                    let _ = rock_storage::put_to_db(block_db,"latest_block", &json);
-
-
                                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                                 }
                             },
@@ -435,28 +418,24 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                 );
                             }
                         }
-            }
-            else if msg.topics[0]==Topic::new("private_blocks_genesis_creation"){
-                let received_serialized_data =msg.data;
-                let json_string = String::from_utf8(received_serialized_data).unwrap();
-                println!("Private Genesis Block: {:?}",json_string);
-                if let Some(publisher) = Publisher::get(){
-                let created_block = public_block::handle_create_block_private_chain(self.app.clone(),Some(json_string),None,None);
-                let json = serde_json::to_string(&created_block).expect("can jsonify request");
-                let block_db = self.storage_path.get_blocks();
-                let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
-                self.app.blocks.push(created_block);
-                publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
-                }
+            
             } else if msg.topics[0]==Topic::new("hybrid_block_creation")  {
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
                 println!("Private Block Transactions: {:?}",json_string);
                 if let Some(publisher) = Publisher::get(){
-                    let created_block = public_block::handle_create_block_private_chain(self.app.clone(),Some(json_string),None,None);
+                    let created_block = block::handle_create_block_private_chain(self.app.clone(),Some(json_string),None,None,None);
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
-                    let block_db = self.storage_path.get_blocks();
-                    let _ = rock_storage::put_to_db(block_db,created_block.public_hash.clone(),&json);
+                    let path = "./blockchain/db";
+                    // Open the database and handle the Result
+                    let block_db = match rock_storage::open_db(path) {
+                        Ok(db) => db,
+                        Err(_) => {
+                            eprintln!("Failed to open database");
+                            return; // This exits the `inject_event` function early.
+                        }
+                    };
+                    let _ = rock_storage::put_to_db(&block_db,created_block.public_hash.clone(),&json);
                     self.app.blocks.push(created_block);
                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                 }

@@ -31,12 +31,12 @@ use wasm_bindgen::JsCast;
 extern crate base64;
 use base64::{encode, decode};
 use crate::gas_calculator;
-use crate::public_txn;
+use crate::txn;
 use crate::account;
 use crate::rock_storage::StoragePath;
-use crate::public_swarm;
-use crate::public_txn::TransactionType;
-use crate::public_txn::PublicTxn;
+use crate::swarm;
+use crate::txn::TransactionType;
+use crate::txn::PublicTxn;
 
 #[derive(Serialize, Deserialize)]
 pub struct ERC721Token {
@@ -1100,7 +1100,7 @@ pub fn create_contract_official(
                 }
             };
             println!("Gas Fee: {:?}",the_gas_cost);
-            let result = public_txn::Txn::create_and_prepare_transaction(
+            let result = txn::Txn::create_and_prepare_transaction(
                 TransactionType::ContractCreation,
                 call_address.to_string(),
                 public_key.to_string(),
@@ -1208,7 +1208,7 @@ pub fn mint_token_official(contract_address:&String,
     //     return Err(e.into());
     //     }
     // };
-    let txn = public_txn::Txn::create_and_prepare_transaction(
+    let txn = txn::Txn::create_and_prepare_transaction(
     TransactionType::ContractInteraction,
     account_key.to_string(),
     contract_address.to_string(),
@@ -1229,7 +1229,7 @@ pub fn mint_token_official(contract_address:&String,
     }
     };
     let result = contract.mint_token_dynamic(&contract_path, &contract_info,account_key,&contract_address.to_string(),owner_creds,owner_name,owner_email,ipfs);
-    let _ = public_txn::Txn::sign_and_submit_transaction(account_key,txn_hash.clone(),&the_official_private_key);
+    let _ = txn::Txn::sign_and_submit_transaction(account_key,txn_hash.clone(),&the_official_private_key);
         match result {
             Ok(token_id) => {
             println!("Mint: {}", token_id);
@@ -1501,7 +1501,7 @@ pub fn call_contract_function(
                     // Calculate the gas cost after converting memory_bytes_used to u64
                     let the_gas_cost: u128 = gas_calculator::calculate_gas_for_contract_interaction(required_memory_size_bytes as u64) as u128;
                     // Create and prepare the transaction
-                    let (txn_hash, _gas_cost, _new_txn) = public_txn::Txn::create_and_prepare_transaction(
+                    let (txn_hash, _gas_cost, _new_txn) = txn::Txn::create_and_prepare_transaction(
                         TransactionType::ContractInteraction,
                         account_key.to_string(),
                         contract_address.to_string(),
@@ -1519,7 +1519,7 @@ pub fn call_contract_function(
                             panic!("Failed to create SecretKey: {:?}", e);
                         }
                     };
-                    let _ = public_txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
+                    let _ = txn::Txn::sign_and_submit_transaction(account_key, txn_hash.clone(), &the_official_private_key);
                     contract.wasm_memory = wasm_memory.data(&mut store).to_vec(); // Update this only if the WASM memory state is relevant
                     let updated_serialized_contract = serde_json::to_vec(&contract)?;
                     rock_storage::put_to_db(&contract_path, &contract_address, &updated_serialized_contract)?;      

@@ -1,0 +1,76 @@
+[{
+    "name": "deserialize_from_memory",
+    "type": "function",
+    "inputs": [{"name": "buffer", "type": "u8"},{"name": "len", "type": "usize"}],
+    "outputs": [{"name": "output", "type": ">"}]
+},{
+    "name": "to_memory",
+    "type": "function",
+    "inputs": [],
+    "outputs": [{"name": "output", "type": ">"}]
+},{
+    "name": "initialize",
+    "type": "function",
+    "inputs": [{"name": "name_ptr", "type": "u8"},{"name": "name_len", "type": "usize"},{"name": "symbol_ptr", "type": "u8"},{"name": "symbol_len", "type": "usize"}],
+    "outputs": []
+},{
+    "name": "mint",
+    "type": "function",
+    "inputs": [{"name": "owner_ptr", "type": "u8"},{"name": "owner_len", "type": "usize"},{"name": "ipfs_hash_ptr", "type": "u8"},{"name": "ipfs_hash_len", "type": "usize"}],
+    "outputs": [{"name": "output", "type": "u32"}]
+},{
+    "name": "get_token_or_default",
+    "type": "function",
+    "inputs": [],
+    "outputs": [{"name": "output", "type": "ERC721Token"}]
+},{
+    "name": "get_owner_len",
+    "type": "function",
+    "inputs": [{"name": "token_id", "type": "i32"}],
+    "outputs": [{"name": "output", "type": "i64"}]
+},{
+    "name": "get_owner_ptr",
+    "type": "function",
+    "inputs": [{"name": "token_id", "type": "i32"}],
+    "outputs": [{"name": "output", "type": "i8"}]
+},{
+    "name": "get_ipfs_len",
+    "type": "function",
+    "inputs": [{"name": "token_id", "type": "i32"}],
+    "outputs": [{"name": "output", "type": "i32"}]
+},{
+    "name": "get_ipfs_ptr",
+    "type": "function",
+    "inputs": [{"name": "token_id", "type": "i32"}],
+    "outputs": [{"name": "output", "type": "i8"}]
+},{
+    "name": "encode_token_details",
+    "type": "function",
+    "inputs": [{"name": "details", "type": "TokenDetails"}],
+    "outputs": [{"name": "output", "type": ">"}]
+},{
+    "name": "transfer",
+    "type": "function",
+    "inputs": [{"name": "from_ptr", "type": "u8"},{"name": "from_len", "type": "usize"},{"name": "to_ptr", "type": "u8"},{"name": "to_len", "type": "usize"},{"name": "token_id", "type": "i32"}],
+    "outputs": [{"name": "output", "type": ">"}]
+},{
+    "name": "read_name",
+    "type": "function",
+    "inputs": [{"name": "buffer", "type": "u8"},{"name": "buffer_len", "type": "usize"}],
+    "outputs": [{"name": "output", "type": "isize"}]
+},{
+    "name": "read_symbol",
+    "type": "function",
+    "inputs": [{"name": "buffer", "type": "u8"},{"name": "buffer_len", "type": "usize"}],
+    "outputs": [{"name": "output", "type": "isize"}]
+},{
+    "name": "string_to_buffer",
+    "type": "function",
+    "inputs": [{"name": "source", "type": "str"},{"name": "buffer", "type": "u8"},{"name": "buffer_len", "type": "usize"}],
+    "outputs": [{"name": "output", "type": "isize"}]
+},{
+    "name": "total_tokens",
+    "type": "function",
+    "inputs": [],
+    "outputs": [{"name": "output", "type": "i64"}]
+}]

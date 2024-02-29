@@ -1,11 +1,11 @@
 {
-  "name": "private_chain",
+  "name": "public_chain",
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
   "scripts": {
     "start": "cargo run",
-    "up": "sudo pm2 start target/debug/private_chain --watch",
+    "up": "sudo pm2 start target/debug/public_chain --watch",
     "down": "sudo pm2 stop 0 --watch && pm2 delete 0"
     },
   "author": "",
