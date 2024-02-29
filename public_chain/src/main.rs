@@ -43,7 +43,6 @@ use rocksdb::SingleThreaded;
 type MySwarm = Swarm<AppBehaviour>;
 
 
-
 pub fn create_pub_storage()->  Result<rock_storage::StoragePath, Box<dyn std::error::Error>>{
     let paths = [
         "./public_blockchain",
@@ -133,38 +132,53 @@ async fn block_producer() {
         sleep(Duration::from_secs(20)).await; // Adjust the interval as needed
     }
 }
-// #[derive(Default)]
-// struct WhitelistedPeers {
-//     peers: Arc<Mutex<Vec<Multiaddr>>>,
-// }
 
-// impl WhitelistedPeers {
-//     // Method to add a new whitelisted peer
-//     fn add_peer(&self, address: Multiaddr) {
-//         let mut peers = self.peers.lock().unwrap();
-//         peers.push(address);
-//     }
-
-//     // Method to get the current list of whitelisted peers
-//     fn get_peers(&self) -> Vec<Multiaddr> {
-//         let peers = self.peers.lock().unwrap();
-//         peers.clone()
-//     }
-// }
 
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
+    //     let mut whitelisted_peers = vec![
+    //     "/ip4/46.137.235.97/tcp/8081",
+    //     "/ip4/13.228.172.186/tcp/8082",
+    //     // Add more whitelisted peers as needed
+    // ];
+
     let mut whitelisted_peers = vec![
-        "/ip4/46.137.235.97/tcp/8081",
-        "/ip4/13.228.172.186/tcp/8082",
-        // Add more whitelisted peers as needed
-    ];
-    
+        "/ip4/0.0.0.0/tcp/8081",
+        "/ip4/0.0.0.0/tcp/8082",
+        "/ip4/0.0.0.0/tcp/8083",
+        "/ip4/0.0.0.0/tcp/8084",
+        "/ip4/0.0.0.0/tcp/8085",
+        "/ip4/0.0.0.0/tcp/8086",
+        "/ip4/0.0.0.0/tcp/8087",
+        "/ip4/0.0.0.0/tcp/8089",
+        "/ip4/0.0.0.0/tcp/8090",
+        "/ip4/0.0.0.0/tcp/8091",
+        "/ip4/0.0.0.0/tcp/8092",
+        "/ip4/0.0.0.0/tcp/8093",
+        "/ip4/0.0.0.0/tcp/8094",
+        "/ip4/0.0.0.0/tcp/8095",
+        "/ip4/0.0.0.0/tcp/8096",
+        "/ip4/0.0.0.0/tcp/8097",
+        "/ip4/0.0.0.0/tcp/8098",
+        // ... other addresses
+        ];
 
     let mut whitelisted_listener = vec![
-        "46.137.235.97:8089",
-        "13.228.172.186:8090"
+        "127.0.0.1:8089",
+        "127.0.0.1:8090",
+        "127.0.0.1:8091",
+        "127.0.0.1:8092",
+        "127.0.0.1:8093",
+        "127.0.0.1:8094",
+        "127.0.0.1:8095",
+        "127.0.0.1:8096",
+        "127.0.0.1:8097",
+        "127.0.0.1:8098",
+        "127.0.0.1:8099",
+        "127.0.0.1:8100",
+        "127.0.0.1:8101",
+        "127.0.0.1:8102",
         ];
     //let whitelisted_peers = WhitelistedPeers::default();
     let my_local_ip = local_ip().unwrap();
