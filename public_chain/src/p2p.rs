@@ -219,7 +219,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                 mempool.remove_transaction_by_id(first_txn_id);
                             } 
                         }
-
                     },
                     Err(err) => {
                         error!(
@@ -244,14 +243,11 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     match serde_json::from_str::<PublicTxn>(&unescaped_value) {
                                         Ok(txn) => {
                                             let serialized_txn_from_msg = serde_json::to_string(&txn).unwrap();
-                                            println!("Serialized from Message: {}", serialized_txn_from_msg);
-                                            
+                                           
                                             let msg_hash_result = Sha256::digest(serialized_txn_from_msg.as_bytes());
                                             let msg_transaction_hash = hex::encode(msg_hash_result);
-                                            println!("Hash from Message: {}", msg_transaction_hash);
                                              // Retrieve the expected hash (key) from outer_json
                                             let expected_hash = outer_json["key"].as_str().unwrap_or_default();
-                                            println!("Hashes {:?} NEXT: {:?}",expected_hash,msg_transaction_hash);
                                             if msg_transaction_hash == expected_hash {
                                                 println!("Hashes match.");
                                                 // Perform actions for a match
@@ -281,9 +277,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         eprintln!("Failed to convert bytes to string: {}", e);
                     }
                 }; 
-                // if let Some(publisher) = Publisher::get(){
-                //     publisher.publish("txn_pbft_commit".to_string(), json_string);
-                // }
             }
             else if msg.topics[0] == Topic::new("txn_pbft_commit") {
                 println!("Transaction PBFT Commit");
@@ -324,36 +317,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                 };
             }
-            //   else if msg.topics[0]==Topic::new("block_pbft_pre_prepared") {
-            //     println!("Block Received");
-            //     let received_serialized_data = msg.data.clone();
-            //     let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
-            //     let the_pbft_hash = self.pbft.get_hash_id();
-            //     if let Some((first_key, inner_value)) = deserialized_data.iter().next() {
-            //         unsafe {
-            //             LEADER = Some(first_key.to_string());
-            //             println!("Leader set to: {:?}", LEADER);
-            //         }
-            //         let serialised_dictionary = serde_json::to_vec(&deserialized_data).unwrap();
-            //         // Here, use `all_valid_txn_hashes` as needed
-            //         self.pbft.increment_verification(&the_pbft_hash);
-            //         for (peer_id, inner_value) in deserialized_data.iter() {
-            //             for (key, inner_map) in inner_value.iter() {
-            //                 let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
-            //                 for (txn_hash, _) in inner_map.iter() {
-            //                     public_txn::Txn::update_transaction_status(&txn_hash,2);
-            //                     mempool.remove_transaction_by_id(txn_hash.to_string());
-            //                 }
-            //             }
-            //         }
-            //         if let Some(publisher) = Publisher::get() {
-            //                 let received_serialized_data = msg.data;
-            //                 publisher.publish_block("block_pbft_prepared".to_string(), received_serialized_data);
-            //         }
-            //     } else {
-            //         println!("The outer HashMap is empty");
-            //     }
-            // }
             else if msg.topics[0]==Topic::new("block_pbft_pre_prepared"){
                 let received_serialized_data = msg.data;
                 let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
@@ -371,7 +334,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                             let (valid_txn, txn_hashes) = self.txn.is_txn_valid(key.to_string(), inner_map.clone());
                             if valid_txn {
                                 for (txn_hash, _) in inner_map.iter() {
-                                    println!("Transaction Hashes: {:?}", txn_hash);
                                     txn_hashes_for_root.push(txn_hash);
                                     Txn::update_transaction_status(&txn_hash,2);
                                 }
@@ -383,7 +345,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         }
                     }
                     if all_transactions_valid {
-                        println!("All transactions are valid, proceeding with PBFT actions");
                         // Here, use `all_valid_txn_hashes` as needed
                         self.pbft.increment_verification(&the_pbft_hash);
                         if let Some(publisher) = Publisher::get() {

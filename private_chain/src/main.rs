@@ -244,7 +244,7 @@ async fn main() {
                     Ok(_) => {
                         info!("Listening on {:?}", the_address.clone());
                         spawn(async move {
-                            sleep(Duration::from_secs(1)).await;
+                            //sleep(Duration::from_secs(1)).await;
                             info!("sending init event");
                             init_sender.send(true).expect("can send init event");
                         });
