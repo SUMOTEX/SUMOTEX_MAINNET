@@ -32,6 +32,8 @@ mod rpc_connector;
 mod gas_calculator;
 mod txn_pool;
 mod token;
+mod staking;
+use crate::staking::NodeInfo;
 use bridge::accept_loop;
 use crate::app::App;
 use std::sync::{RwLock, Arc};
@@ -214,7 +216,6 @@ async fn main() {
     //WHITE-LABEL PRODUCT: CHANGE OF CHAIN
     let mut gas_token = token::SMTXToken::new("SUMOTEX".to_string(), "SMTX".to_string(), 18, 1000000000000000000);
     if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
-        //rpc_connector::set_global_swarm_public_net(swarm_public_net);
         loop {
             if let Some(port) = whitelisted_listener.pop() {
                 match TcpListener::bind(&port).await {
@@ -265,7 +266,7 @@ async fn main() {
                 Some(_) => {
                     let peers = p2p::get_list_peers(&swarm_public_net);
                     let _ = swarm_public_net.behaviour_mut().app.initialize_from_storage();
-                    info!("Connected nodes: {}", peers.len());
+                    // info!("Connected nodes: {}", peers.len());
                     if !peers.is_empty() {
                         let req = p2p::LocalChainRequest {
                             from_peer_id: peers
@@ -284,8 +285,22 @@ async fn main() {
                                 panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
                             }
                         };
+                        //let whitelisted_peers = WhitelistedPeers::default();
+                        let my_local_ip = local_ip().unwrap();
+                        // Add initial whitelisted peers (if any)
+                        println!("This is my local IP address: {:?}", my_local_ip);
+                        let binding = my_local_ip.to_string();
                         let _ = rock_storage::put_to_db(&node_path,"node_id",&pub_key.clone().to_string());
                         let json = serde_json::to_string(&req).expect("can jsonify request");
+                        let start = SystemTime::now();
+                        let since_the_epoch = start.duration_since(UNIX_EPOCH)?;
+                        let node_info = NodeInfo {
+                            node_address: pub_key.to_string(),
+                            ip_address:my_local_ip.to_string(),
+                            last_active: since_the_epoch.as_secs(),
+                        };
+                        NodeInfo::upsert_node_info(&db, &node_info)?;
+
                         swarm_public_net
                             .behaviour_mut()
                             .floodsub

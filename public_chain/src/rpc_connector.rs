@@ -537,6 +537,27 @@ fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
     }
 }
 
+#[post("/read-node", data = "<txn_id_info>")]
+fn read_node(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
+    let txn_id = &txn_id_info.txn_hash;
+    // Assuming a function `get_transaction_by_id` that fetches the transaction from storage
+    match public_txn::Txn::get_transaction_by_id(txn_id) {
+        Ok(transaction) => {
+            // Assuming `transaction` is serializable with `serde`
+            Json(json!({
+                "jsonrpc": "1.0",
+                "result": transaction
+            }))
+        },
+        Err(e) => {
+            println!("Error reading transaction: {:?}", e);
+            Json(json!({
+                "jsonrpc": "1.0", 
+                "error": "Transaction read failed"
+            }))
+        }
+    }
+}
 
 #[get("/healthcheck")]
 fn healthcheck() -> Json<serde_json::Value> {

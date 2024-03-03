@@ -1,6 +1,7 @@
 use std::collections::HashMap;
 use serde::{Deserialize, Serialize};
 use secp256k1::Error as Secp256k1Error;
+use std::time::{SystemTime, UNIX_EPOCH};
 use crate::rock_storage;
 
 const MIN_STAKE: u64 = 1_400_000; // Minimum stake of 1.4 million
@@ -15,6 +16,7 @@ pub struct NodeStaking {
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NodeInfo {
     node_address: String,
+    ip_address:String,
     last_active: u64, // Timestamp of last activity
     is_active: bool,  // Represents if the node is considered active
     // Add other relevant fields
@@ -35,9 +37,13 @@ impl From<Secp256k1Error> for SigningError {
         SigningError::Secp256k1Error(err)
     }
 }
+fn current_unix_timestamp() -> Result<u64, std::time::SystemTimeError> {
+    let start = SystemTime::now();
+    let since_the_epoch = start.duration_since(UNIX_EPOCH)?;
+    Ok(since_the_epoch.as_secs())
+}
 
 impl NodeInfo {
-
     pub fn upsert_node_info(db: &DB, node_info: &NodeInfo) -> Result<(), StakingError> {
         let serialized_info = serde_json::to_string(node_info)?;
         db.put(node_info.node_address.as_bytes(), serialized_info.as_bytes())?;
