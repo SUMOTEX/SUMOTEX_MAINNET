@@ -14,6 +14,7 @@ use crate::public_swarm;
 use crate::account;
 use crate::public_txn;
 use crate::public_block;
+use crate::staking;
 use crate::public_block::Block;
 use crate::public_txn::TransactionType;
 use crate::public_app::App as PubApp;
@@ -537,27 +538,50 @@ fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
     }
 }
 
-#[post("/read-node", data = "<txn_id_info>")]
-fn read_node(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
-    let txn_id = &txn_id_info.txn_hash;
-    // Assuming a function `get_transaction_by_id` that fetches the transaction from storage
-    match public_txn::Txn::get_transaction_by_id(txn_id) {
-        Ok(transaction) => {
-            // Assuming `transaction` is serializable with `serde`
+#[post("/setup-node")]
+fn  setup_node() -> Json<serde_json::Value> {
+    let n_path = "./node/db";
+    let node_address = rock_storage::get_from_db(&node_path,"node_id");
+    let address_list = HashMap::new();
+    match staking::NodeStaking::new(node_address,1_500_000,address_list){
+        Ok(value)=>{
             Json(json!({
                 "jsonrpc": "1.0",
-                "result": transaction
+                "result": "Setup nodes succesfully"
             }))
         },
-        Err(e) => {
-            println!("Error reading transaction: {:?}", e);
+        Err(e)=>{
             Json(json!({
-                "jsonrpc": "1.0", 
-                "error": "Transaction read failed"
+                "jsonrpc": "1.0",
+                "result": "Error setting up nodes"
             }))
         }
     }
+
 }
+
+// #[post("/read-rpc-node")]
+// fn read_node() -> Json<serde_json::Value> {
+//     let n_path = "./node/db";
+//     let the_node_pub_key = rock_storage::get_from_db(&node_path,"node_id");
+//     // Assuming a function `get_transaction_by_id` that fetches the transaction from storage
+//     match public_txn::Txn::get_transaction_by_id(txn_id) {
+//         Ok(transaction) => {
+//             // Assuming `transaction` is serializable with `serde`
+//             Json(json!({
+//                 "jsonrpc": "1.0",
+//                 "result": transaction
+//             }))
+//         },
+//         Err(e) => {
+//             println!("Error reading transaction: {:?}", e);
+//             Json(json!({
+//                 "jsonrpc": "1.0", 
+//                 "error": "Transaction read failed"
+//             }))
+//         }
+//     }
+// }
 
 #[get("/healthcheck")]
 fn healthcheck() -> Json<serde_json::Value> {

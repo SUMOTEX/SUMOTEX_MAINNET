@@ -10,6 +10,9 @@ use tokio::{
     time::sleep
 };
 use std::path::Path;
+use std::time::UNIX_EPOCH;
+use std::time::SystemTime;
+use std::collections::HashMap;
 use std::fs;
 use libp2p::Multiaddr;
 use std::str::FromStr;
@@ -32,6 +35,7 @@ mod rpc_connector;
 mod gas_calculator;
 mod txn_pool;
 mod token;
+mod staking;
 use bridge::accept_loop;
 use crate::public_app::App;
 use std::sync::{RwLock, Arc};
@@ -185,7 +189,7 @@ async fn main() {
     // Add initial whitelisted peers (if any)
     println!("This is my local IP address: {:?}", my_local_ip);
     let binding = my_local_ip.to_string();
-    whitelisted_peers.push(&binding);
+    //whitelisted_peers.push(&binding);
 
     //create storage
     remove_lock_file();
@@ -234,7 +238,6 @@ async fn main() {
                 info!("No more TCP Ports!");
             }
         }
-        //let the_address = Multiaddr::from_str("/ip4/0.0.0.0/tcp/8083").expect("Failed to parse multiaddr");
         loop {
             if let Some(port) = whitelisted_peers.pop() {
                 let address_str = format!("{}",port);
@@ -255,7 +258,7 @@ async fn main() {
                     }
                     }
             } else {
-                info!("No more Whitelisted Peers!");
+                info!("No more whitelisted Peers!");
             }
         }
         let mut init_received = false;  // flag to track if Init event is processed
@@ -276,7 +279,22 @@ async fn main() {
                         };
                         let (pub_key,private_key)=account::create_account().expect("Failed to create account");
                         let n_path = "./node/db";
-                        
+                        let my_local_ip = local_ip().unwrap();
+                        // Add initial whitelisted peers (if any)
+                        println!("Local IP address: {:?}", my_local_ip);
+                        println!("Pub node address: {:?}", pub_key);
+                        let binding = my_local_ip.to_string();
+                        // let start = SystemTime::now();
+                        // let since_the_epoch = start.duration_since(UNIX_EPOCH);
+                        // let node_info = staking::NodeInfo {
+                        //     node_address: pub_key.to_string(),
+                        //     ip_address:my_local_ip.to_string(),
+                        //     is_active:false,
+                        //     last_active: since_the_epoch.as_secs(),
+                        // };
+                        // let initial_stake = 1_550_000; // Example stake
+                        // let address_list = HashMap::new(); // Start with an empty address list
+
                         let node_path = match rock_storage::open_db(n_path) {
                             Ok(path) => path,
                             Err(e) => {
@@ -284,6 +302,8 @@ async fn main() {
                                 panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
                             }
                         };
+                        // staking::NodeInfo::upsert_node_info(&node_path, &node_info);
+                        // staking::NodeStaking::new(pub_key.to_string(),initial_stake,address_list);
                         let _ = rock_storage::put_to_db(&node_path,"node_id",&pub_key.clone().to_string());
                         let json = serde_json::to_string(&req).expect("can jsonify request");
                         swarm_public_net
@@ -339,6 +359,7 @@ async fn main() {
                                         .to_string(),
                                 };
                                 let json = serde_json::to_string(&req).expect("can jsonify request");
+
                                 swarm_public_net
                                     .behaviour_mut()
                                     .floodsub
