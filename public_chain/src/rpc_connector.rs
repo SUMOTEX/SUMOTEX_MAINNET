@@ -10,6 +10,7 @@ use std::sync::{Arc, Mutex};
 use rocket::fairing::{Fairing, Info, Kind};
 use log::error;
 use crate::smart_contract;
+use crate::rock_storage;
 use crate::public_swarm;
 use crate::account;
 use crate::public_txn;
@@ -121,6 +122,23 @@ pub struct TransferTokenInfo {
 pub struct TxnIdInfo {
     txn_hash: String
 }
+
+#[derive(serde::Deserialize, Debug)]
+pub struct SetupNodeInfo {
+    public_address: String,
+    ip_address:String
+}
+#[derive(serde::Deserialize, Debug)]
+pub struct AddStakerInfo {
+    node_public_address: String,
+    stake_address:String,
+    amount:u64
+}
+#[derive(serde::Deserialize, Debug)]
+pub struct GetNodeInfo {
+    public_address: String
+}
+
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct SignedTransaction {
     transaction_hash: String,
@@ -538,51 +556,79 @@ fn read_transaction(txn_id_info: Json<TxnIdInfo>) -> Json<serde_json::Value> {
     }
 }
 
-#[post("/setup-node")]
-fn  setup_node() -> Json<serde_json::Value> {
-    let n_path = "./node/db";
-    let node_address = rock_storage::get_from_db(&node_path,"node_id");
+#[post("/setup-node", data="<setup_node_info>")]
+fn setup_node(setup_node_info: Json<SetupNodeInfo>) -> Json<serde_json::Value> {
+    let node_address = &setup_node_info.public_address;
+    let ip_address = &setup_node_info.ip_address;
     let address_list = HashMap::new();
-    match staking::NodeStaking::new(node_address,1_500_000,address_list){
-        Ok(value)=>{
+    match staking::NodeStaking::new(node_address.to_string(),ip_address.to_string(), 1_500_000, address_list) {
+        Ok(_) => Json(json!({
+            "jsonrpc": "1.0",
+            "result": "Setup nodes successfully"
+        })),
+        Err(e) => {
+            println!("Error transaction: {:?}", e);
             Json(json!({
-                "jsonrpc": "1.0",
-                "result": "Setup nodes succesfully"
-            }))
-        },
-        Err(e)=>{
-            Json(json!({
-                "jsonrpc": "1.0",
-                "result": "Error setting up nodes"
+                "jsonrpc": "1.0", 
+                "error": "Node creation failed"
             }))
         }
     }
-
 }
 
-// #[post("/read-rpc-node")]
-// fn read_node() -> Json<serde_json::Value> {
-//     let n_path = "./node/db";
-//     let the_node_pub_key = rock_storage::get_from_db(&node_path,"node_id");
-//     // Assuming a function `get_transaction_by_id` that fetches the transaction from storage
-//     match public_txn::Txn::get_transaction_by_id(txn_id) {
-//         Ok(transaction) => {
-//             // Assuming `transaction` is serializable with `serde`
-//             Json(json!({
-//                 "jsonrpc": "1.0",
-//                 "result": transaction
-//             }))
-//         },
-//         Err(e) => {
-//             println!("Error reading transaction: {:?}", e);
-//             Json(json!({
-//                 "jsonrpc": "1.0", 
-//                 "error": "Transaction read failed"
-//             }))
-//         }
-//     }
-// }
-
+#[post("/add-stake", data="<add_stake_info>")]
+fn add_stake(add_stake_info: Json<AddStakerInfo>) -> Json<serde_json::Value> {
+    let node_address = &add_stake_info.node_public_address;
+    let stake_address = &add_stake_info.stake_address;
+    let amount = &add_stake_info.amount;
+    match staking::NodeStaking::add_staker_to_node_staking(node_address.to_string(),stake_address.to_string(), *amount) {
+        Ok(_) => Json(json!({
+            "jsonrpc": "1.0",
+            "result": "Add stake succesfully"
+        })),
+        Err(e) => {
+            println!("Error transaction: {:?}", e);
+            Json(json!({
+                "jsonrpc": "1.0", 
+                "error": "Fail to add stake"
+            }))
+        }
+    }
+}
+#[post("/node-info", data="<get_node_info>")]
+fn node_info(get_node_info: Json<GetNodeInfo>) -> Json<serde_json::Value> {
+    let node_address = &get_node_info.public_address;
+    match staking::NodeStaking::get_node_info(node_address) {
+        Ok(node_info) => Json(json!({
+            "jsonrpc": "1.0",
+            "result": node_info
+        })),
+        Err(e) => {
+            println!("Error transaction: {:?}", e);
+            Json(json!({
+                "jsonrpc": "1.0", 
+                "error": "Node creation failed"
+            }))
+        }
+    }
+}
+#[post("/node-staking", data="<get_node_info>")]
+fn node_staking(get_node_info: Json<GetNodeInfo>) -> Json<serde_json::Value> {
+    let node_address = &get_node_info.public_address;
+    match staking::NodeStaking::get_node_staking(node_address) {
+        Ok(node_info) => Json(json!({
+            "jsonrpc": "1.0",
+            "result": node_info
+        })),
+        Err(e) => {
+            println!("Error transaction: {:?}", e);
+            Json(json!({
+                "jsonrpc": "1.0", 
+                "error": "Node creation failed"
+            }))
+        }
+    }
+}
 #[get("/healthcheck")]
 fn healthcheck() -> Json<serde_json::Value> {
     // Perform any necessary health checks here. For simplicity, this example
@@ -659,6 +705,10 @@ pub async fn start_rpc() {
                         create_block,
                         create_contract,
                         get_block,
+                        setup_node,
+                        node_info,
+                        node_staking,
+                        add_stake,
                         get_latest_block,
                         healthcheck])
     .launch()

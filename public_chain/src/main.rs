@@ -212,11 +212,17 @@ async fn main() {
     // });    
     println!("After RPC server");
     let swarm_mutex = public_swarm::get_global_swarm_public_net();
-
     let mut stdin = BufReader::new(stdin()).lines();
     let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    
     //WHITE-LABEL PRODUCT: CHANGE OF CHAIN
     let mut gas_token = token::SMTXToken::new("SUMOTEX".to_string(), "SMTX".to_string(), 18, 1000000000000000000);
+    let (pub_key,private_key)=account::create_account().expect("Failed to create account");
+    let my_local_ip = local_ip().unwrap();
+    // Add initial whitelisted peers (if any)
+    println!("Local IP address: {:?}", my_local_ip);
+    println!("Pub node address: {:?}", pub_key);
+    println!("Private node address: {:?}", private_key);
+    let binding = my_local_ip.to_string();
     if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
         //rpc_connector::set_global_swarm_public_net(swarm_public_net);
         loop {
@@ -277,34 +283,7 @@ async fn main() {
                                 .expect("at least one peer")
                                 .to_string(),
                         };
-                        let (pub_key,private_key)=account::create_account().expect("Failed to create account");
-                        let n_path = "./node/db";
-                        let my_local_ip = local_ip().unwrap();
-                        // Add initial whitelisted peers (if any)
-                        println!("Local IP address: {:?}", my_local_ip);
-                        println!("Pub node address: {:?}", pub_key);
-                        let binding = my_local_ip.to_string();
-                        // let start = SystemTime::now();
-                        // let since_the_epoch = start.duration_since(UNIX_EPOCH);
-                        // let node_info = staking::NodeInfo {
-                        //     node_address: pub_key.to_string(),
-                        //     ip_address:my_local_ip.to_string(),
-                        //     is_active:false,
-                        //     last_active: since_the_epoch.as_secs(),
-                        // };
-                        // let initial_stake = 1_550_000; // Example stake
-                        // let address_list = HashMap::new(); // Start with an empty address list
 
-                        let node_path = match rock_storage::open_db(n_path) {
-                            Ok(path) => path,
-                            Err(e) => {
-                                // Handle the error, maybe log it, and then decide what to do next
-                                panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
-                            }
-                        };
-                        // staking::NodeInfo::upsert_node_info(&node_path, &node_info);
-                        // staking::NodeStaking::new(pub_key.to_string(),initial_stake,address_list);
-                        let _ = rock_storage::put_to_db(&node_path,"node_id",&pub_key.clone().to_string());
                         let json = serde_json::to_string(&req).expect("can jsonify request");
                         swarm_public_net
                             .behaviour_mut()
