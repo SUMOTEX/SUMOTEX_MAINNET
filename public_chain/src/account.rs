@@ -114,7 +114,6 @@ impl Account {
         if sender_account.balance < amount {
             return Err("Insufficient balance".into());
         }
-        println!("Sufficient balance for transfer");
     
         // Step 4: Get receiver account
         let mut receiver_account = Self::get_account(receiver_key, &db_handle)

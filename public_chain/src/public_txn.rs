@@ -187,8 +187,6 @@ impl Txn {
         let current_timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs() as i64;
         match transaction_type {
             TransactionType::ContractCreation => {
-            //TransactionType::ContractCreation => {
-                // Handle contract-specific transactions
                 Self::handle_contract_transaction(transaction_type, &caller_address, &to_address, computed_value, current_timestamp)
             },
             _ => {
@@ -213,7 +211,7 @@ impl Txn {
                 // Open the database and handle the Result
                 let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
             
-                let gas_cost = computed_value;  // Example gas cost, adjust as needed
+                let gas_cost = 1;  // Example gas cost, adjust as needed
     
                 let new_txn = PublicTxn {
                     txn_type: transaction_type,
@@ -273,7 +271,6 @@ impl Txn {
                 };
                 let verified_signature =  account::Account::verify_signature(&public_key,&hash_array,&signature);
                 if verified_signature.is_ok() && verified_signature.unwrap() {
-
                     // Update the transaction status
                     let mut updated_txn = txn.clone();
                     updated_txn.set_status(1);
@@ -349,13 +346,10 @@ impl Txn {
     pub fn handle_post_complete_block(txn: PublicTxn) -> Result<(), Box<dyn std::error::Error>> {
         
         if txn.txn_type == TransactionType::SimpleTransfer {
-            println!("Handling SimpleTransfer");
             let node_account_key = get_node_pub_account()?;
             account::Account::transfer(&txn.caller_address, &txn.to_address, txn.value);
             account::Account::transfer(&txn.caller_address, &node_account_key, txn.gas_cost);
-            println!("SimpleTransfer handled successfully.");
         }
-    
         Ok(())
     }
 

@@ -4,8 +4,10 @@ use serde::{Deserialize, Serialize};
 use secp256k1::Error as Secp256k1Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::rock_storage;
+use crate::public_txn;
 
 const MIN_STAKE: u64 = 1_500_000; // Minimum stake of 1.5 million
+const BLOCK_REWARD: u64 = 50;
 
 // Staking structure
 #[derive(Serialize, Deserialize, Debug, Clone)]
@@ -13,6 +15,7 @@ pub struct NodeStaking {
     pub node_address: String,
     pub total_stake: u64,
     pub address_list: HashMap<String, u64>, // Add balances field
+    pub rewards_distributed: HashMap<String,u64>
 }
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NodeInfo {
@@ -82,6 +85,7 @@ impl NodeStaking {
                     node_address: node_address.clone(),
                     total_stake,
                     address_list: updated_address_list.clone(),
+                    rewards_distributed:updated_address_list.clone(),
                 }).map_err(|_| StakingError::SerializationError)?;
         
                 let node_info_json = serde_json::to_string(&node_info)
@@ -173,6 +177,7 @@ impl NodeStaking {
                         let mut node_staking = serde_json::from_str::<NodeStaking>(&node_staking_json)
                             .map_err(|_| StakingError::SerializationError)?;
                         node_staking.address_list.insert(address, stake);
+                        node_staking.rewards_distributed.insert(address,0);
                         node_staking.total_stake += stake; // Update the total stake   
                         // Serialize NodeStaking and NodeInfo to JSON strings
                         let node_staking_json = serde_json::to_string(&node_staking).map_err(|_| StakingError::SerializationError)?;
@@ -193,24 +198,79 @@ impl NodeStaking {
         }
 
     }
-    
-    pub fn distribute_rewards(&mut self, total_rewards: u64) -> Result<(), StakingError> {
-        if self.total_stake == 0 {
-            // Avoid division by zero if there's no stake in the system
-            return Err(StakingError::MinStakeNotMet);
+    pub fn add_to_rewards(total_rewards: u64) -> Result<(), StakingError> {
+        let db_path = "./node/db";
+        let node_path = rock_storage::open_db(db_path);
+        let key = format!("node_staking:{}", node_address);
+        let mut rewards_distributed: u64 = 0;
+        match node_path {
+            Ok(db_handle) => {
+                match rock_storage::get_from_db(&db_handle, &key) {
+                    let mut node = serde_json::from_str::<NodeStaking>(&node_staking_json)
+                    .map_err(|_| StakingError::SerializationError)?;
+                    // Calculate and distribute rewards to each address proportionally
+                    for (address, stake) in node.address_list.iter_mut() {
+                        let reward = (*stake as f64 / node.total_stake as f64) * total_rewards as f64;
+                        let reward_as_u64 = reward.round() as u64; // Use round for fair distribution
+                        *stake += reward_as_u64;
+                        rewards_distributed += reward_as_u64;
+     
+                    }
+                    let node_staking_json = serde_json::to_string(node).map_err(|_| StakingError::SerializationError)?;
+                    rock_storage::put_to_db(&db_handle, &key, &node_staking_json).map_err(|_| StakingError::DatabaseError)?;
+                }
+            }
         }
-
-        // Calculate and distribute rewards to each address proportionally
-        for (address, stake) in self.address_list.iter_mut() {
-            let reward = (*stake as f64 / self.total_stake as f64) * total_rewards as f64;
-            *stake += reward as u64;
-        }
-
-        // Update the total stake to include the distributed rewards
-        self.total_stake += total_rewards;
-
         Ok(())
+    }
+    pub fn claim_rewards(node_address:&str,staker_address: &str,staker_key:&str) -> Result<u64, StakingError> {
+        let db_path = "./node/db";
+        let node_path = rock_storage::open_db(db_path);
+        let key = format!("node_staking:{}", node_address);
+        match node_path {
+            Ok(db_handle) => {
+                match rock_storage::get_from_db(&db_handle, &key) {
+                    let mut node = serde_json::from_str::<NodeStaking>(&node_staking_json)
+                    .map_err(|_| StakingError::SerializationError)?;
+                    match node.address_list.get(address) {
+                        Some(balance) => 
+                        {
+                            match public_txn::Txn::create_and_prepare_transaction(
+                                TransactionType::SimpleTransfer
+                                staker_address.to_string(),
+                                address.to_string(),
+                                balance.round() as u64
+                            ) {
+                                Ok((txn_hash_hex,gas_cost, _)) => {
+                                    sign_and_submit_transaction(staker_address,txn_hash,staker_key);
+                                    let node_staking_json = serde_json::to_string(node).map_err(|_| StakingError::SerializationError)?;
+                                    rock_storage::put_to_db(&db_handle, &key, &node_staking_json).map_err(|_| StakingError::DatabaseError)?;
+                                },
+                                Err(e) => {
+                                    println!("Error creating transaction: {:?}", e);
+                                }
+                            }
+                        }
+                        Ok(balance.to_string()), // Convert the u64 balance to a String
+                        None => Err(StakingError::AddressNotFound), // Assume AddressNotFound is defined in StakingError
+                    }
+                }
+            }
+        }
     }
 }
 
-
+                   // match public_txn::Txn::create_and_prepare_transaction(
+                        //     TransactionType::SimpleTransfer
+                        //     caller_address.to_string(),
+                        //     address.to_string(),
+                        //     reward_as_u64
+                        // ) {
+                        //     Ok((txn_hash_hex,gas_cost, _)) => {
+                        //         sign_and_submit_transaction("pub_key",txn_hash,"private_key")
+                        //         println!("Transaction successfully prepared: {:?}", txn_hash_hex);
+                        //     },
+                        //     Err(e) => {
+                        //         println!("Error creating transaction: {:?}", e);
+                        //     }
+                        // }

@@ -208,7 +208,6 @@ fn create_transaction(transaction_data: Json<TransactionInfo>) -> Json<serde_jso
 
 #[post("/sign-transaction", data = "<transaction_signed_data>")]
 fn sign_transaction(transaction_signed_data: Json<TransactionSignedInfo>) -> Json<serde_json::Value> {
-    
     println!("Signing transaction");
     let caller_address = &transaction_signed_data.caller_address;
     // Attempt to decode the provided private key
@@ -216,7 +215,6 @@ fn sign_transaction(transaction_signed_data: Json<TransactionSignedInfo>) -> Jso
         Ok(bytes) => bytes,
         Err(_) => return Json(json!({"jsonrpc": "2.0", "error": "Invalid private key format"})),
     };
-
     // Attempt to create a SecretKey from the decoded bytes
     let private_key = match SecretKey::from_slice(&private_key_bytes) {
         Ok(key) => key,
@@ -242,7 +240,6 @@ fn sign_transaction(transaction_signed_data: Json<TransactionSignedInfo>) -> Jso
 
 #[post("/create-contract", data = "<post_data>")]
 fn create_contract(post_data: Json<GenericContractCreationInfo>)-> Json<serde_json::Value> {
-    println!("Create Contract");
     let call_address = &post_data.call_address;
     let private_key = &post_data.private_key;
     let contract_name = &post_data.contract_name;
