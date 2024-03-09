@@ -10,3 +10,4 @@ pub mod rock_storage;
 pub mod public_app;
 pub mod public_swarm;
 pub mod gas_calculator;
+pub mod staking;

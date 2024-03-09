@@ -211,7 +211,7 @@ impl Txn {
                 // Open the database and handle the Result
                 let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
             
-                let gas_cost = 1;  // Example gas cost, adjust as needed
+                let gas_cost = 1000;  // Example gas cost, adjust as needed
     
                 let new_txn = PublicTxn {
                     txn_type: transaction_type,
@@ -280,7 +280,6 @@ impl Txn {
                     rock_storage::put_to_db(&db_handle, txn.txn_hash.to_string(), &serde_json::to_string(&updated_txn)?)?;
                     let serialized_data = serde_json::to_string(&updated_txn)?;
 
-                    println!("Serialized Transaction Data: {}", serialized_data);  
                     // Hash the serialized transaction data using SHA-256
                     let hash_result = Sha256::digest(serialized_data.as_bytes());
                     

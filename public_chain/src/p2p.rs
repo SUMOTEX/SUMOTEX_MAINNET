@@ -26,6 +26,7 @@ use crate::public_txn;
 use crate::pbft;
 use crate::rock_storage;
 use crate::txn_pool;
+use crate::staking;
 use crate::public_txn::PublicTxn;
 use crate::public_block::handle_create_block_pbft;
 
@@ -392,13 +393,18 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     let json = serde_json::to_string(&block).expect("can jsonify request");
                                     let _ = rock_storage::put_to_db(&block_db, block.public_hash.clone(), &json);
                                     let _ = rock_storage::put_to_db(&block_db,"latest_block", &json);
+                                    let mut total_gas_cost: u128 = 0; // Initialize total gas cost
                                     for txn_hash in &block.transactions {
+                                      
                                         if let Some(first_txn_id) = txn_hash.first().cloned() {
+                                            let txn_detail = serde_json::from_str::<PublicTxn>(&first_txn_id).map_err(|_| "");
+                                            total_gas_cost += txn_detail.unwrap().gas_cost;
                                             Txn::update_transaction_status(&first_txn_id,3);
                                             mempool.remove_transaction_by_id(first_txn_id);
                                         } 
+                                        
                                     }
-
+                                    staking::NodeStaking::add_to_rewards(local_peer_id,total_gas_cost);
                                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                                 }
                             },

@@ -132,7 +132,7 @@ pub struct SetupNodeInfo {
 pub struct AddStakerInfo {
     node_public_address: String,
     stake_address:String,
-    amount:u64
+    amount:u128
 }
 #[derive(serde::Deserialize, Debug)]
 pub struct GetNodeInfo {

@@ -80,8 +80,6 @@ pub fn mine_block(id: u64, timestamp: i64, previous_hash: &str) -> (u64, String)
 pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error::Error>> {
         let mut verkle_tree = VerkleTree::new();
         let mut transactions: HashMap<String, String>= HashMap::new();
-        // Fetch transactions from the mempool
-        //println!("Block requested");
         let mempool_lock = txn_pool::Mempool::get_instance().lock().unwrap();
         let mempool_transactions = mempool_lock.get_transactions_with_status(5,1); // Assuming this method exists and returns a list of transactions
         if let Some(publisher) = Publisher::get(){
@@ -97,6 +95,7 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
                                 processing_transactions.push(txn);
                             } else {
                                 non_processing_transactions.push(txn);
+                               
                             }
                         }
                         Err(err) => {
@@ -109,7 +108,6 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
                     return Ok(());
                 }else {
                     for txn in non_processing_transactions {
-                        println!("Transactions: {:?}",txn);
                         // Process each transaction
                         let serialized_data = serde_json::to_string(&txn).expect("can jsonify request");
                         let mut hasher = Sha256::new();
@@ -123,7 +121,6 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
                         dictionary_data.insert("value".to_string(), serialized_data.clone());
                         transactions.insert(txn.txn_hash.clone(), serialized_data);
                         Txn::update_transaction_status(&txn.txn_hash,2);
-        
                     }
                     let peer_id = p2p::get_peer_id();
                     let root_hash = verkle_tree.get_root_string();
@@ -132,7 +129,7 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
                     let mut map_with_peer_id: HashMap<String, HashMap<String, HashMap<String,String>>> = HashMap::new();
                     map_with_peer_id.insert(peer_id.to_string(), map);
                     let serialised_dictionary = serde_json::to_vec(&map_with_peer_id).unwrap();
-                    println!("Broadcasting PBFT blocks...");
+                    println!("Broadcasting blocks...");
         
                     let serialised_dictionary_bytes = serialised_dictionary.to_vec();
                     publisher.publish_block("block_pbft_pre_prepared".to_string(), serialised_dictionary_bytes);
