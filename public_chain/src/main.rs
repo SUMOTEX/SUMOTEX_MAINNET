@@ -202,7 +202,7 @@ async fn main() {
     let app = App::new();
     public_swarm::create_public_swarm(app.clone(),the_storage).await;
     // Lock the swarm and access it
-    println!("Before RPC server");
+    //println!("Before RPC server");
     let rpc_runner = tokio::spawn( async{
         rpc_connector::start_rpc().await
     });
@@ -210,19 +210,32 @@ async fn main() {
     // let rpc_runner = tokio::task::spawn_local(async {
     //     rpc_connector::start_rpc().await
     // });    
-    println!("After RPC server");
+    //println!("After RPC server");
     let swarm_mutex = public_swarm::get_global_swarm_public_net();
     let mut stdin = BufReader::new(stdin()).lines();
     let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    
     //WHITE-LABEL PRODUCT: CHANGE OF CHAIN
     let mut gas_token = token::SMTXToken::new("SUMOTEX".to_string(), "SMTX".to_string(), 18, 1000000000000000000);
-    let (pub_key,private_key)=account::create_account().expect("Failed to create account");
+    let (pub_key,private_key)=account::create_account().expect("Failed to create an account");
     let my_local_ip = local_ip().unwrap();
     // Add initial whitelisted peers (if any)
-    println!("Local IP address: {:?}", my_local_ip);
+    // println!("Local IP address: {:?}", my_local_ip);
+    // let db_path = "./node/db";
+    // let node_path = rock_storage::open_db(db_path);
+    // match node_path {
+    //     Ok(db_handle) => {
+    //         rock_storage::put_to_db(&db_handle, format!("node_address:{}", &node_address), &node_staking_json)
+    //         .map_err(|_| "")?;
+    //         Ok("")
+    //     }
+    //     Err(e) => {
+    //         println!("{:?}",e);
+    //         return Err("");
+    //     }
+    // }
     println!("Pub node address: {:?}", pub_key);
     println!("Private node address: {:?}", private_key);
-    let binding = my_local_ip.to_string();
+    //let binding = my_local_ip.to_string();
     if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
         //rpc_connector::set_global_swarm_public_net(swarm_public_net);
         loop {
