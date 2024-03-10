@@ -75,7 +75,7 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
         .into_authentic(&KEYS)
         .expect("can create auth keys");
     // Convert to AuthenticKeypair
-    let keypair = generate_and_save_key_if_not_exists("/Users/leowyennhan/Desktop/sumotex_mainnet/chain/public_chain/key_storage");
+    let _keypair = generate_and_save_key_if_not_exists("/Users/leowyennhan/Desktop/sumotex_mainnet/chain/public_chain/key_storage");
     let key_public_net = IdentityKeypair::generate_ed25519();
     let local_peer_id_net1 = PeerId::from(key_public_net.public());
 

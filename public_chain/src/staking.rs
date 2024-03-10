@@ -1,15 +1,14 @@
 use std::collections::HashMap;
-use rocksdb::{IteratorMode,DB};
 use serde::{Deserialize, Serialize};
 use secp256k1::Error as Secp256k1Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::rock_storage;
-use crate::public_txn;
 
 const MIN_STAKE: u128 = 1_500_000; // Minimum stake of 1.5 million
 const BLOCK_REWARD: u128 = 50;
-const FOUNDATION_RATIO: u128 = 0.4;
-const NODE_RATIO: u128 = 0.6;
+const FOUNDATION_RATIO: u128 = 400; // 0.4 represented as 400 parts per thousand
+const NODE_RATIO: u128 = 600; // 0.6 represented as 600 parts per thousand
+const RATIO_BASE: u128 = 1000; // Base value for ratios
 // Staking structure
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct NodeStaking {
@@ -97,7 +96,7 @@ impl NodeStaking {
                     .map_err(|_| StakingError::DatabaseError)?;
                 rock_storage::put_to_db(&db_handle, format!("node_info:{}", &node_address), &node_info_json)
                     .map_err(|_| StakingError::DatabaseError)?;
-                rock_storage::put_to_db(&db_handle, format!"node_id", &node_address)
+                rock_storage::put_to_db(&db_handle,"node_id", &node_address)
                     .map_err(|_| StakingError::DatabaseError)?;
                 Ok(NodeStaking {
                     node_address,
@@ -207,8 +206,8 @@ impl NodeStaking {
         let node_path = rock_storage::open_db(db_path);
         let key = format!("node_staking:{}", node_address);
         let mut rewards_distributed: u128 = 0;
-        let staker_rewards = total_rewards * NODE_RATIO;
-        let foundation_rewards = total_rewards * FOUNDATION_RATIO;
+        let foundation_rewards = (total_rewards * FOUNDATION_RATIO) / RATIO_BASE;
+        let node_rewards = (total_rewards * NODE_RATIO) / RATIO_BASE;
         match node_path {
             Ok(db_handle) => {
                 let node_staking_json = rock_storage::get_from_db(&db_handle, &key)
@@ -221,7 +220,7 @@ impl NodeStaking {
                 // Calculate and distribute rewards to each address proportionally
                 if node.total_stake > 0 { // Prevent division by zero
                     for (_address, stake) in node.address_list.iter_mut() {
-                        let reward = (*stake as u128 * staker_rewards) / node.total_stake; // Use u128 for calculation to avoid precision loss
+                        let reward = (*stake as u128 * node_rewards) / node.total_stake; // Use u128 for calculation to avoid precision loss
                         *stake += reward;
                     }
                 } else {

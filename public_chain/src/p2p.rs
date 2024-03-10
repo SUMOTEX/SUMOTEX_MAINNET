@@ -371,8 +371,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     println!("The outer HashMap is empty");
                 }
             }else if msg.topics[0]==Topic::new("block_pbft_commit"){
-                let node_path = "./node/db";
-                let node_path = rock_storage::open_db(db_path);
+                let node_path = rock_storage::open_db("./node/db");
                 let local_peer_id = get_peer_id();
                 // println!("Local Peer ID {:?} Leader: {:?}", local_peer_id, unsafe { LEADER.as_ref() });
                 //let is_leader = unsafe { LEADER.as_ref() == Some(&local_peer_id) };
@@ -409,19 +408,18 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     match node_path {
                                         Ok(db_handle) => {
                                             match rock_storage::get_from_db(&db_handle, "node_id") {
-                                                Some(id) => {
-                                                    staking::NodeStaking::add_to_rewards(id,total_gas_cost);
-                                                    Ok(Some(id))
+                                                (Some(id))=> {
+                                                    match staking::NodeStaking::add_to_rewards(id, total_gas_cost) {
+                                                        Ok(_) => Ok(()),
+                                                        Err(_) =>Err({}) // Assuming you need to convert StakingError to the function's error type
+                                                    }
                                                 },
-                                                None => {
-                                                    // No data found for the given node address.
-                                                    Ok(None)
-                                                }
-                                            }
+                                                None => Err({ // Handle case where the id is not found
+                                                })
+                                            };
                                         }
                                         Err(e) => {
-                                            println!("{:?}",e);
-                                            return Err(StakingError::DatabaseError);
+                                           
                                         }
                                     }
 
