@@ -626,6 +626,23 @@ fn node_staking(get_node_info: Json<GetNodeInfo>) -> Json<serde_json::Value> {
         }
     }
 }
+#[post("/claim-reward", data="<node_info>")]
+fn claim_reward(node_info: Json<GetNodeInfo>) -> Json<serde_json::Value> {
+    let node_address = &node_info.public_address;
+    match staking::NodeStaking::get_node_staking(node_address) {
+        Ok(node_info) => Json(json!({
+            "jsonrpc": "1.0",
+            "result": node_info
+        })),
+        Err(e) => {
+            println!("Error transaction: {:?}", e);
+            Json(json!({
+                "jsonrpc": "1.0", 
+                "error": "Node creation failed"
+            }))
+        }
+    }
+}
 #[get("/healthcheck")]
 fn healthcheck() -> Json<serde_json::Value> {
     // Perform any necessary health checks here. For simplicity, this example
