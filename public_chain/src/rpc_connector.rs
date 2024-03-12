@@ -138,6 +138,12 @@ pub struct AddStakerInfo {
 pub struct GetNodeInfo {
     public_address: String
 }
+#[derive(serde::Deserialize, Debug)]
+pub struct ClaimRewardsInfo {
+    public_address: String,
+    claim_address:String,
+    private_key:String
+}
 
 #[derive(Debug, serde::Serialize, serde::Deserialize)]
 pub struct SignedTransaction {
@@ -627,18 +633,20 @@ fn node_staking(get_node_info: Json<GetNodeInfo>) -> Json<serde_json::Value> {
     }
 }
 #[post("/claim-reward", data="<node_info>")]
-fn claim_reward(node_info: Json<GetNodeInfo>) -> Json<serde_json::Value> {
+fn claim_reward(node_info: Json<ClaimRewardsInfo>) -> Json<serde_json::Value> {
     let node_address = &node_info.public_address;
-    match staking::NodeStaking::get_node_staking(node_address) {
+    let claim_address = &node_info.claim_address;
+    let claim_private_key = &node_info.private_key;
+    match staking::NodeStaking::claim_rewards(node_address,claim_address,claim_private_key) {
         Ok(node_info) => Json(json!({
             "jsonrpc": "1.0",
             "result": node_info
         })),
         Err(e) => {
-            println!("Error transaction: {:?}", e);
+            println!("Error Claiming reward: {:?}", e);
             Json(json!({
                 "jsonrpc": "1.0", 
-                "error": "Node creation failed"
+                "error": "Can't seems to claim reward"
             }))
         }
     }
