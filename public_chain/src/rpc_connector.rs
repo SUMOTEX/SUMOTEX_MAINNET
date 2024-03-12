@@ -730,6 +730,7 @@ pub async fn start_rpc() {
                         setup_node,
                         node_info,
                         node_staking,
+                        claim_reward,
                         add_stake,
                         get_latest_block,
                         healthcheck])

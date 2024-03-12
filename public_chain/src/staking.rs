@@ -3,6 +3,10 @@ use serde::{Deserialize, Serialize};
 use secp256k1::Error as Secp256k1Error;
 use std::time::{SystemTime, UNIX_EPOCH};
 use crate::rock_storage;
+use crate::public_txn::TransactionType;
+use crate::public_txn;
+use secp256k1::SecretKey;
+
 
 const MIN_STAKE: u128 = 1_500_000; // Minimum stake of 1.5 million
 const BLOCK_REWARD: u128 = 50;
@@ -260,13 +264,40 @@ impl NodeStaking {
                         // Assuming the transaction is successful and you deduct the balance:
                         let balance_u64 = *balance as u64; // Convert to u64 if needed
                         *balance = 0; // Assuming rewards are claimed and thus set to 0
-    
-                        let node_staking_json = serde_json::to_string(&node)
-                            .map_err(|_| StakingError::SerializationError)?;
-                        rock_storage::put_to_db(&db_handle, &key, &node_staking_json)
-                            .map_err(|_| StakingError::DatabaseError)?;
-    
-                        Ok(balance_u64) // Return the claimed balance
+                        let node_staking_json = serde_json::to_string(&node).map_err(|_| StakingError::SerializationError)?;
+                        rock_storage::put_to_db(&db_handle, &key, &node_staking_json).map_err(|_| StakingError::DatabaseError)?;
+                        match public_txn::Txn::create_and_prepare_transaction(
+                            TransactionType::SimpleTransfer,
+                                node_address.to_string(),
+                                staker_address.to_string(),
+                                balance_u64 as u128,
+                        ) {
+                            Ok((txn_hash_hex, gas_cost, _)) => {
+                                let private_key_bytes = match hex::decode(&staker_key) {
+                                    Ok(bytes) => bytes,
+                                    Err(_) => {
+                                        println!("Failed to decode staker key");
+                                        Vec::new()
+                                    },
+                                };
+                                // Attempt to create a SecretKey from the decoded bytes
+                                let private_key = match SecretKey::from_slice(&private_key_bytes) {
+                                    Ok(key) => key,
+                                    Err(_) => {
+                                        println!("Failed to create SecretKey from bytes");
+                                        return Err(StakingError::SerializationError); 
+                                    },
+                                };
+                                match public_txn::Txn::sign_and_submit_transaction(&staker_address.to_string(), txn_hash_hex, &private_key) {
+                                    Ok(_) => println!("Transaction successfully sent:"),
+                                    Err(e) => println!("Error signing or submitting transaction: {:?}", e),
+                                }
+                            },
+                            Err(e) => {
+                                println!("Error creating transaction: {:?}", e);
+                            }
+                        };
+                        Ok(balance_u64)
                     } else {
                         Err(StakingError::MinStakeNotMet) // Or another error indicating zero balance
                     }
