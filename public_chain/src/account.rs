@@ -5,6 +5,8 @@ use serde::{Deserialize, Serialize};
 use secp256k1::Message;
 use secp256k1::Error as Secp256k1Error;
 use crate::rock_storage;
+use crate::public_txn::TransactionType;
+use crate::public_txn;
 
 pub fn generate_keypair()->(PublicKey,SecretKey) {
     let secp = Secp256k1::new();
@@ -158,7 +160,37 @@ pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> 
         Ok(_) => println!("Account stored successfully"),
         Err(e) => eprintln!("Failed to store account: {:?}", e),
     }
-
+    match public_txn::Txn::create_and_prepare_transaction(
+        TransactionType::SimpleTransfer,
+            node_address.to_string(),
+            staker_address.to_string(),
+            balance_u64 as u128,
+    ) {
+        Ok((txn_hash_hex, gas_cost, _)) => {
+            let private_key_bytes = match hex::decode(&staker_key) {
+                Ok(bytes) => bytes,
+                Err(_) => {
+                    println!("Failed to decode staker key");
+                    Vec::new()
+                },
+            };
+            // Attempt to create a SecretKey from the decoded bytes
+            let private_key = match SecretKey::from_slice(&private_key_bytes) {
+                Ok(key) => key,
+                Err(_) => {
+                    println!("Failed to create SecretKey from bytes");
+                    return Err(StakingError::SerializationError); 
+                },
+            };
+            match public_txn::Txn::sign_and_submit_transaction(&staker_address.to_string(), txn_hash_hex, &private_key) {
+                Ok(_) => println!("Transaction successfully sent:"),
+                Err(e) => println!("Error signing or submitting transaction: {:?}", e),
+            }
+        },
+        Err(e) => {
+            println!("Error creating transaction: {:?}", e);
+        }
+    };
     Ok((public_key.to_string(), private_key.to_string()))
 }
 
