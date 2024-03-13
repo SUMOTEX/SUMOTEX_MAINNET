@@ -200,7 +200,6 @@ impl NodeStaking {
                 }
             }
             Err(e) => {
-                println!("{:?}",e);
                 return Err(StakingError::DatabaseError);
             }
         }

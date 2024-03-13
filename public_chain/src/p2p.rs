@@ -475,6 +475,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     self.app.blocks.push(created_block);
                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                 }
+            }else if msg.topics[0]==Topic::new("account_creation"){
+                
             }
         }
     }

@@ -159,7 +159,6 @@ pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> 
         Err(e) => eprintln!("Failed to store account: {:?}", e),
     }
 
-    println!("Public Acc: {}", public_key); // Avoid logging private key
     Ok((public_key.to_string(), private_key.to_string()))
 }
 
