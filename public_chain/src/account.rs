@@ -7,6 +7,8 @@ use secp256k1::Error as Secp256k1Error;
 use crate::rock_storage;
 use crate::public_txn::TransactionType;
 use crate::public_txn;
+use crate::publisher::Publisher;
+use std::str::FromStr;
 
 pub fn generate_keypair()->(PublicKey,SecretKey) {
     let secp = Secp256k1::new();
@@ -18,11 +20,11 @@ pub fn generate_keypair()->(PublicKey,SecretKey) {
 // Account structure
 #[derive(Serialize, Deserialize, Debug, Clone)]
 pub struct Account {
-    public_address: String,
-    balance: u128,   
-    nonce: i64,
-    contract_address: Option<Vec<String>>,
-    owned_tokens:  Option<HashMap<String, Vec<u64>>>, // Contract address to list of token IDs
+    pub public_address: String,
+    pub balance: u128,   
+    pub nonce: i64,
+    pub contract_address: Option<Vec<String>>,
+    pub owned_tokens:  Option<HashMap<String, Vec<u64>>>, // Contract address to list of token IDs
 }
 #[derive(Debug)]
 pub enum SigningError {
@@ -95,11 +97,9 @@ impl Account {
     }
     pub fn get_account(pub_key: &str, db_handle: &DB) -> Option<Account> {
         let account_data = rock_storage::get_from_db(db_handle, pub_key.to_string());
-
         if let Some(data) = &account_data {
             println!("Retrieved account data: {}", data);
         }
-    
         account_data.and_then(|data| serde_json::from_str(&data).ok())
     }
     pub fn transfer(sender_key: &str, receiver_key: &str, amount: u128) -> Result<(), Box<dyn std::error::Error>> {
@@ -160,38 +160,12 @@ pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> 
         Ok(_) => println!("Account stored successfully"),
         Err(e) => eprintln!("Failed to store account: {:?}", e),
     }
-    match public_txn::Txn::create_and_prepare_transaction(
-        TransactionType::SimpleTransfer,
-            node_address.to_string(),
-            staker_address.to_string(),
-            balance_u64 as u128,
-    ) {
-        Ok((txn_hash_hex, gas_cost, _)) => {
-            let private_key_bytes = match hex::decode(&staker_key) {
-                Ok(bytes) => bytes,
-                Err(_) => {
-                    println!("Failed to decode staker key");
-                    Vec::new()
-                },
-            };
-            // Attempt to create a SecretKey from the decoded bytes
-            let private_key = match SecretKey::from_slice(&private_key_bytes) {
-                Ok(key) => key,
-                Err(_) => {
-                    println!("Failed to create SecretKey from bytes");
-                    return Err(StakingError::SerializationError); 
-                },
-            };
-            match public_txn::Txn::sign_and_submit_transaction(&staker_address.to_string(), txn_hash_hex, &private_key) {
-                Ok(_) => println!("Account creation sent:"),
-                Err(e) => println!("Error creation of account: {:?}", e),
-            }
-        },
-        Err(e) => {
-            println!("Error creating transaction for account creation: {:?}", e);
-        }
-    };
+    if let Some(publisher) = Publisher::get(){
+        let serialized_data_bytes = serialized_data.as_bytes().to_vec();
+        publisher.publish_block("account_creation".to_string(), serialized_data_bytes);
+    }
     Ok((public_key.to_string(), private_key.to_string()))
+
 }
 
 
@@ -216,7 +190,26 @@ pub fn get_balance(public_key: &str) -> Result<u128, Box<dyn std::error::Error>>
         }
     }
 }
+pub fn get_account_by_private_key(private_key_str: &str) -> Result<Account, Box<dyn std::error::Error>> {
+    // Parse the private key from a string (ensure this is securely handled)
+    let private_key = SecretKey::from_str(private_key_str)?;
 
+    // Derive the public key from the private key
+    let secp = Secp256k1::new();
+    let public_key = PublicKey::from_secret_key(&secp, &private_key);
+
+    // Convert public key to a string or address format as needed
+    let public_key_str = public_key.to_string();
+
+    // Lookup the account by its public key or derived address
+    let account = lookup_account_by_public_key(&public_key_str)?;
+
+    Ok(account)
+}
+pub fn lookup_account_by_public_key(public_key_str: &str) -> Result<Account, Box<dyn std::error::Error>> {
+    // Your logic here to find and return the account based on the public key string or derived address
+    Err("Not implemented".into())
+}
 pub fn get_account_no_swarm(account_key: &str) -> Result<Option<Account>, Box<dyn std::error::Error>> {
     let path = "./account/db";
     let account_path = rock_storage::open_db(path)?;

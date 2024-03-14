@@ -172,7 +172,6 @@ pub fn handle_create_block_private_chain(app:App,private_hash:Option<String>,pri
         [" ".to_string()].to_vec(),
     );
     let json = serde_json::to_string(&block).expect("can jsonify request");
-
     block
 }
 pub fn get_latest_block_hash()-> Result<Block, Box<dyn std::error::Error>>{

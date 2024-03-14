@@ -27,6 +27,7 @@ use crate::pbft;
 use crate::rock_storage;
 use crate::txn_pool;
 use crate::staking;
+use crate::account;
 use crate::public_txn::PublicTxn;
 use crate::public_block::handle_create_block_pbft;
 
@@ -45,7 +46,7 @@ pub static BLOCK_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block
 //Transaction mempool verifications PBFT engine
 pub static TXN_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_prepared"));
 pub static TXN_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_commit"));
-
+pub static ACCOUNT_CREATION_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("account_creation"));
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChainResponse {
@@ -117,6 +118,7 @@ impl AppBehaviour {
         behaviour.floodsub.subscribe(TXN_PBFT_COMMIT_TOPIC.clone());
         behaviour.floodsub.subscribe(PRIVATE_BLOCK_GENESIS_CREATION.clone());
         behaviour.floodsub.subscribe(HYBRID_BLOCK_CREATION.clone());
+        behaviour.floodsub.subscribe(ACCOUNT_CREATION_TOPIC.clone());
         behaviour
     }
     fn send_message(&mut self, target: PeerId, message: String) {
@@ -391,7 +393,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                             return; // This exits the `inject_event` function early.
                                         }
                                     };
-                                   
                                     let json = serde_json::to_string(&block).expect("can jsonify request");
                                     let _ = rock_storage::put_to_db(&block_db, block.public_hash.clone(), &json);
                                     let _ = rock_storage::put_to_db(&block_db,"latest_block", &json);
@@ -408,7 +409,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     match node_path {
                                         Ok(db_handle) => {
                                             match rock_storage::get_from_db(&db_handle, "node_id") {
-                                                (Some(id))=> {
+                                                Some(id)=> {
                                                     match staking::NodeStaking::add_to_rewards(id, total_gas_cost) {
                                                         Ok(_) => Ok(()),
                                                         Err(_) =>Err({}) // Assuming you need to convert StakingError to the function's error type
@@ -476,6 +477,27 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                 }
             }else if msg.topics[0]==Topic::new("account_creation"){
+                let received_serialized_data =msg.data;
+                match serde_json::from_slice::<account::Account>(&received_serialized_data) {
+                    Ok(acc) => {
+                        let path = "./account/db";
+                        // Open the database and handle the Result
+                        let acc_db = match rock_storage::open_db(path) {
+                            Ok(db) => db,
+                            Err(_) => {
+                                eprintln!("Failed to open database");
+                                return; // This exits the `inject_event` function early.
+                            }
+                        };
+                        let serialized_data = serde_json::to_string(&acc).expect("can't jsonify request");
+                        let _ = rock_storage::put_to_db(&acc_db,acc.public_address,&serialized_data);
+                    },
+                    Err(err) => {
+                        error!(
+                            "Error creating account on other nodes"
+                        );
+                    }
+                }
                 
             }
         }
