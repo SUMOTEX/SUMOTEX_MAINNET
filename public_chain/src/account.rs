@@ -183,12 +183,12 @@ pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> 
                 },
             };
             match public_txn::Txn::sign_and_submit_transaction(&staker_address.to_string(), txn_hash_hex, &private_key) {
-                Ok(_) => println!("Transaction successfully sent:"),
-                Err(e) => println!("Error signing or submitting transaction: {:?}", e),
+                Ok(_) => println!("Account creation sent:"),
+                Err(e) => println!("Error creation of account: {:?}", e),
             }
         },
         Err(e) => {
-            println!("Error creating transaction: {:?}", e);
+            println!("Error creating transaction for account creation: {:?}", e);
         }
     };
     Ok((public_key.to_string(), private_key.to_string()))
