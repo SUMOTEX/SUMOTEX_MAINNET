@@ -492,11 +492,6 @@ pub fn handle_print_txn(swarm: &Swarm<AppBehaviour>) {
         serde_json::to_string_pretty(&swarm.behaviour().txn.transactions).expect("can jsonify transactions");
     info!("{}", pretty_json);
 }
-pub fn handle_print_raw_txn(swarm: &Swarm<AppBehaviour>) {
-    info!("Raw Transactions:");
-    let pretty_json =
-        serde_json::to_string_pretty(&swarm.behaviour().txn.hashed_txn).expect("can jsonify transactions");
-    info!("{}", pretty_json);
-}
+
 
 
