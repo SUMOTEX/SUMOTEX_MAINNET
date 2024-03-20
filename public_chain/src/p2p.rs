@@ -526,7 +526,6 @@ pub fn trigger_publish(sender: mpsc::UnboundedSender<(String, String)>, title: S
     sender.send((title, message)).expect("Can send publish event");
 }
 pub fn get_list_peers(swarm: &Swarm<AppBehaviour>) -> Vec<String> {
-    info!("Validators:");
     let nodes = swarm.behaviour().mdns.discovered_nodes();
     let mut unique_peers = HashSet::new();
     for peer in nodes {
@@ -541,19 +540,16 @@ pub fn handle_print_peers(swarm: &Swarm<AppBehaviour>) {
 }
 
 pub fn handle_print_chain(swarm: &Swarm<AppBehaviour>) {
-    info!("SUMOTEX Blockchain:");
     let pretty_json =
         serde_json::to_string_pretty(&swarm.behaviour().app.blocks).expect("can jsonify blocks");
     info!("{}", pretty_json);
 }
 pub fn handle_print_txn(swarm: &Swarm<AppBehaviour>) {
-    info!("Transactions:");
     let pretty_json =
         serde_json::to_string_pretty(&swarm.behaviour().txn.transactions).expect("can jsonify transactions");
     info!("{}", pretty_json);
 }
 pub fn handle_print_raw_txn(swarm: &Swarm<AppBehaviour>) {
-    info!("Raw Transactions:");
     let pretty_json =
         serde_json::to_string_pretty(&swarm.behaviour().txn.hashed_txn).expect("can jsonify transactions");
     info!("{}", pretty_json);
