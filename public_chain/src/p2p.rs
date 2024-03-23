@@ -439,7 +439,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
             else if msg.topics[0]==Topic::new("private_blocks_genesis_creation"){
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
-                println!("Private Genesis Block: {:?}",json_string);
                 if let Some(publisher) = Publisher::get(){
                 let created_block = public_block::handle_create_block_private_chain(self.app.clone(),Some(json_string),None,None,None);
                 let json = serde_json::to_string(&created_block).expect("can jsonify request");
@@ -459,7 +458,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
             } else if msg.topics[0]==Topic::new("hybrid_block_creation")  {
                 let received_serialized_data =msg.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
-                println!("Private Block Transactions: {:?}",json_string);
                 if let Some(publisher) = Publisher::get(){
                     let created_block = public_block::handle_create_block_private_chain(self.app.clone(),Some(json_string),None,None,None);
                     let json = serde_json::to_string(&created_block).expect("can jsonify request");
