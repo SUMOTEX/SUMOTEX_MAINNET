@@ -188,7 +188,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     self.app.blocks = self.app.choose_chain(self.app.blocks.clone(), resp.blocks);
                 }
             } else if let Ok(resp) = serde_json::from_slice::<LocalChainRequest>(&msg.data) {
-                info!("sending local chain to {}", msg.source.to_string());
                 let peer_id = resp.from_peer_id;
                 if PEER_ID.to_string() == peer_id {
                     if let Err(e) = self.response_sender.send(ChainResponse {
@@ -282,7 +281,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 }; 
             }
             else if msg.topics[0] == Topic::new("txn_pbft_commit") {
-                println!("Transaction PBFT Commit");
                 let received_serialized_data = msg.data;
                 match String::from_utf8(received_serialized_data.to_vec()) {
                     Ok(json_string) => {
@@ -487,12 +485,12 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                 return; // This exits the `inject_event` function early.
                             }
                         };
-                        let serialized_data = serde_json::to_string(&acc).expect("can't jsonify request");
+                        let serialized_data = serde_json::to_string(&acc).expect("JSONIFY request");
                         let _ = rock_storage::put_to_db(&acc_db,acc.public_address,&serialized_data);
                     },
                     Err(err) => {
                         error!(
-                            "Error creating account on other nodes"
+                            "Error creating account on another nodes"
                         );
                     }
                 }
