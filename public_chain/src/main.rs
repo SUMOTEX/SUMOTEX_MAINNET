@@ -216,7 +216,7 @@ async fn main() {
     let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    
     //WHITE-LABEL PRODUCT: CHANGE OF CHAIN
     let mut gas_token = token::SMTXToken::new("SUMOTEX".to_string(), "SMTX".to_string(), 18, 1000000000000000000);
-    let (pub_key,private_key)=account::create_account().expect("Failed to create an account");
+    let (pub_key,private_key)=account::create_account().expect("Failed to create a node account");
     let my_local_ip = local_ip().unwrap();
     // Add initial whitelisted peers (if any)
     // println!("Local IP address: {:?}", my_local_ip);

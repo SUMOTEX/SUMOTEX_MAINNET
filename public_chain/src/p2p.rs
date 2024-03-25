@@ -158,7 +158,6 @@ fn extract_block_hash(json_str: &str) -> Option<String> {
     if let Ok(parsed_json) = serde_json::from_str::<serde_json::Value>(json_str) {
         // Extract the block hash from the JSON object
         // Adjust the key as per your JSON structure
-        println!("{:?}",parsed_json.to_string());
         if let Some(hash) = parsed_json["block_hash"].as_str() {
             return Some(hash.to_string());
         }

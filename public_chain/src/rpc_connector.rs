@@ -320,22 +320,6 @@ fn read_contract(post_data: Json<ReadContractInfo>)-> Json<serde_json::Value> {
         }
     }
 }
-// // Route to handle RPC requests.
-#[post("/read-total-minted", data = "<post_data>")]
-fn read_total_minted_token(post_data: Json<ReadTotalTokenInfo>)-> Json<serde_json::Value> {
-    println!("Read Minted Token");
-    let contract_address = &post_data.contract_address;
-    match smart_contract::read_total_token_erc721(&contract_address) {
-        Ok(minted_token) => {
-            let response_body = json!({"total_supply": minted_token});
-            Json(json!({"jsonrpc": "1.0",  "result": response_body}))
-        },
-        Err(e) => {
-            error!("Error creating contract: {:?}", e);
-            Json(json!({"jsonrpc": "1.0", "result": "error"}))
-        }
-    }
-}
 // Route to handle RPC requests.
 #[post("/create-wallet")]
 fn create_wallet()-> Json<serde_json::Value> {
