@@ -705,7 +705,6 @@ pub async fn start_rpc() {
                         get_account,
                         complete_transaction,
                         read_transaction,
-                        read_total_minted_token,
                         get_receiver_transactions,
                         generic_smart_contract_function_call,
                         create_block,

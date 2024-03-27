@@ -296,7 +296,6 @@ impl Txn {
                     // Serialize the dictionary to JSON
                     let serialised_dictionary_json = serde_json::json!(dictionary_data).to_string();
                     
-                    println!("Broadcast transactions");
                     if let Some(publisher) = Publisher::get(){
                         let serialised_dictionary_bytes = serialised_dictionary_json.as_bytes().to_vec();
                         publisher.publish_block("txn_pbft_prepared".to_string(), serialised_dictionary_bytes);
@@ -337,7 +336,6 @@ impl Txn {
         // Serialize and save the updated transaction
         rock_storage::put_to_db(&db_handle, txn_hash.to_string(), &serde_json::to_string(&transaction)?)?;
         if new_status==3{
-            println!("Transaction update requested");
             Self::handle_post_complete_block(transaction);
         }
         Ok(())
@@ -379,7 +377,6 @@ impl Txn {
         let txn_hash = Sha256::digest(txn_data.as_bytes());
         let txn_hash_hex = format!("{:x}", txn_hash);
         let gas_cost = computed_value; // This is an example function call
-        println!("Caller: {:?}",caller_address);
         let account = match account::get_account_no_swarm(&caller_address) {
             Ok(Some(acc)) => acc,
             Ok(None) => return Err("Account not found".into()), // or handle this case as needed

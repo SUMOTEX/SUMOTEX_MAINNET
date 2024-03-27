@@ -43,7 +43,6 @@ impl SMTXToken {
         if self.total_supply + amount > self.max_supply {
             return Err(TokenError::MaxSupplyExceeded);
         }
-
     
         // Increment the recipient's balance
         let recipient_balance = self.balances.entry(recipient.to_string()).or_insert(0);

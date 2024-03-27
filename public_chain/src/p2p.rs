@@ -480,7 +480,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         let acc_db = match rock_storage::open_db(path) {
                             Ok(db) => db,
                             Err(_) => {
-                                eprintln!("Failed to open database");
+                                eprintln!("Failed to open database for wallet");
                                 return; // This exits the `inject_event` function early.
                             }
                         };
@@ -493,7 +493,6 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                         );
                     }
                 }
-                
             }
         }
     }
@@ -544,10 +543,3 @@ pub fn handle_print_txn(swarm: &Swarm<AppBehaviour>) {
         serde_json::to_string_pretty(&swarm.behaviour().txn.transactions).expect("can jsonify transactions");
     info!("{}", pretty_json);
 }
-pub fn handle_print_raw_txn(swarm: &Swarm<AppBehaviour>) {
-    let pretty_json =
-        serde_json::to_string_pretty(&swarm.behaviour().txn.hashed_txn).expect("can jsonify transactions");
-    info!("{}", pretty_json);
-}
-
-
