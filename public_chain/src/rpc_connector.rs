@@ -152,6 +152,10 @@ pub struct SignedTransaction {
     // ... other fields as needed ...
 }
 
+#[derive(serde::Deserialize, Debug)]
+pub struct AddPeerInfo {
+    peer_address: String,
+}
 
 #[derive( serde::Serialize, serde::Deserialize,Debug,Clone)]
 pub struct AppBlocks {
@@ -635,6 +639,23 @@ fn claim_reward(node_info: Json<ClaimRewardsInfo>) -> Json<serde_json::Value> {
         }
     }
 }
+
+#[post("/add-peer", data = "<peer_info>")]
+fn add_peer(peer_info: Json<AddPeerInfo>) -> Json<serde_json::Value> {
+    // Simulate adding the peer address to your application
+    println!("Adding new peer: {}", peer_info.peer_address);
+
+    // Here, you would typically call a function to update your peer list
+    // or directly connect to the new peer if your application supports it.
+    // For example: my_p2p_network.connect(peer_info.peer_address);
+
+    // Respond to the user
+    Json(json!({
+        "jsonrpc": "1.0",
+        "result": "Peer added successfully"
+    }))
+}
+
 #[get("/healthcheck")]
 fn healthcheck() -> Json<serde_json::Value> {
     // Perform any necessary health checks here. For simplicity, this example
@@ -716,6 +737,7 @@ pub async fn start_rpc() {
                         claim_reward,
                         add_stake,
                         get_latest_block,
+                        add_peer,
                         healthcheck])
     .launch()
     .await

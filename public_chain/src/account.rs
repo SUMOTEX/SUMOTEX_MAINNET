@@ -200,7 +200,6 @@ pub fn get_account_by_private_key(private_key_str: &str) -> Result<Account, Box<
 
     // Convert public key to a string or address format as needed
     let public_key_str = public_key.to_string();
-
     // Lookup the account by its public key or derived address
     let account = lookup_account_by_public_key(&public_key_str)?;
 
