@@ -137,6 +137,25 @@ async fn block_producer() {
     }
 }
 
+async fn add_listener(addr: String) -> Result<(), String> {
+    let address_str = format!("{}",addr);
+    let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
+
+    let swarm_mutex = public_swarm::get_global_swarm_public_net();
+    let mut swarm_public_net_guard = swarm_mutex.lock().unwrap(); 
+    if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
+        match Swarm::listen_on(swarm_public_net, the_address.clone()) {
+            Ok(_) => {
+                info!("Listening on {:?}", the_address);
+                Ok(())
+            },
+            Err(e) => Err(format!("Failed to listen on {:?}. Reason: {:?}", the_address, e)),
+        }
+    } else {
+        Err(format!("Failed to add peers"))
+    }
+}
+
 
 #[tokio::main]
 async fn main() {
@@ -149,22 +168,22 @@ async fn main() {
 
     let mut whitelisted_peers = vec![
         "/ip4/0.0.0.0/tcp/8081",
-        "/ip4/0.0.0.0/tcp/8082",
-        "/ip4/0.0.0.0/tcp/8083",
-        "/ip4/0.0.0.0/tcp/8084",
-        "/ip4/0.0.0.0/tcp/8085",
-        "/ip4/0.0.0.0/tcp/8086",
-        "/ip4/0.0.0.0/tcp/8087",
-        "/ip4/0.0.0.0/tcp/8089",
-        "/ip4/0.0.0.0/tcp/8090",
-        "/ip4/0.0.0.0/tcp/8091",
-        "/ip4/0.0.0.0/tcp/8092",
-        "/ip4/0.0.0.0/tcp/8093",
-        "/ip4/0.0.0.0/tcp/8094",
-        "/ip4/0.0.0.0/tcp/8095",
-        "/ip4/0.0.0.0/tcp/8096",
-        "/ip4/0.0.0.0/tcp/8097",
-        "/ip4/0.0.0.0/tcp/8098",
+        // "/ip4/0.0.0.0/tcp/8082",
+        // "/ip4/0.0.0.0/tcp/8083",
+        // "/ip4/0.0.0.0/tcp/8084",
+        // "/ip4/0.0.0.0/tcp/8085",
+        // "/ip4/0.0.0.0/tcp/8086",
+        // "/ip4/0.0.0.0/tcp/8087",
+        // "/ip4/0.0.0.0/tcp/8089",
+        // "/ip4/0.0.0.0/tcp/8090",
+        // "/ip4/0.0.0.0/tcp/8091",
+        // "/ip4/0.0.0.0/tcp/8092",
+        // "/ip4/0.0.0.0/tcp/8093",
+        // "/ip4/0.0.0.0/tcp/8094",
+        // "/ip4/0.0.0.0/tcp/8095",
+        // "/ip4/0.0.0.0/tcp/8096",
+        // "/ip4/0.0.0.0/tcp/8097",
+        // "/ip4/0.0.0.0/tcp/8098",
         // ... other addresses
         ];
 
@@ -189,7 +208,6 @@ async fn main() {
     // Add initial whitelisted peers (if any)
     println!("This is my local IP address: {:?}", my_local_ip);
     let binding = my_local_ip.to_string();
-    //whitelisted_peers.push(&binding);
 
     //create storage
     remove_lock_file();
@@ -202,7 +220,6 @@ async fn main() {
     let app = App::new();
     public_swarm::create_public_swarm(app.clone(),the_storage).await;
     // Lock the swarm and access it
-    //println!("Before RPC server");
     let rpc_runner = tokio::spawn( async{
         rpc_connector::start_rpc().await
     });
@@ -213,7 +230,7 @@ async fn main() {
     //println!("After RPC server");
     let swarm_mutex = public_swarm::get_global_swarm_public_net();
     let mut stdin = BufReader::new(stdin()).lines();
-    let mut swarm_public_net_guard = swarm_mutex.lock().unwrap();    
+    let mut swarm_public_net_guard = swarm_mutex.lock().unwrap(); 
     //WHITE-LABEL PRODUCT: CHANGE OF CHAIN
     let mut gas_token = token::SMTXToken::new("SUMOTEX".to_string(), "SMTX".to_string(), 18, 1000000000000000000);
     let (pub_key,private_key)=account::create_account().expect("Failed to create a node account");
@@ -264,7 +281,6 @@ async fn main() {
                 //Loop  to listen
                 match Swarm::listen_on( swarm_public_net, the_address.clone()) {
                     Ok(_) => {
-                        info!("Listening on {:?}", the_address.clone());
                         spawn(async move {
                             sleep(Duration::from_secs(1)).await;
                             info!("sending init event");

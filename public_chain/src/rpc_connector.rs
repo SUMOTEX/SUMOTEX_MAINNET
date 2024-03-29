@@ -16,6 +16,7 @@ use crate::account;
 use crate::public_txn;
 use crate::public_block;
 use crate::staking;
+use crate::add_listener;
 use crate::public_block::Block;
 use crate::public_txn::TransactionType;
 use crate::public_app::App as PubApp;
@@ -640,20 +641,14 @@ fn claim_reward(node_info: Json<ClaimRewardsInfo>) -> Json<serde_json::Value> {
     }
 }
 
-#[post("/add-peer", data = "<peer_info>")]
-fn add_peer(peer_info: Json<AddPeerInfo>) -> Json<serde_json::Value> {
-    // Simulate adding the peer address to your application
-    println!("Adding new peer: {}", peer_info.peer_address);
+#[post("/add-peer", format = "json", data = "<peer_info>")]
+async fn add_peer(peer_info: Json<AddPeerInfo>) -> Json<serde_json::Value> {
+    let peer_addr = &peer_info.peer_address;
 
-    // Here, you would typically call a function to update your peer list
-    // or directly connect to the new peer if your application supports it.
-    // For example: my_p2p_network.connect(peer_info.peer_address);
-
-    // Respond to the user
-    Json(json!({
-        "jsonrpc": "1.0",
-        "result": "Peer added successfully"
-    }))
+    match add_listener(peer_addr.to_string()).await {
+        Ok(_) => Json(json!({"status": "Peer added successfully"})),
+        Err(e) => Json(json!({"error": e.to_string()})),
+    }
 }
 
 #[get("/healthcheck")]
