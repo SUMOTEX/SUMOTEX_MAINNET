@@ -137,25 +137,6 @@ async fn block_producer() {
     }
 }
 
-async fn add_listener(addr: String) -> Result<(), String> {
-    let address_str = format!("{}",addr);
-    let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
-
-    let swarm_mutex = public_swarm::get_global_swarm_public_net();
-    let mut swarm_public_net_guard = swarm_mutex.lock().unwrap(); 
-    if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
-        match Swarm::listen_on(swarm_public_net, the_address.clone()) {
-            Ok(_) => {
-                info!("Listening on {:?}", the_address);
-                Ok(())
-            },
-            Err(e) => Err(format!("Failed to listen on {:?}. Reason: {:?}", the_address, e)),
-        }
-    } else {
-        Err(format!("Failed to add peers"))
-    }
-}
-
 
 #[tokio::main]
 async fn main() {
@@ -166,26 +147,16 @@ async fn main() {
     //     // Add more whitelisted peers as needed
     // ];
 
-    let mut whitelisted_peers = vec![
-        "/ip4/0.0.0.0/tcp/8081",
+    //let mut whitelisted_peers = vec![
+        //"/ip4/0.0.0.0/tcp/8081",
         // "/ip4/0.0.0.0/tcp/8082",
         // "/ip4/0.0.0.0/tcp/8083",
         // "/ip4/0.0.0.0/tcp/8084",
         // "/ip4/0.0.0.0/tcp/8085",
         // "/ip4/0.0.0.0/tcp/8086",
-        // "/ip4/0.0.0.0/tcp/8087",
-        // "/ip4/0.0.0.0/tcp/8089",
-        // "/ip4/0.0.0.0/tcp/8090",
-        // "/ip4/0.0.0.0/tcp/8091",
-        // "/ip4/0.0.0.0/tcp/8092",
-        // "/ip4/0.0.0.0/tcp/8093",
-        // "/ip4/0.0.0.0/tcp/8094",
-        // "/ip4/0.0.0.0/tcp/8095",
-        // "/ip4/0.0.0.0/tcp/8096",
-        // "/ip4/0.0.0.0/tcp/8097",
         // "/ip4/0.0.0.0/tcp/8098",
         // ... other addresses
-        ];
+        //];
 
     let mut whitelisted_listener = vec![
         "127.0.0.1:8089",
@@ -224,32 +195,14 @@ async fn main() {
         rpc_connector::start_rpc().await
     });
     tokio::spawn(block_producer());
-    // let rpc_runner = tokio::task::spawn_local(async {
-    //     rpc_connector::start_rpc().await
-    // });    
-    //println!("After RPC server");
     let swarm_mutex = public_swarm::get_global_swarm_public_net();
-    let mut stdin = BufReader::new(stdin()).lines();
     let mut swarm_public_net_guard = swarm_mutex.lock().unwrap(); 
+    let mut stdin = BufReader::new(stdin()).lines();
     //WHITE-LABEL PRODUCT: CHANGE OF CHAIN
     let mut gas_token = token::SMTXToken::new("SUMOTEX".to_string(), "SMTX".to_string(), 18, 1000000000000000000);
     let (pub_key,private_key)=account::create_account().expect("Failed to create a node account");
     let my_local_ip = local_ip().unwrap();
-    // Add initial whitelisted peers (if any)
-    // println!("Local IP address: {:?}", my_local_ip);
-    // let db_path = "./node/db";
-    // let node_path = rock_storage::open_db(db_path);
-    // match node_path {
-    //     Ok(db_handle) => {
-    //         rock_storage::put_to_db(&db_handle, format!("node_address:{}", &node_address), &node_staking_json)
-    //         .map_err(|_| "")?;
-    //         Ok("")
-    //     }
-    //     Err(e) => {
-    //         println!("{:?}",e);
-    //         return Err("");
-    //     }
-    // }
+
     println!("Pub node address: {:?}", pub_key);
     println!("Private node address: {:?}", private_key);
     //let binding = my_local_ip.to_string();
@@ -275,9 +228,10 @@ async fn main() {
             }
         }
         loop {
-            if let Some(port) = whitelisted_peers.pop() {
-                let address_str = format!("{}",port);
-                let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");        
+            // if let Some(port) = whitelisted_peers.pop() {
+                let address_str = format!("/ip4/{}/tcp/8105",(my_local_ip.to_string()));
+                let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
+                println!("{}",the_address);      
                 //Loop  to listen
                 match Swarm::listen_on( swarm_public_net, the_address.clone()) {
                     Ok(_) => {
@@ -292,9 +246,9 @@ async fn main() {
                         info!("Failed to listen on {:?}. Reason: {:?}", the_address, e);
                     }
                     }
-            } else {
-                info!("No more whitelisted Peers!");
-            }
+            // } else {
+            //     info!("No more whitelisted Peers!");
+            // }
         }
         let mut init_received = false;  // flag to track if Init event is processed
         if !init_received {

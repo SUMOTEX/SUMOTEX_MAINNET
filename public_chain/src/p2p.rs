@@ -396,8 +396,10 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                                     let mut total_gas_cost: u128 = 0; // Initialize total gas cost
                                     for txn_hash in &block.transactions {
                                         if let Some(first_txn_id) = txn_hash.first().cloned() {
-                                            let txn_detail = serde_json::from_str::<PublicTxn>(&first_txn_id).map_err(|_| "");
-                                            total_gas_cost += txn_detail.unwrap().gas_cost;
+                                            println!("Transaction ID:{:?}",first_txn_id);
+                                            let txn_detail = Txn::get_transaction_by_id(&first_txn_id).map_err(|_| "");
+                                            println!("Gas:{:?}",txn_detail.unwrap().gas_cost);
+                                            total_gas_cost += txn_detail.gas_cost;
                                             Txn::update_transaction_status(&first_txn_id,3);
                                             mempool.remove_transaction_by_id(first_txn_id);
                                         } 

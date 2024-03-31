@@ -6,6 +6,8 @@ use libp2p::{
     tcp::TokioTcpConfig,
     swarm::{Swarm,SwarmBuilder},
 };
+use libp2p::Multiaddr;
+use std::str::FromStr;
 use tokio::{
     sync::mpsc,
      spawn,
@@ -94,5 +96,26 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
     set_global_swarm_public_net(swarm);
     //swarm
 
+}
+
+pub async fn add_listener(addr: String) -> Result<(), Box<dyn std::error::Error>> {
+    let address_str = format!("{}",addr);
+    let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
+
+    let swarm_mutex = get_global_swarm_public_net();
+    println!("SWARM MUTEX HERE ");
+    let mut swarm_public_net_guard = swarm_mutex.lock().unwrap(); 
+    println!("GUARD ");
+    if let Some(swarm_public) = &mut *swarm_public_net_guard {
+        match Swarm::listen_on(swarm_public, the_address.clone()) {
+            Ok(_) => {
+                info!("Listening on {:?}", the_address);
+                Ok(())
+            },
+            Err(e) => return Err(e.into())
+        }
+    } else {
+        return Err("Error".into())
+    }
 }
 
