@@ -641,18 +641,28 @@ fn claim_reward(node_info: Json<ClaimRewardsInfo>) -> Json<serde_json::Value> {
     }
 }
 
-#[post("/add-peer", format = "json", data = "<peer_info>")]
-async fn add_peer(peer_info: Json<AddPeerInfo>) -> Json<serde_json::Value> {
-    let peer_addr = &peer_info.peer_address;
+// #[post("/add-peer", format = "json", data = "<peer_info>")]
+// async fn add_peer(peer_info: Json<AddPeerInfo>) -> Json<serde_json::Value> {
+//     let peer_addr = &peer_info.peer_address;
 
-    match public_swarm::add_listener(peer_addr.to_string()).await {
-        Ok(_) => Json(json!({
-            "jsonrpc": "1.0",
-            "result": peer_addr
-        })),
-        Err(e) => Json(json!({"error": e.to_string()})),
-    }
-}
+//     // Basic validation/logging
+//     if peer_addr.is_empty() {
+//         return Json(json!({"error": "Peer address is empty"}));
+//     }
+//     log::info!("Adding listener on address: {}", peer_addr);
+
+//     match public_swarm::add_listener(peer_addr.to_string()).await {
+//         Ok(_) => {
+//             log::info!("Successfully added listener on {}", peer_addr);
+//             Json(json!({"jsonrpc": "1.0", "result": peer_addr}))
+//         },
+//         Err(e) => {
+//             log::error!("Error adding listener on {}: {}", peer_addr, e);
+//             Json(json!({"error": e.to_string()}))
+//         },
+//     }
+// }
+
 
 #[get("/healthcheck")]
 fn healthcheck() -> Json<serde_json::Value> {
@@ -735,7 +745,7 @@ pub async fn start_rpc() {
                         claim_reward,
                         add_stake,
                         get_latest_block,
-                        add_peer,
+                        //add_peer,
                         healthcheck])
     .launch()
     .await

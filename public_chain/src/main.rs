@@ -137,7 +137,6 @@ async fn block_producer() {
     }
 }
 
-
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
@@ -229,14 +228,14 @@ async fn main() {
         }
         loop {
             // if let Some(port) = whitelisted_peers.pop() {
-                let address_str = format!("/ip4/{}/tcp/8105",(my_local_ip.to_string()));
+                let address_str = format!("/ip4/{}/tcp/8104",(my_local_ip.to_string()));
                 let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
                 println!("{}",the_address);      
                 //Loop  to listen
                 match Swarm::listen_on( swarm_public_net, the_address.clone()) {
                     Ok(_) => {
                         spawn(async move {
-                            sleep(Duration::from_secs(1)).await;
+     
                             info!("sending init event");
                             init_sender.send(true).expect("can send init event");
                         });
@@ -245,7 +244,7 @@ async fn main() {
                     Err(e) => {
                         info!("Failed to listen on {:?}. Reason: {:?}", the_address, e);
                     }
-                    }
+                }
             // } else {
             //     info!("No more whitelisted Peers!");
             // }
@@ -350,10 +349,28 @@ async fn main() {
                             let message_json = serde_json::to_string(&message).expect("can jsonify message");
                             swarm_public_net.behaviour_mut().floodsub.publish(topic,message)
                         }
-                        p2p::EventType::Input(line) => match line.as_str() {
-                            "ls p" => p2p::handle_print_peers(&swarm_public_net),
-                            cmd if cmd.starts_with("ls b") => p2p::handle_print_chain(&swarm_public_net),
-                            _ => error!("unknown command"),  
+                        p2p::EventType::Input(line) => {
+                            let command = line.trim();
+                            if command == "exit" {
+                                // Exit logic here. If it's within a loop, you might need a way to break out of or return from the loop/function.
+                                println!("Exiting...");
+                            } else if command.starts_with("ls node") {
+                                // Command processing
+                                if let Some(addr) = command.strip_prefix("ls node") {
+                                    let addr = addr.trim();
+                                    if !addr.is_empty() {
+                                        // Process the address. Consider proper error handling instead of `.unwrap()`
+                                        match public_swarm::add_listener(addr.to_string(), swarm_public_net).await {
+                                            Ok(_) => println!("Listener added to {}", addr),
+                                            Err(e) => eprintln!("Error adding listener: {}", e),
+                                        }
+                                    } else {
+                                        println!("Address not provided for 'ls node' command.");
+                                    }
+                                }
+                            } else {
+                                println!("Unknown command: {}", command);
+                            }
                         },
                     }
                 }

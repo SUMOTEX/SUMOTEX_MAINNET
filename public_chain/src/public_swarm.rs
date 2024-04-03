@@ -25,13 +25,18 @@ use crate::rock_storage::StoragePath;
 use libp2p::PeerId;
 use libp2p::identity::{Keypair as IdentityKeypair};
 type MySwarm = Swarm<AppBehaviour>;
-
+use log::error;
 use std::sync::{Arc, Mutex};
 use lazy_static::lazy_static;
+
 
 lazy_static! {
     static ref GLOBAL_SWARM_PUBLIC_NET: Arc<Mutex<Option<Swarm<AppBehaviour>>>> = Arc::new(Mutex::new(None));
 }
+
+// lazy_static! {
+//     static ref GLOBAL_SWARM_PUBLIC_NET: Arc<Mutex<Option<Swarm<AppBehaviour>>>> = Arc::new(Mutex::new(None));
+// }
 
 pub fn set_global_swarm_public_net(swarm: Swarm<AppBehaviour>) {
     let mut global_swarm = GLOBAL_SWARM_PUBLIC_NET.lock().unwrap();
@@ -69,8 +74,7 @@ fn generate_and_save_key_if_not_exists(file_path: &str) ->  Result<(), Box<dyn E
 }
 
 pub async fn create_public_swarm(app: App,storage:StoragePath) {
-    // Create and initialize your swarm here
-    info!("Peer Id: {}", PEER_ID.clone());
+    // Create and initialize your swarm hereq
     let (response_sender, _response_rcv) = mpsc::unbounded_channel();
     let (init_sender,  _init_rcv) = mpsc::unbounded_channel();
     let auth_keys = Keypair::<X25519Spec>::new()
@@ -98,24 +102,18 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
 
 }
 
-pub async fn add_listener(addr: String) -> Result<(), Box<dyn std::error::Error>> {
-    let address_str = format!("{}",addr);
-    let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
+pub async fn add_listener(addr: String, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn Error>> {
+    info!("Attempting to add listener on address: {}", addr);
 
-    let swarm_mutex = get_global_swarm_public_net();
-    println!("SWARM MUTEX HERE ");
-    let mut swarm_public_net_guard = swarm_mutex.lock().unwrap(); 
-    println!("GUARD ");
-    if let Some(swarm_public) = &mut *swarm_public_net_guard {
-        match Swarm::listen_on(swarm_public, the_address.clone()) {
-            Ok(_) => {
-                info!("Listening on {:?}", the_address);
-                Ok(())
-            },
-            Err(e) => return Err(e.into())
-        }
-    } else {
-        return Err("Error".into())
+    let the_address = Multiaddr::from_str(&addr)
+        .map_err(|e| Box::new(e) as Box<dyn Error>)?;
+    
+    // Directly use the mutable reference to `Swarm<AppBehaviour>` for adding a listener
+    match Swarm::listen_on(swarm, the_address.clone()) {
+        Ok(_) => {
+            println!("Listening on {:?}", the_address);
+            Ok(())
+        },
+        Err(e) => Err(Box::new(e) as Box<dyn Error>),
     }
 }
-
