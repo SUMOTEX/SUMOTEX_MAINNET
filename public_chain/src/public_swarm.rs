@@ -91,7 +91,7 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
         .multiplex(mplex::MplexConfig::new())
         .boxed();
     let behaviour = AppBehaviour::new(app.clone(),Txn::new(),PBFTNode::new(PEER_ID.clone().to_string()),storage, response_sender, init_sender.clone()).await;
-
+    println!("PEER_ID: {:?}",PEER_ID);
     let swarm = SwarmBuilder::new(transp, behaviour, *PEER_ID)
         .executor(Box::new(|fut| {
             spawn(fut);
@@ -107,13 +107,33 @@ pub async fn add_listener(addr: String, swarm: &mut Swarm<AppBehaviour>) -> Resu
 
     let the_address = Multiaddr::from_str(&addr)
         .map_err(|e| Box::new(e) as Box<dyn Error>)?;
-    
-    // Directly use the mutable reference to `Swarm<AppBehaviour>` for adding a listener
+    // let remote: Multiaddr = addr.parse().expect("Invalid Multiaddr");
+    // // Directly use the mutable reference to `Swarm<AppBehaviour>` for adding a listener
+    // swarm.dial(remote.clone()).expect("Failed to dial");
+    // println!("Dialed {:?}", remote);
     match Swarm::listen_on(swarm, the_address.clone()) {
         Ok(_) => {
             println!("Listening on {:?}", the_address);
+       
             Ok(())
         },
         Err(e) => Err(Box::new(e) as Box<dyn Error>),
     }
+}
+
+pub async fn dial(addr: &str, swarm: &mut Swarm<AppBehaviour>) {
+    // let local_key = identity::Keypair::generate_ed25519();
+    // let local_peer_id = PeerId::from(local_key.public());
+    // println!("Dialer peer id: {:?}", local_peer_id);
+
+    // let transport = development_transport(local_key).await.unwrap();
+    // let behaviour = libp2p::ping::Behaviour::new(libp2p::ping::Config::new().with_keep_alive(true));
+
+    // let address = addr.parse::<Multiaddr>().expect("Invalid Multiaddr format");
+
+    // match swarm.dial(addr) {
+    //     Ok(_) => println!("Dialed successfully"),
+    //     Err(e) => eprintln!("Dialing failed: {:?}", e),
+    // }
+
 }

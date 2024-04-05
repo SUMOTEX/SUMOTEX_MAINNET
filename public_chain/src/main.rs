@@ -228,7 +228,7 @@ async fn main() {
         }
         loop {
             // if let Some(port) = whitelisted_peers.pop() {
-                let address_str = format!("/ip4/{}/tcp/8100",(my_local_ip.to_string()));
+                let address_str = format!("/ip4/{}/tcp/8101",(my_local_ip.to_string()));
                 let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
                 println!("{}",the_address);      
                 //Loop  to listen
@@ -368,6 +368,19 @@ async fn main() {
                                         println!("Address not provided for 'ls node' command.");
                                     }
                                 }
+                            }else if command.starts_with("ls dial"){
+                                // if let Some(addr) = command.strip_prefix("ls dial") {
+                                //     let addr = addr.trim();
+                                //     if !addr.is_empty() {
+                                //         // Process the address. Consider proper error handling instead of `.unwrap()`
+                                //         match public_swarm::dial(addr, swarm_public_net).await {
+                                //             Ok(_) => println!("Dialing at to {}", addr),
+                                //             Err(e) => eprintln!("Error adding listener: {}", e),
+                                //         }
+                                //     } else {
+                                //         println!("Address not provided for 'ls node' command.");
+                                //     }
+                                // }
                             } else {
                                 println!("Unknown command: {}", command);
                             }
