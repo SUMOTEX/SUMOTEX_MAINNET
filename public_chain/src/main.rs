@@ -228,7 +228,7 @@ async fn main() {
         }
         loop {
             // if let Some(port) = whitelisted_peers.pop() {
-                let address_str = format!("/ip4/{}/tcp/8100",(my_local_ip.to_string()));
+                let address_str = format!("/ip4/{}/tcp/8101",(my_local_ip.to_string()));
                 let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
                 println!("{}",the_address);      
                 //Loop  to listen
@@ -320,12 +320,12 @@ async fn main() {
                                         .to_string(),
                                 };
                                 let json = serde_json::to_string(&req).expect("can jsonify request");
-
-                                swarm_public_net
-                                    .behaviour_mut()
-                                    .floodsub
-                                    .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
+                         
                             }
+                            swarm_public_net
+                            .behaviour_mut()
+                            .floodsub
+                            .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
                         }
                         p2p::EventType::LocalChainResponse(resp) => {
                             let json = serde_json::to_string(&resp).expect("can jsonify response");
