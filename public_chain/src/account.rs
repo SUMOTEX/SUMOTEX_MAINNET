@@ -162,6 +162,7 @@ pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> 
     }
     if let Some(publisher) = Publisher::get(){
         let serialized_data_bytes = serialized_data.as_bytes().to_vec();
+        println!("Publishing account creation")
         publisher.publish_block("account_creation".to_string(), serialized_data_bytes);
     }
     Ok((public_key.to_string(), private_key.to_string()))
