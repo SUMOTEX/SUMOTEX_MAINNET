@@ -472,6 +472,7 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                 }
             }else if msg.topics[0]==Topic::new("account_creation"){
+                println!("Received account creation request");
                 let received_serialized_data =msg.data;
                 match serde_json::from_slice::<account::Account>(&received_serialized_data) {
                     Ok(acc) => {
