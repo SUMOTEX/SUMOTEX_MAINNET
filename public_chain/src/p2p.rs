@@ -533,14 +533,3 @@ pub fn handle_print_peers(swarm: &Swarm<AppBehaviour>) {
     let peers = get_list_peers(swarm);
     peers.iter().for_each(|p| info!("{}", p));
 }
-
-pub fn handle_print_chain(swarm: &Swarm<AppBehaviour>) {
-    let pretty_json =
-        serde_json::to_string_pretty(&swarm.behaviour().app.blocks).expect("can jsonify blocks");
-    info!("{}", pretty_json);
-}
-pub fn handle_print_txn(swarm: &Swarm<AppBehaviour>) {
-    let pretty_json =
-        serde_json::to_string_pretty(&swarm.behaviour().txn.transactions).expect("can jsonify transactions");
-    info!("{}", pretty_json);
-}

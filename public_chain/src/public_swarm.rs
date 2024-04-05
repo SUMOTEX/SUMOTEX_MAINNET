@@ -6,6 +6,9 @@ use libp2p::{
     tcp::TokioTcpConfig,
     swarm::{Swarm,SwarmBuilder},
 };
+use libp2p::{
+    core::multiaddr::{Protocol},
+};
 use libp2p::Multiaddr;
 use std::str::FromStr;
 use tokio::{
@@ -111,6 +114,9 @@ pub async fn add_listener(addr: String, swarm: &mut Swarm<AppBehaviour>) -> Resu
     // // Directly use the mutable reference to `Swarm<AppBehaviour>` for adding a listener
     // swarm.dial(remote.clone()).expect("Failed to dial");
     // println!("Dialed {:?}", remote);
+    if let Err(e) = dial_peer_with_peer_id(swarm, the_address.clone()) {
+        eprintln!("Error dialing peer: {:?}", e);
+    }
     match Swarm::listen_on(swarm, the_address.clone()) {
         Ok(_) => {
             println!("Listening on {:?}", the_address);
@@ -121,19 +127,26 @@ pub async fn add_listener(addr: String, swarm: &mut Swarm<AppBehaviour>) -> Resu
     }
 }
 
-pub async fn dial(addr: &str, swarm: &mut Swarm<AppBehaviour>) {
-    // let local_key = identity::Keypair::generate_ed25519();
-    // let local_peer_id = PeerId::from(local_key.public());
-    // println!("Dialer peer id: {:?}", local_peer_id);
+pub fn dial_peer_with_peer_id(swarm: &mut Swarm<AppBehaviour>, multiaddr: Multiaddr) -> Result<(), Box<dyn Error>> {
+    // Attempt to extract the PeerId from the Multiaddr
+    let peer_id = multiaddr.iter().find_map(|protocol| {
+        if let Protocol::P2p(hash) = protocol {
+            PeerId::from_multihash(hash).ok()
+        } else {
+            None
+        }
+    });
 
-    // let transport = development_transport(local_key).await.unwrap();
-    // let behaviour = libp2p::ping::Behaviour::new(libp2p::ping::Config::new().with_keep_alive(true));
-
-    // let address = addr.parse::<Multiaddr>().expect("Invalid Multiaddr format");
-
-    // match swarm.dial(addr) {
-    //     Ok(_) => println!("Dialed successfully"),
-    //     Err(e) => eprintln!("Dialing failed: {:?}", e),
-    // }
-
+    match peer_id {
+        Some(pid) => {
+            // Dial the peer using the extracted PeerId
+            if let Err(e) = swarm.dial(&pid) {
+                eprintln!("Failed to dial {:?}: {}", pid, e);
+                return Err(Box::new(e));
+            }
+            println!("Dialed {:?}", pid);
+            Ok(())
+        },
+        None => Err("No PeerId found in Multiaddr.".into()),
+    }
 }
