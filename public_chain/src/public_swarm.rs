@@ -6,6 +6,8 @@ use libp2p::{
     tcp::TokioTcpConfig,
     swarm::{Swarm,SwarmBuilder},
 };
+use libp2p::kad::{Kademlia, KademliaConfig};
+use libp2p::kad::store::MemoryStore;
 use libp2p::{
     core::multiaddr::{Protocol},
 };
@@ -88,12 +90,18 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
     let key_public_net = IdentityKeypair::generate_ed25519();
     let local_peer_id_net1 = PeerId::from(key_public_net.public());
 
+    // Setting up Kademlia
+    let store = MemoryStore::new(*PEER_ID);
+    let mut cfg = KademliaConfig::default();
+    // Example: Add custom Kademlia configuration here
+    let kademlia = Kademlia::with_config(*PEER_ID, store, cfg);
+
     let transp = TokioTcpConfig::new()
         .upgrade(upgrade::Version::V1)
         .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
         .boxed();
-    let behaviour = AppBehaviour::new(app.clone(),Txn::new(),PBFTNode::new(PEER_ID.clone().to_string()),storage, response_sender, init_sender.clone()).await;
+    let behaviour = AppBehaviour::new(app.clone(),Txn::new(),PBFTNode::new(PEER_ID.clone().to_string()),storage,kademlia, response_sender, init_sender.clone(),).await;
     println!("PEER_ID: {:?}",PEER_ID);
     let swarm = SwarmBuilder::new(transp, behaviour, *PEER_ID)
         .executor(Box::new(|fut| {
@@ -105,48 +113,49 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
 
 }
 
-pub async fn add_listener(addr: String, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn Error>> {
-    info!("Attempting to add listener on address: {}", addr);
+pub async fn setup_node(listen_addr: &str, peer_addr: Option<String>, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn Error>> {
+    println!("Received listen address: {}", listen_addr);
+    let listen_multiaddr = Multiaddr::from_str(listen_addr)
+        .map_err(|e| {
+            eprintln!("Error parsing listen address {}: {}", listen_addr, e);
+            Box::new(e) as Box<dyn Error>
+        })?;
 
-    let the_address = Multiaddr::from_str(&addr)
-        .map_err(|e| Box::new(e) as Box<dyn Error>)?;
-    // let remote: Multiaddr = addr.parse().expect("Invalid Multiaddr");
-    // // Directly use the mutable reference to `Swarm<AppBehaviour>` for adding a listener
-    // swarm.dial(remote.clone()).expect("Failed to dial");
-    // println!("Dialed {:?}", remote);
-    if let Err(e) = dial_peer_with_peer_id(swarm, the_address.clone()) {
-        eprintln!("Error dialing peer: {:?}", e);
+    match swarm.listen_on(listen_multiaddr.clone()) {
+        Ok(_) => println!("Listening on {}", listen_multiaddr),
+        Err(e) => return Err(Box::new(e) as Box<dyn Error>),
     }
-    match Swarm::listen_on(swarm, the_address.clone()) {
-        Ok(_) => {
-            println!("Listening on {:?}", the_address);
-       
-            Ok(())
-        },
-        Err(e) => Err(Box::new(e) as Box<dyn Error>),
-    }
-}
 
-pub fn dial_peer_with_peer_id(swarm: &mut Swarm<AppBehaviour>, multiaddr: Multiaddr) -> Result<(), Box<dyn Error>> {
-    // Attempt to extract the PeerId from the Multiaddr
-    let peer_id = multiaddr.iter().find_map(|protocol| {
-        if let Protocol::P2p(hash) = protocol {
-            PeerId::from_multihash(hash).ok()
-        } else {
-            None
+    if let Some(addr) = peer_addr {
+        println!("Received peer address: {}", addr);
+        let peer_multiaddr = Multiaddr::from_str(&addr)
+            .map_err(|e| {
+                eprintln!("Error parsing peer address {}: {}", addr, e);
+                Box::new(e) as Box<dyn Error>
+            })?;
+
+        let peer_id = peer_multiaddr.iter().find_map(|protocol| match protocol {
+            Protocol::P2p(hash) => PeerId::from_multihash(hash).ok(),
+            _ => None,
+        }).ok_or_else(|| {
+            eprintln!("No PeerId found in Multiaddr.");
+            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "No PeerId found in Multiaddr.")) as Box<dyn Error>
+        })?;
+
+        if let Err(e) = swarm.dial(peer_multiaddr.clone()) {
+            eprintln!("Error dialing peer address {}: {}", peer_multiaddr, e);
         }
-    });
 
-    match peer_id {
-        Some(pid) => {
-            // Dial the peer using the extracted PeerId
-            if let Err(e) = swarm.dial(&pid) {
-                eprintln!("Failed to dial {:?}: {}", pid, e);
-                return Err(Box::new(e));
-            }
-            println!("Dialed {:?}", pid);
-            Ok(())
-        },
-        None => Err("No PeerId found in Multiaddr.".into()),
+        swarm.behaviour_mut().kademlia.add_address(&peer_id, peer_multiaddr.clone());
+        println!("Dialing peer {} and added to Kademlia", peer_id);
+        // let kademlia = &swarm.behaviour().kademlia;
+        // let routing_table = kademlia.routing_table();
+
+        // for bucket in routing_table.buckets() {
+        //     for entry in bucket.iter() {
+        //         println!("Peer in bucket: {:?}", entry.node.key.preimage());
+        //     }
+        // }
     }
+    Ok(())
 }

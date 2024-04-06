@@ -235,7 +235,6 @@ async fn main() {
                 match Swarm::listen_on( swarm_public_net, the_address.clone()) {
                     Ok(_) => {
                         spawn(async move {
-     
                             info!("sending init event");
                             init_sender.send(true).expect("can send init event");
                         });
@@ -254,24 +253,24 @@ async fn main() {
             let recv_result = init_rcv.recv().await;
             match recv_result {
                 Some(_) => {
-                    let peers = p2p::get_list_peers(&swarm_public_net);
-                    let _ = swarm_public_net.behaviour_mut().app.initialize_from_storage();
-                    info!("Connected nodes: {}", peers.len());
-                    if !peers.is_empty() {
-                        let req = p2p::LocalChainRequest {
-                            from_peer_id: peers
-                                .iter()
-                                .last()
-                                .expect("at least one peer")
-                                .to_string(),
-                        };
+                    // let peers = p2p::get_list_peers(&swarm_public_net);
+                    // let _ = swarm_public_net.behaviour_mut().app.initialize_from_storage();
+                    // info!("Connected nodes: {}", peers.len());
+                    // if !peers.is_empty() {
+                    //     let req = p2p::LocalChainRequest {
+                    //         from_peer_id: peers
+                    //             .iter()
+                    //             .last()
+                    //             .expect("at least one peer")
+                    //             .to_string(),
+                    //     };
 
-                        let json = serde_json::to_string(&req).expect("can jsonify request");
-                        swarm_public_net
-                            .behaviour_mut()
-                            .floodsub
-                            .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
-                    }
+                    //     let json = serde_json::to_string(&req).expect("can jsonify request");
+                    //     swarm_public_net
+                    //         .behaviour_mut()
+                    //         .floodsub
+                    //         .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
+                    // }
                     init_received = true;
                 },
                 None => {
@@ -308,24 +307,24 @@ async fn main() {
                 if let Some(event) = public_evt {
                     match event {
                         p2p::EventType::Init => {
-                            let peers = p2p::get_list_peers(&swarm_public_net);
-                            swarm_public_net.behaviour_mut().app.genesis();
-                            info!("Connected nodes: {}", peers.len());
-                            if !peers.is_empty() {
-                                let req = p2p::LocalChainRequest {
-                                    from_peer_id: peers
-                                        .iter()
-                                        .last()
-                                        .expect("at least one peer")
-                                        .to_string(),
-                                };
-                                let json = serde_json::to_string(&req).expect("can jsonify request");
+                            // let peers = p2p::get_list_peers(&swarm_public_net);
+                            // swarm_public_net.behaviour_mut().app.genesis();
+                            // info!("Connected nodes: {}", peers.len());
+                            // if !peers.is_empty() {
+                            //     let req = p2p::LocalChainRequest {
+                            //         from_peer_id: peers
+                            //             .iter()
+                            //             .last()
+                            //             .expect("at least one peer")
+                            //             .to_string(),
+                            //     };
+                            //     let json = serde_json::to_string(&req).expect("can jsonify request");
 
-                                swarm_public_net
-                                    .behaviour_mut()
-                                    .floodsub
-                                    .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
-                            }
+                            //     swarm_public_net
+                            //         .behaviour_mut()
+                            //         .floodsub
+                            //         .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
+                            // }
                         }
                         p2p::EventType::LocalChainResponse(resp) => {
                             let json = serde_json::to_string(&resp).expect("can jsonify response");
@@ -339,7 +338,6 @@ async fn main() {
                             let topic_str = title_json.trim_matches('"');
                             let topic = libp2p::floodsub::Topic::new(topic_str);
                             let message_json = serde_json::to_string(&message).expect("can jsonify message");
-                            let peers = p2p::get_list_peers(&swarm_public_net);
                             swarm_public_net.behaviour_mut().floodsub.publish(topic,message_json.as_bytes())
                         }
                         p2p::EventType::PublishBlock(title,message)=>{
@@ -354,34 +352,27 @@ async fn main() {
                             if command == "exit" {
                                 // Exit logic here. If it's within a loop, you might need a way to break out of or return from the loop/function.
                                 println!("Exiting...");
-                            } else if command.starts_with("ls node") {
-                                // Command processing
-                                if let Some(addr) = command.strip_prefix("ls node") {
-                                    let addr = addr.trim();
-                                    if !addr.is_empty() {
-                                        // Process the address. Consider proper error handling instead of `.unwrap()`
-                                        match public_swarm::add_listener(addr.to_string(), swarm_public_net).await {
-                                            Ok(_) => println!("Listener added to {}", addr),
-                                            Err(e) => eprintln!("Error adding listener: {}", e),
+                            }else if command.starts_with("ls node") {
+                                // Split the command to separate the listener address and optional peer address
+                                let parts: Vec<&str> = command.strip_prefix("ls node").unwrap().trim().split_whitespace().collect();
+                                match parts.len() {
+                                    1 => {
+                                        // Only a listener address is provided
+                                        match public_swarm::setup_node(parts[0], None, swarm_public_net).await {
+                                            Ok(_) => println!("Listener added on {}", parts[0]),
+                                            Err(e) => eprintln!("Error setting up node: {}", e),
                                         }
-                                    } else {
-                                        println!("Address not provided for 'ls node' command.");
-                                    }
+                                    },
+                                    2 => {
+                                        // Both a listener address and a peer address are provided
+                                        match public_swarm::setup_node(parts[0], Some(parts[1].to_string()), swarm_public_net).await {
+                                            Ok(_) => println!("Listener added on {} and dialed peer {}", parts[0], parts[1]),
+                                            Err(e) => eprintln!("Error setting up node: {}", e),
+                                        }
+                                    },
+                                    _ => println!("Invalid 'ls node' command format. Expected 'ls node [listener address] [optional peer address]'"),
                                 }
-                            }else if command.starts_with("ls dial"){
-                                // if let Some(addr) = command.strip_prefix("ls dial") {
-                                //     let addr = addr.trim();
-                                //     if !addr.is_empty() {
-                                //         // Process the address. Consider proper error handling instead of `.unwrap()`
-                                //         match public_swarm::dial(addr, swarm_public_net).await {
-                                //             Ok(_) => println!("Dialing at to {}", addr),
-                                //             Err(e) => eprintln!("Error adding listener: {}", e),
-                                //         }
-                                //     } else {
-                                //         println!("Address not provided for 'ls node' command.");
-                                //     }
-                                // }
-                            } else {
+                            }else {
                                 println!("Unknown command: {}", command);
                             }
                         },

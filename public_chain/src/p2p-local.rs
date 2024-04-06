@@ -1,12 +1,11 @@
 use libp2p::{
     floodsub::{Floodsub,FloodsubEvent,Topic},
-    kad::{Kademlia,KademliaEvent, KademliaConfig},
+    
     core::{identity},
     mdns::{Mdns,MdnsEvent},
     NetworkBehaviour, PeerId,
     swarm::{Swarm,NetworkBehaviourEventProcess},
 };
-use libp2p::kad::store::MemoryStore;
 use tokio::{
     sync::mpsc,
 };
@@ -69,19 +68,11 @@ pub enum EventType {
     Publish(String, String), // Publish a message to a topic
     PublishBlock(String,Vec<u8>),
 }
-#[derive(Debug)]
-pub enum AppEvent {
-    Floodsub(FloodsubEvent),
-    Kademlia(KademliaEvent)
-    // Add variants for other event types as needed
-    // For example: Kademlia(KademliaEvent),
-}
 
 #[derive(NetworkBehaviour)]
-#[behaviour(out_event = "AppEvent", event_process = false)] // event_process = false tells derive macro not to expect automatic event processing
 pub struct AppBehaviour {
     pub floodsub: Floodsub,
-    pub kademlia: Kademlia<MemoryStore>,
+    pub mdns: Mdns,
     #[behaviour(ignore)]
     pub response_sender: mpsc::UnboundedSender<ChainResponse>,
     #[behaviour(ignore)]
@@ -103,22 +94,19 @@ impl AppBehaviour {
         txn:Txn,
         pbft:PBFTNode,
         storage_path:StoragePath,
-        kademlia: Kademlia<MemoryStore>, // Include Kademlia here
         response_sender: mpsc::UnboundedSender<ChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
     ) -> Self {
         info!("About to send init event from [BEHAVIOUR]");
-        let mut cfg = KademliaConfig::default();
-        let store = libp2p::kad::record::store::MemoryStore::new(*PEER_ID);
-        let mut kademlia = Kademlia::with_config(*PEER_ID, store, cfg);
-        
         let mut behaviour = Self {
             app,
             txn,
             pbft,
             storage_path,
             floodsub: Floodsub::new(*PEER_ID),
-            kademlia,
+            mdns: Mdns::new(Default::default())
+                .await
+                .expect("can create mdns"),
             response_sender,
             init_sender,
         };
@@ -511,18 +499,38 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
         }
     }
 }
-
-impl From<FloodsubEvent> for AppEvent {
-    fn from(event: FloodsubEvent) -> Self {
-        AppEvent::Floodsub(event)
+impl NetworkBehaviourEventProcess<MdnsEvent> for AppBehaviour {
+    fn inject_event(&mut self, event: MdnsEvent) {
+        match event {
+            MdnsEvent::Discovered(discovered_list) => {
+                for (peer, _addr) in discovered_list {
+                    self.floodsub.add_node_to_partial_view(peer);
+                }
+            }
+            MdnsEvent::Expired(expired_list) => {
+                for (peer, _addr) in expired_list {
+                    if !self.mdns.has_node(&peer) {
+                        self.floodsub.remove_node_from_partial_view(&peer);
+                    }
+                }
+            }
+        }
     }
 }
 
-impl From<KademliaEvent> for AppEvent {
-    fn from(event: KademliaEvent) -> Self {
-        AppEvent::Kademlia(event)
-    }
-}
 pub fn trigger_publish(sender: mpsc::UnboundedSender<(String, String)>, title: String, message: String) {
     sender.send((title, message)).expect("Can send publish event");
+}
+pub fn get_list_peers(swarm: &Swarm<AppBehaviour>) -> Vec<String> {
+    let nodes = swarm.behaviour().mdns.discovered_nodes();
+    let mut unique_peers = HashSet::new();
+    for peer in nodes {
+        unique_peers.insert(peer);
+    }
+    unique_peers.iter().map(|p| p.to_string()).collect()
+}
+
+pub fn handle_print_peers(swarm: &Swarm<AppBehaviour>) {
+    let peers = get_list_peers(swarm);
+    peers.iter().for_each(|p| info!("{}", p));
 }
