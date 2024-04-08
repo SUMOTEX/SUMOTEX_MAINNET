@@ -1,6 +1,7 @@
 use libp2p::{
-    swarm::{Swarm}
+    swarm::{Swarm,SwarmEvent}
 };
+use libp2p::gossipsub::{IdentTopic as Topic};
 use local_ip_address::local_ip;
 use log::{error, info};
 use tokio::{
@@ -9,6 +10,8 @@ use tokio::{
     sync::mpsc,
     time::sleep
 };
+use libp2p::kad::KademliaEvent;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::path::Path;
 use std::time::UNIX_EPOCH;
 use std::time::SystemTime;
@@ -36,11 +39,14 @@ mod gas_calculator;
 mod txn_pool;
 mod token;
 mod staking;
+use ctrlc;
 use bridge::accept_loop;
 use crate::public_app::App;
 use std::sync::{RwLock, Arc};
 use publisher::Publisher;
 use tokio::net::TcpListener;
+use tokio::signal;
+use tokio::sync::Notify;
 use crate::p2p::AppBehaviour;
 use rocksdb::DBWithThreadMode;
 use rocksdb::SingleThreaded;
@@ -228,7 +234,7 @@ async fn main() {
         }
         loop {
             // if let Some(port) = whitelisted_peers.pop() {
-                let address_str = format!("/ip4/{}/tcp/8101",(my_local_ip.to_string()));
+                let address_str = format!("/ip4/{}/tcp/8102",(my_local_ip.to_string()));
                 let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
                 println!("{}",the_address);      
                 //Loop  to listen
@@ -253,24 +259,6 @@ async fn main() {
             let recv_result = init_rcv.recv().await;
             match recv_result {
                 Some(_) => {
-                    // let peers = p2p::get_list_peers(&swarm_public_net);
-                    // let _ = swarm_public_net.behaviour_mut().app.initialize_from_storage();
-                    // info!("Connected nodes: {}", peers.len());
-                    // if !peers.is_empty() {
-                    //     let req = p2p::LocalChainRequest {
-                    //         from_peer_id: peers
-                    //             .iter()
-                    //             .last()
-                    //             .expect("at least one peer")
-                    //             .to_string(),
-                    //     };
-
-                    //     let json = serde_json::to_string(&req).expect("can jsonify request");
-                    //     swarm_public_net
-                    //         .behaviour_mut()
-                    //         .floodsub
-                    //         .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
-                    // }
                     init_received = true;
                 },
                 None => {
@@ -330,22 +318,27 @@ async fn main() {
                             let json = serde_json::to_string(&resp).expect("can jsonify response");
                             swarm_public_net
                                 .behaviour_mut()
-                                .floodsub
+                                .gossipsub
                                 .publish(p2p::CHAIN_TOPIC.clone(), json.as_bytes());
                         }
                         p2p::EventType::Publish(title,message)=>{
                             let title_json = serde_json::to_string(&title).expect("can jsonify title");
                             let topic_str = title_json.trim_matches('"');
-                            let topic = libp2p::floodsub::Topic::new(topic_str);
+                            let topic = Topic::new(topic_str);
                             let message_json = serde_json::to_string(&message).expect("can jsonify message");
-                            swarm_public_net.behaviour_mut().floodsub.publish(topic,message_json.as_bytes())
+                            swarm_public_net.behaviour_mut().gossipsub.publish(topic,message_json.as_bytes());
                         }
                         p2p::EventType::PublishBlock(title,message)=>{
+                            println!("Topic: {:?}",title);
+                            println!("Message: {:?}",message);
                             let title_json = serde_json::to_string(&title).expect("can jsonify title");
                             let topic_str = title_json.trim_matches('"');
-                            let topic = libp2p::floodsub::Topic::new(topic_str);
+                            let topic = Topic::new(topic_str);
                             let message_json = serde_json::to_string(&message).expect("can jsonify message");
-                            swarm_public_net.behaviour_mut().floodsub.publish(topic,message)
+                            match swarm_public_net.behaviour_mut().gossipsub.publish(topic, message) {
+                                Ok(_) => println!("Message published to topic {}", title),
+                                Err(e) => println!("Failed to publish message to topic {}: {:?}", title, e),
+                            }
                         }
                         p2p::EventType::Input(line) => {
                             let command = line.trim();
@@ -372,6 +365,8 @@ async fn main() {
                                     },
                                     _ => println!("Invalid 'ls node' command format. Expected 'ls node [listener address] [optional peer address]'"),
                                 }
+                            }else if command.starts_with("ls peer"){
+                                public_swarm::check_connected_peers(swarm_public_net);
                             }else {
                                 println!("Unknown command: {}", command);
                             }

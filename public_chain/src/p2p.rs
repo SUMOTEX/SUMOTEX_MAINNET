@@ -1,17 +1,15 @@
 use libp2p::{
-    floodsub::{Floodsub,FloodsubEvent,Topic},
     kad::{Kademlia,KademliaEvent, KademliaConfig},
     core::{identity},
-    mdns::{Mdns,MdnsEvent},
     NetworkBehaviour, PeerId,
     swarm::{Swarm,NetworkBehaviourEventProcess},
 };
+use libp2p::gossipsub::{Gossipsub, GossipsubConfig,GossipsubConfigBuilder,ValidationMode, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity};
 use libp2p::kad::store::MemoryStore;
 use tokio::{
     sync::mpsc,
 };
 use sha2::{Digest, Sha256};
-use crate::verkle_tree::VerkleTree;
 use std::collections::HashMap;
 use log::{error, info};
 use once_cell::sync::Lazy;
@@ -25,7 +23,6 @@ use crate::public_txn::Txn;
 use crate::rock_storage::StoragePath;
 use crate::public_block;
 use crate::public_txn;
-use crate::pbft;
 use crate::rock_storage;
 use crate::txn_pool;
 use crate::staking;
@@ -38,17 +35,18 @@ use crate::publisher::Publisher;
 pub static KEYS: Lazy<identity::Keypair> = Lazy::new(identity::Keypair::generate_ed25519);
 pub static PEER_ID: Lazy<PeerId> = Lazy::new(|| PeerId::from(KEYS.public()));
 pub static CHAIN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("chains"));
-pub static PRIVATE_BLOCK_GENESIS_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("private_blocks_genesis_creation"));
-pub static HYBRID_BLOCK_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("hybrid_block_creation"));
-//For blocks
-pub static BLOCK_PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_pre_prepared"));
-pub static BLOCK_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_prepared"));
-pub static BLOCK_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_commit"));
+static PRIVATE_BLOCK_GENESIS_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("private_blocks_genesis_creation"));
+static HYBRID_BLOCK_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("hybrid_block_creation"));
 
-//Transaction mempool verifications PBFT engine
-pub static TXN_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_prepared"));
-pub static TXN_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_commit"));
-pub static ACCOUNT_CREATION_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("account_creation"));
+// For blocks
+static BLOCK_PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_pre_prepared"));
+static BLOCK_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_prepared"));
+static BLOCK_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_commit"));
+
+// Transaction mempool verifications PBFT engine
+static TXN_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_prepared"));
+static TXN_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_commit"));
+static ACCOUNT_CREATION_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("account_creation"));
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChainResponse {
@@ -71,7 +69,7 @@ pub enum EventType {
 }
 #[derive(Debug)]
 pub enum AppEvent {
-    Floodsub(FloodsubEvent),
+    Gossipsub(GossipsubEvent),
     Kademlia(KademliaEvent)
     // Add variants for other event types as needed
     // For example: Kademlia(KademliaEvent),
@@ -80,7 +78,7 @@ pub enum AppEvent {
 #[derive(NetworkBehaviour)]
 #[behaviour(out_event = "AppEvent", event_process = false)] // event_process = false tells derive macro not to expect automatic event processing
 pub struct AppBehaviour {
-    pub floodsub: Floodsub,
+    pub gossipsub: Gossipsub,
     pub kademlia: Kademlia<MemoryStore>,
     #[behaviour(ignore)]
     pub response_sender: mpsc::UnboundedSender<ChainResponse>,
@@ -107,36 +105,26 @@ impl AppBehaviour {
         response_sender: mpsc::UnboundedSender<ChainResponse>,
         init_sender: mpsc::UnboundedSender<bool>,
     ) -> Self {
-        info!("About to send init event from [BEHAVIOUR]");
-        let mut cfg = KademliaConfig::default();
-        let store = libp2p::kad::record::store::MemoryStore::new(*PEER_ID);
-        let mut kademlia = Kademlia::with_config(*PEER_ID, store, cfg);
-        
+        let gossipsub_config = GossipsubConfigBuilder::default()
+            .validation_mode(ValidationMode::Anonymous) // Allows unsigned messages
+            .build()
+            .expect("Valid Gossipsub configuration");
+        let gossipsub = Gossipsub::new(
+            MessageAuthenticity::Anonymous, 
+            gossipsub_config
+        ).expect("Correct Gossipsub configuration");
+  
         let mut behaviour = Self {
             app,
             txn,
             pbft,
             storage_path,
-            floodsub: Floodsub::new(*PEER_ID),
+            gossipsub,
             kademlia,
             response_sender,
             init_sender,
         };
-        behaviour.floodsub.subscribe(CHAIN_TOPIC.clone());
-        behaviour.floodsub.subscribe(public_block::BLOCK_TOPIC.clone());
-        behaviour.floodsub.subscribe(BLOCK_PBFT_PREPREPARED_TOPIC.clone());
-        behaviour.floodsub.subscribe(BLOCK_PBFT_PREPARED_TOPIC.clone());
-        behaviour.floodsub.subscribe(BLOCK_PBFT_COMMIT_TOPIC.clone());
-        behaviour.floodsub.subscribe(TXN_PBFT_PREPARED_TOPIC.clone());
-        behaviour.floodsub.subscribe(TXN_PBFT_COMMIT_TOPIC.clone());
-        behaviour.floodsub.subscribe(PRIVATE_BLOCK_GENESIS_CREATION.clone());
-        behaviour.floodsub.subscribe(HYBRID_BLOCK_CREATION.clone());
-        behaviour.floodsub.subscribe(ACCOUNT_CREATION_TOPIC.clone());
         behaviour
-    }
-    fn send_message(&mut self, target: PeerId, message: String) {
-        println!("Message Sending {:?}",target)
-        // Logic to send the message to the target PeerId
     }
 }
 #[derive(Debug, Clone)]
@@ -188,31 +176,25 @@ static mut LEADER: Option<String> = None;
 
 
 // incoming event handler
-impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
-    fn inject_event(&mut self, event: FloodsubEvent) {
-        if let FloodsubEvent::Message(msg) = event {
-            // if msg.topics[0]
-            //info!("Response from {:?}:", msg);
-            if let Ok(resp) = serde_json::from_slice::<ChainResponse>(&msg.data) {
-                if resp.receiver == PEER_ID.to_string() {
-                    //info!("Response from {}:", msg.source);
-                    resp.blocks.iter().for_each(|r| info!("{:?}", r));
-                    self.app.blocks = self.app.choose_chain(self.app.blocks.clone(), resp.blocks);
-                }
-            } else if let Ok(resp) = serde_json::from_slice::<LocalChainRequest>(&msg.data) {
-                let peer_id = resp.from_peer_id;
-                if PEER_ID.to_string() == peer_id {
-                    if let Err(e) = self.response_sender.send(ChainResponse {
-                        blocks: self.app.blocks.clone(),
-                        receiver: msg.source.to_string(),
-                    }) {
-                        error!("error sending response via channel, {}", e);
-                    }
-                }
-            } else if msg.topics[0]==Topic::new("create_blocks"){
-                match serde_json::from_slice::<Block>(&msg.data) {
+impl NetworkBehaviourEventProcess<GossipsubEvent> for AppBehaviour {
+    fn inject_event(&mut self, event: GossipsubEvent) {
+        match event {
+            GossipsubEvent::Subscribed { peer_id, topic } => {
+                info!("Peer {:?} subscribed to topic {:?}", peer_id, topic);
+            },
+            GossipsubEvent::Unsubscribed { peer_id, topic } => {
+                info!("Peer {:?} unsubscribed from topic {:?}", peer_id, topic);
+            },
+            GossipsubEvent::Message {
+                propagation_source: peer_id,
+                message_id: _,
+                message,
+            } => {
+            println!("Receive message: {:?}",message);
+            if message.topic ==  Topic::new("create_blocks").hash() { 
+                match serde_json::from_slice::<Block>(&message.data) {
                     Ok(block) => {
-                        info!("Received new block from {}", msg.source.to_string());
+                        //info!("Received new block from {}", message.source.to_string());
                         self.app.try_add_block(block.clone());
                         let path = "./public_blockchain/db";
                         // Open the database and handle the Result
@@ -236,15 +218,14 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     },
                     Err(err) => {
                         error!(
-                            "Error deserializing block from {}: {}",
-                            msg.source.to_string(),
+                            "Error deserializing block from: {}",
                             err
                         );
                     }
                 }
             }
-            else if msg.topics[0]==Topic::new("txn_pbft_prepared"){
-                let received_serialized_data =msg.data;
+            else if message.topic == Topic::new("txn_pbft_prepared").hash()  {
+                let received_serialized_data =message.data;
                 // let json_string = String::from_utf8(received_serialized_data).unwrap();
                 // info!("Transactions prepared: {:?}",json_string);
                 match String::from_utf8(received_serialized_data.to_vec()) {
@@ -292,8 +273,8 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                 }; 
             }
-            else if msg.topics[0] == Topic::new("txn_pbft_commit") {
-                let received_serialized_data = msg.data;
+            else if message.topic == Topic::new("txn_pbft_commit").hash() {  
+                let received_serialized_data = message.data;
                 match String::from_utf8(received_serialized_data.to_vec()) {
                     Ok(json_string) => {
                         // First unescape: Remove extra backslashes and outer quotes
@@ -330,8 +311,9 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     }
                 };
             }
-            else if msg.topics[0]==Topic::new("block_pbft_pre_prepared"){
-                let received_serialized_data = msg.data;
+          
+            else  if message.topic == Topic::new("block_pbft_pre_prepared").hash() { 
+                let received_serialized_data = message.data;
                 let deserialized_data:  HashMap<String, HashMap<String, HashMap<String,String>>> = serde_json::from_slice(&received_serialized_data).expect("Deserialization failed");
                 let the_pbft_hash = self.pbft.get_hash_id();
                 let mut all_transactions_valid = true;
@@ -382,16 +364,17 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 } else {
                     println!("The outer HashMap is empty");
                 }
-            }else if msg.topics[0]==Topic::new("block_pbft_commit"){
+            }
+            else if message.topic == Topic::new("block_pbft_commit").hash() { 
                 let node_path = rock_storage::open_db("./node/db");
                 let local_peer_id = get_peer_id();
                 // println!("Local Peer ID {:?} Leader: {:?}", local_peer_id, unsafe { LEADER.as_ref() });
                 //let is_leader = unsafe { LEADER.as_ref() == Some(&local_peer_id) };
                 let is_leader = unsafe { LEADER.as_ref() }.map(|leader| leader == &local_peer_id).unwrap_or(false);
-                        match serde_json::from_slice::<Block>(&msg.data) {
+                        match serde_json::from_slice::<Block>(&message.data) {
                             Ok(block) => {
                                 if let Some(publisher) = Publisher::get() {
-                                    info!("Received new block from {}", msg.source.to_string());
+                                    //info!("Received new block from {}", message.source.to_string());
                                     let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
                                     self.app.try_add_block(block.clone());
                                     let path = "./public_blockchain/db";
@@ -439,15 +422,15 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                             },
                             Err(err) => {
                                 error!(
-                                    "Error deserializing block from {}: {}",
-                                    msg.source.to_string(),
+                                    "Error deserializing block from: {}",
+                                   
                                     err
                                 );
                             }
                         }
             }
-            else if msg.topics[0]==Topic::new("private_blocks_genesis_creation"){
-                let received_serialized_data =msg.data;
+            else if message.topic == Topic::new("private_blocks_genesis_creation").hash() { 
+                let received_serialized_data =message.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
                 if let Some(publisher) = Publisher::get(){
                 let created_block = public_block::handle_create_block_private_chain(self.app.clone(),Some(json_string),None,None,None);
@@ -465,8 +448,9 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 self.app.blocks.push(created_block);
                 publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                 }
-            } else if msg.topics[0]==Topic::new("hybrid_block_creation")  {
-                let received_serialized_data =msg.data;
+            }
+            else if message.topic == Topic::new("hybrid_block_creation").hash() { 
+                let received_serialized_data =message.data;
                 let json_string = String::from_utf8(received_serialized_data).unwrap();
                 if let Some(publisher) = Publisher::get(){
                     let created_block = public_block::handle_create_block_private_chain(self.app.clone(),Some(json_string),None,None,None);
@@ -484,9 +468,10 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                     self.app.blocks.push(created_block);
                     publisher.publish_block("create_blocks".to_string(),json.as_bytes().to_vec())
                 }
-            }else if msg.topics[0]==Topic::new("account_creation"){
+            }
+            else if message.topic == Topic::new("account_creation").hash() { 
                 println!("Received account creation request");
-                let received_serialized_data =msg.data;
+                let received_serialized_data =message.data;
                 match serde_json::from_slice::<account::Account>(&received_serialized_data) {
                     Ok(acc) => {
                         let path = "./account/db";
@@ -509,12 +494,14 @@ impl NetworkBehaviourEventProcess<FloodsubEvent> for AppBehaviour {
                 }
             }
         }
+        _ => {}
     }
 }
+}
 
-impl From<FloodsubEvent> for AppEvent {
-    fn from(event: FloodsubEvent) -> Self {
-        AppEvent::Floodsub(event)
+impl From<GossipsubEvent> for AppEvent {
+    fn from(event: GossipsubEvent) -> Self {
+        AppEvent::Gossipsub(event)
     }
 }
 
@@ -523,6 +510,7 @@ impl From<KademliaEvent> for AppEvent {
         AppEvent::Kademlia(event)
     }
 }
+
 pub fn trigger_publish(sender: mpsc::UnboundedSender<(String, String)>, title: String, message: String) {
     sender.send((title, message)).expect("Can send publish event");
 }

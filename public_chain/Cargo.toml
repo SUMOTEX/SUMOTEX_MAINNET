@@ -13,6 +13,7 @@ json = 33554432  # 32 MiB in bytes
 
 [dependencies]
 common = { path = "../common" }
+ctrlc = "3.2.1"
 secp256k1 = {version = "0.20", features = ["rand-std","rand"]}
 rocksdb = "0.17.0"
 actix-web = "3"

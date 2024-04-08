@@ -1,8 +1,8 @@
 use chrono::prelude::*;
 use libp2p::{
-    floodsub::{Topic},
     swarm::{Swarm},
 };
+use libp2p::gossipsub::{ IdentTopic as Topic};
 use log::{ info, warn};
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
@@ -16,6 +16,8 @@ use crate::txn_pool;
 use crate::p2p;
 use crate::public_txn::Txn;
 use crate::publisher::Publisher;
+
+
 pub static BLOCK_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("create_blocks"));
 
 

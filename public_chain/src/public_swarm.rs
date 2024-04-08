@@ -6,11 +6,14 @@ use libp2p::{
     tcp::TokioTcpConfig,
     swarm::{Swarm,SwarmBuilder},
 };
+use libp2p::gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity};
+use once_cell::sync::Lazy;
 use libp2p::kad::{Kademlia, KademliaConfig};
 use libp2p::kad::store::MemoryStore;
 use libp2p::{
     core::multiaddr::{Protocol},
 };
+use log::warn;
 use libp2p::Multiaddr;
 use std::str::FromStr;
 use tokio::{
@@ -25,6 +28,7 @@ use crate::p2p::AppBehaviour;
 use crate::p2p::KEYS;
 use crate::public_app::App;
 use crate::public_txn::Txn;
+use crate::public_block;
 use crate::pbft::PBFTNode;
 use crate::rock_storage::StoragePath;
 use libp2p::PeerId;
@@ -88,11 +92,10 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
     // Convert to AuthenticKeypair
     let _keypair = generate_and_save_key_if_not_exists("/Users/leowyennhan/Desktop/sumotex_mainnet/chain/public_chain/key_storage");
     let key_public_net = IdentityKeypair::generate_ed25519();
-    let local_peer_id_net1 = PeerId::from(key_public_net.public());
 
     // Setting up Kademlia
     let store = MemoryStore::new(*PEER_ID);
-    let mut cfg = KademliaConfig::default();
+    let cfg = KademliaConfig::default();
     // Example: Add custom Kademlia configuration here
     let kademlia = Kademlia::with_config(*PEER_ID, store, cfg);
 
@@ -101,9 +104,15 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
         .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
         .boxed();
-    let behaviour = AppBehaviour::new(app.clone(),Txn::new(),PBFTNode::new(PEER_ID.clone().to_string()),storage,kademlia, response_sender, init_sender.clone(),).await;
+    let behaviour = AppBehaviour::new(app.clone(),
+                Txn::new(),
+                PBFTNode::new(PEER_ID.clone().to_string()),
+                storage,
+                kademlia,
+                response_sender,
+                init_sender.clone(),).await;
     println!("PEER_ID: {:?}",PEER_ID);
-    let swarm = SwarmBuilder::new(transp, behaviour, *PEER_ID)
+    let mut swarm = SwarmBuilder::new(transp, behaviour, *PEER_ID)
         .executor(Box::new(|fut| {
             spawn(fut);
         }))
@@ -113,49 +122,109 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
 
 }
 
-pub async fn setup_node(listen_addr: &str, peer_addr: Option<String>, swarm: &mut Swarm<AppBehaviour>) -> Result<(), Box<dyn Error>> {
-    println!("Received listen address: {}", listen_addr);
-    let listen_multiaddr = Multiaddr::from_str(listen_addr)
-        .map_err(|e| {
-            eprintln!("Error parsing listen address {}: {}", listen_addr, e);
-            Box::new(e) as Box<dyn Error>
-        })?;
+pub async fn setup_node(
+    listen_addr: &str,
+    peer_addr: Option<String>,
+    swarm: &mut Swarm<AppBehaviour>,
+) -> Result<(), Box<dyn Error>> {
+    info!("Setting up node with listen address: {}", listen_addr);
 
-    match swarm.listen_on(listen_multiaddr.clone()) {
-        Ok(_) => println!("Listening on {}", listen_multiaddr),
-        Err(e) => return Err(Box::new(e) as Box<dyn Error>),
-    }
+    let listen_multiaddr = Multiaddr::from_str(listen_addr);
+    match listen_multiaddr {
+        Ok(addr) => {
+            info!("Attempting to dial peer at {}", addr);
+            if let Err(e) = swarm.dial(addr.clone()) {
+                error!("Failed to dial {}: {:?}", addr, e);
+                return Err(e.into());
+            }
 
-    if let Some(addr) = peer_addr {
-        println!("Received peer address: {}", addr);
-        let peer_multiaddr = Multiaddr::from_str(&addr)
-            .map_err(|e| {
-                eprintln!("Error parsing peer address {}: {}", addr, e);
-                Box::new(e) as Box<dyn Error>
-            })?;
+            if let Some(addr_str) = peer_addr {
+                match PeerId::from_str(&addr_str) {
+                    Ok(peer_id) => {
+                        info!("Adding known peer {} with address {}", peer_id, addr);
+                        swarm.behaviour_mut().kademlia.add_address(&peer_id, addr.clone());
+                        swarm.behaviour_mut().gossipsub.add_explicit_peer(&peer_id.clone());
+                        println!("Successfully added explicit peer: {:?}", peer_id);
+                    },
+                    Err(e) => {
+                        error!("Invalid peer address {}: {:?}", addr_str, e);
+                        return Err(e.into());
+                    }
+                }
+            }
 
-        let peer_id = peer_multiaddr.iter().find_map(|protocol| match protocol {
-            Protocol::P2p(hash) => PeerId::from_multihash(hash).ok(),
-            _ => None,
-        }).ok_or_else(|| {
-            eprintln!("No PeerId found in Multiaddr.");
-            Box::new(std::io::Error::new(std::io::ErrorKind::InvalidInput, "No PeerId found in Multiaddr.")) as Box<dyn Error>
-        })?;
-
-        if let Err(e) = swarm.dial(peer_multiaddr.clone()) {
-            eprintln!("Error dialing peer address {}: {}", peer_multiaddr, e);
+            info!("Listening on {}", addr);
+            if let Err(e) = Swarm::listen_on(swarm, addr.clone()) {
+                error!("Failed to listen on {}: {:?}", addr, e);
+                return Err(e.into());
+            }
+        },
+        Err(e) => {
+            error!("Error parsing Multiaddr {}: {:?}", listen_addr, e);
+            return Err(e.into());
         }
-
-        swarm.behaviour_mut().kademlia.add_address(&peer_id, peer_multiaddr.clone());
-        println!("Dialing peer {} and added to Kademlia", peer_id);
-        // let kademlia = &swarm.behaviour().kademlia;
-        // let routing_table = kademlia.routing_table();
-
-        // for bucket in routing_table.buckets() {
-        //     for entry in bucket.iter() {
-        //         println!("Peer in bucket: {:?}", entry.node.key.preimage());
-        //     }
-        // }
     }
+
+    info!("Bootstrapping Kademlia DHT.");
+    if let Err(e) = swarm.behaviour_mut().kademlia.bootstrap() {
+        warn!("Kademlia bootstrap failed: {}", e);
+    }
+
+    info!("Subscribing to topics.");
+    static CHAIN_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("chains"));
+    static PRIVATE_BLOCK_GENESIS_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("private_blocks_genesis_creation"));
+    static HYBRID_BLOCK_CREATION: Lazy<Topic> = Lazy::new(|| Topic::new("hybrid_block_creation"));
+    
+    // For blocks
+    static BLOCK_PBFT_PREPREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_pre_prepared"));
+    static BLOCK_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_prepared"));
+    static BLOCK_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbft_commit"));
+    
+    // Transaction mempool verifications PBFT engine
+    static TXN_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_prepared"));
+    static TXN_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_commit"));
+    static ACCOUNT_CREATION_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("account_creation"));
+    for topic in vec![
+        CHAIN_TOPIC.clone(),
+        public_block::BLOCK_TOPIC.clone(),
+        BLOCK_PBFT_PREPREPARED_TOPIC.clone(),
+        BLOCK_PBFT_PREPARED_TOPIC.clone(),
+        BLOCK_PBFT_COMMIT_TOPIC.clone(),
+        TXN_PBFT_PREPARED_TOPIC.clone(),
+        TXN_PBFT_COMMIT_TOPIC.clone(),
+        PRIVATE_BLOCK_GENESIS_CREATION.clone(),
+        HYBRID_BLOCK_CREATION.clone(),
+        ACCOUNT_CREATION_TOPIC.clone()
+        // Add other topics as in your original code
+    ] {
+        match swarm.behaviour_mut().gossipsub.subscribe(&topic) {
+            Ok(subscribed) => {
+                if subscribed {
+                    info!("Successfully subscribed to topic: {:?}", topic);
+                } else {
+                    warn!("Already subscribed to topic: {:?}", topic);
+                }
+            },
+            Err(e) => {
+                error!("Failed to subscribe to topic {:?}: {:?}", topic, e);
+                return Err(e.into());
+            }
+        }
+    }
+
     Ok(())
+}
+
+pub fn check_connected_peers(swarm: &mut Swarm<AppBehaviour>){
+    swarm.behaviour_mut().kademlia.bootstrap();
+    let kademlia = &mut swarm.behaviour_mut().kademlia;
+    for bucket in kademlia.kbuckets() {
+        for entry in bucket.iter() {
+            let peer_id = entry.node.key.preimage();
+            println!("Known peer: {:?}", peer_id);
+        }
+    }
+    for peer in swarm.behaviour_mut().gossipsub.all_peers() {
+        println!("Connected to peer: {:?}", peer);
+    }
 }
