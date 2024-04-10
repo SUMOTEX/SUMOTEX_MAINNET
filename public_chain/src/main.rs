@@ -234,7 +234,7 @@ async fn main() {
         }
         loop {
             // if let Some(port) = whitelisted_peers.pop() {
-                let address_str = format!("/ip4/{}/tcp/8102",(my_local_ip.to_string()));
+                let address_str = format!("/ip4/{}/tcp/8100",(my_local_ip.to_string()));
                 let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
                 println!("{}",the_address);      
                 //Loop  to listen

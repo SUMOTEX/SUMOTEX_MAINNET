@@ -107,6 +107,10 @@ impl AppBehaviour {
     ) -> Self {
         let gossipsub_config = GossipsubConfigBuilder::default()
             .validation_mode(ValidationMode::Anonymous) // Allows unsigned messages
+            .mesh_n(2)
+            .mesh_n_low(1) // Minimum number of peers in the mesh before adding more.
+            .mesh_n_high(3) // Maximum number of peers in the mesh before pruning some.
+            .mesh_outbound_min(1) // Minimum number of outbound peers in the mesh.
             .build()
             .expect("Valid Gossipsub configuration");
         let gossipsub = Gossipsub::new(
