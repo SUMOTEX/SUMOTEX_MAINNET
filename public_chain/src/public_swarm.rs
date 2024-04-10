@@ -1,5 +1,6 @@
 use libp2p::{
     core::upgrade,
+    identify::{Identify, IdentifyConfig},
     noise::{Keypair, NoiseConfig, X25519Spec},
     mplex,
     identity::{self, ed25519},
