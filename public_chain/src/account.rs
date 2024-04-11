@@ -9,6 +9,7 @@ use crate::public_txn::TransactionType;
 use crate::public_txn;
 use crate::publisher::Publisher;
 use std::str::FromStr;
+use std::time::{SystemTime, UNIX_EPOCH};
 
 pub fn generate_keypair()->(PublicKey,SecretKey) {
     let secp = Secp256k1::new();
@@ -25,6 +26,7 @@ pub struct Account {
     pub nonce: i64,
     pub contract_address: Option<Vec<String>>,
     pub owned_tokens:  Option<HashMap<String, Vec<u64>>>, // Contract address to list of token IDs
+    pub created_time:u64
 }
 #[derive(Debug)]
 pub enum SigningError {
@@ -40,7 +42,7 @@ impl From<Secp256k1Error> for SigningError {
 
 impl Account {
     // Creates a new account
-    fn new(public_key:PublicKey) -> Self {
+    fn new(public_key:PublicKey,timestamp:u64) -> Self {
         Account {
             public_address:public_key.to_string(),
             //TEST
@@ -49,6 +51,7 @@ impl Account {
             nonce: 1,
             contract_address: Some(Vec::new()),
             owned_tokens: None::<HashMap<String, Vec<u64>>>, // Initially, the account does not own any tokens
+            created_time:timestamp
         }
     }
 
@@ -153,7 +156,8 @@ pub fn create_account() -> Result<(String, String), Box<dyn std::error::Error>> 
     let account_db = open_account_db()?;
     
     let (public_key, private_key) = generate_keypair();
-    let account = Account::new(public_key);
+    let timestamp = SystemTime::now().duration_since(UNIX_EPOCH)?.as_secs();
+    let account = Account::new(public_key,timestamp);
     let serialized_data = serde_json::to_string(&account)?;
 
     match rock_storage::put_to_db(&account_db, public_key.clone().to_string(), &serialized_data) {

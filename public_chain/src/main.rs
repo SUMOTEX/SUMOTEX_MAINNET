@@ -152,17 +152,6 @@ async fn main() {
     //     // Add more whitelisted peers as needed
     // ];
 
-    //let mut whitelisted_peers = vec![
-        //"/ip4/0.0.0.0/tcp/8081",
-        // "/ip4/0.0.0.0/tcp/8082",
-        // "/ip4/0.0.0.0/tcp/8083",
-        // "/ip4/0.0.0.0/tcp/8084",
-        // "/ip4/0.0.0.0/tcp/8085",
-        // "/ip4/0.0.0.0/tcp/8086",
-        // "/ip4/0.0.0.0/tcp/8098",
-        // ... other addresses
-        //];
-
     let mut whitelisted_listener = vec![
         "127.0.0.1:8089",
         "127.0.0.1:8090",
@@ -234,7 +223,7 @@ async fn main() {
         }
         loop {
             // if let Some(port) = whitelisted_peers.pop() {
-                let address_str = format!("/ip4/{}/tcp/8101",(my_local_ip.to_string()));
+                let address_str = format!("/ip4/{}/tcp/8102",(my_local_ip.to_string()));
                 let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
                 println!("{}",the_address);      
                 //Loop  to listen

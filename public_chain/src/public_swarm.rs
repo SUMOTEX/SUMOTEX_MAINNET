@@ -221,8 +221,6 @@ pub async fn setup_node(
 }
 
 pub fn check_connected_peers(swarm: &mut Swarm<AppBehaviour>){
-
-
     // Extract Kademlia known peers
     let kademlia = &mut swarm.behaviour_mut().kademlia;
     for bucket in kademlia.kbuckets() {

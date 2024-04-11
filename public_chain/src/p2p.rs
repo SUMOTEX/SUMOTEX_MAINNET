@@ -1,14 +1,17 @@
 use libp2p::{
+    identify::{Identify,IdentifyEvent, IdentifyConfig},
     kad::{Kademlia,KademliaEvent, KademliaConfig},
     core::{identity},
     NetworkBehaviour, PeerId,
     swarm::{Swarm,NetworkBehaviourEventProcess},
 };
-use libp2p::gossipsub::{Gossipsub, GossipsubConfig,GossipsubConfigBuilder,ValidationMode, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity};
+use libp2p::gossipsub::{Gossipsub,MessageId,GossipsubMessage, GossipsubConfig,GossipsubConfigBuilder,ValidationMode, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity};
 use libp2p::kad::store::MemoryStore;
 use tokio::{
     sync::mpsc,
 };
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use sha2::{Digest, Sha256};
 use std::collections::HashMap;
 use log::{error, info};
@@ -70,7 +73,8 @@ pub enum EventType {
 #[derive(Debug)]
 pub enum AppEvent {
     Gossipsub(GossipsubEvent),
-    Kademlia(KademliaEvent)
+    Kademlia(KademliaEvent),
+    Identify(IdentifyEvent)
     // Add variants for other event types as needed
     // For example: Kademlia(KademliaEvent),
 }
@@ -80,6 +84,7 @@ pub enum AppEvent {
 pub struct AppBehaviour {
     pub gossipsub: Gossipsub,
     pub kademlia: Kademlia<MemoryStore>,
+    pub identify: Identify,
     #[behaviour(ignore)]
     pub response_sender: mpsc::UnboundedSender<ChainResponse>,
     #[behaviour(ignore)]
@@ -109,15 +114,27 @@ impl AppBehaviour {
             .validation_mode(ValidationMode::Anonymous) // Allows unsigned messages
             .mesh_n(2)
             .mesh_n_low(1) // Minimum number of peers in the mesh before adding more.
-            .mesh_n_high(3) // Maximum number of peers in the mesh before pruning some.
+            .mesh_n_high(100) // Maximum number of peers in the mesh before pruning some.
             .mesh_outbound_min(1) // Minimum number of outbound peers in the mesh.
+            .message_id_fn(|message: &GossipsubMessage| {
+                // Use a custom function to generate a unique message ID
+                let mut s = DefaultHasher::new();
+                message.data.hash(&mut s);
+                message.sequence_number.unwrap_or_default().hash(&mut s);
+                // Convert the hash to a MessageId
+                let hash = s.finish();
+                let hash_bytes = hash.to_be_bytes(); // Convert the hash to a byte array
+                MessageId::from(hash_bytes.to_vec()) // Convert the byte array to a Vec<u8> and then to MessageId
+            })
             .build()
             .expect("Valid Gossipsub configuration");
         let gossipsub = Gossipsub::new(
             MessageAuthenticity::Anonymous, 
             gossipsub_config
         ).expect("Correct Gossipsub configuration");
-  
+        let identify = Identify::new(
+            IdentifyConfig::new("/sumotex/1.0.0".to_string(), KEYS.public()).with_agent_version("SUMOTEX v1.0".to_string())
+        );
         let mut behaviour = Self {
             app,
             txn,
@@ -125,6 +142,7 @@ impl AppBehaviour {
             storage_path,
             gossipsub,
             kademlia,
+            identify,
             response_sender,
             init_sender,
         };
@@ -512,6 +530,11 @@ impl From<GossipsubEvent> for AppEvent {
 impl From<KademliaEvent> for AppEvent {
     fn from(event: KademliaEvent) -> Self {
         AppEvent::Kademlia(event)
+    }
+}
+impl From<IdentifyEvent> for AppEvent {
+    fn from(event: IdentifyEvent) -> Self {
+        AppEvent::Identify(event)
     }
 }
 
