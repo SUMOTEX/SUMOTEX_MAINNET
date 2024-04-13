@@ -75,8 +75,8 @@ pub async fn accept_loop(listener: TcpListener) {
 }
 
 pub fn obtain_message(r_message:String){
-    let deserialized_message = match serde_json::from_str::<Message>(&r_message) {
-        Ok(mut message) => {
+    let _deserialized_message = match serde_json::from_str::<Message>(&r_message) {
+        Ok( message) => {
             println!("Message: {:?}", message);
             if message.title=="GENESIS"{
                 println!("Received GENESIS: {:?}", message);

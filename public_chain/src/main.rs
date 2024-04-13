@@ -39,7 +39,7 @@ mod gas_calculator;
 mod txn_pool;
 mod token;
 mod staking;
-use ctrlc;
+use p2p::AppEvent;
 use bridge::accept_loop;
 use crate::public_app::App;
 use std::sync::{RwLock, Arc};
@@ -223,7 +223,7 @@ async fn main() {
         }
         loop {
             // if let Some(port) = whitelisted_peers.pop() {
-                let address_str = format!("/ip4/{}/tcp/8102",(my_local_ip.to_string()));
+                let address_str = format!("/ip4/{}/tcp/8100",(my_local_ip.to_string()));
                 let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
                 println!("{}",the_address);      
                 //Loop  to listen
@@ -263,10 +263,60 @@ async fn main() {
                         Some(p2p::EventType::LocalChainResponse(response.expect("response exists")))
                     },
                     event = swarm_public_net.select_next_some() => {
-                        let api_app =swarm_public_net.behaviour_mut().app.clone();
-                        rpc_connector::add_api_blocks(api_app.clone());
-                        None
-                    }
+                        match event {
+                            SwarmEvent::Behaviour(app_event) => {
+                                let api_app =swarm_public_net.behaviour_mut().app.clone();
+                                rpc_connector::add_api_blocks(api_app.clone());
+                                println!("Received network behaviour event: {:?}", app_event);
+                                match app_event {
+                                    AppEvent::AccountCreation { propagation_source, message_id, data } => {
+                                        println!("Received account creation message from {}", propagation_source);
+                                        swarm_public_net.behaviour_mut().process_account_creation_event(&data);
+                                    },
+                                    AppEvent::CreateBlocks { propagation_source, message_id, data } => {
+                                        println!("Received create blocks message from {}", propagation_source);
+                                        swarm_public_net.behaviour_mut().process_create_blocks(&data);
+                                    },
+                                    AppEvent::TxnPbftPrepared { propagation_source, message_id, data } => {
+                                        println!("Received txn PBFT prepared message from {}", propagation_source);
+                                        swarm_public_net.behaviour_mut().process_txn_pbft_prepared(&data);
+                                    },
+                                    AppEvent::TxnPbftCommit { propagation_source, message_id, data } => {
+                                        println!("Received txn PBFT commit message from {}", propagation_source);
+                                        swarm_public_net.behaviour_mut().process_txn_pbft_commit(&data);
+                                    },
+                                    AppEvent::BlockPbftPrePrepared { propagation_source, message_id, data } => {
+                                        println!("Received block PBFT pre-prepared message from {}", propagation_source);
+                                        swarm_public_net.behaviour_mut().process_block_pbft_pre_prepared(&data);
+                                    },
+                                    AppEvent::BlockPbftCommit { propagation_source, message_id, data } => {
+                                        println!("Received block PBFT commit message from {}", propagation_source);
+                                        swarm_public_net.behaviour_mut().process_block_pbft_commit(&data);
+                                    },
+                                    AppEvent::PrivateBlocksGenesisCreation { propagation_source, message_id, data } => {
+                                        println!("Received private blocks genesis creation message from {}", propagation_source);
+                                        swarm_public_net.behaviour_mut().process_private_blocks_genesis_creation(&data);
+                                    },
+                                    AppEvent::HybridBlockCreation { propagation_source, message_id, data } => {
+                                        println!("Received hybrid block creation message from {}", propagation_source);
+                                        swarm_public_net.behaviour_mut().process_hybrid_block_creation(&data);
+                                    },
+                                    AppEvent::Gossipsub(_) => {
+                                        println!("Received a Gossipsub event.");
+                                    },
+                                    _ => {
+                                        println!("Received another type of AppEvent.");
+                                    }
+                                }
+                                None
+                            }
+                            _ =>{
+                            println!("Received other swarm event: {:?}", event);
+                            None
+                        }
+                        }
+                      
+                    },
                     publish = publish_receiver.recv() => {
                         let (title, message) = publish.clone().expect("Publish exists");
                         let api_app =swarm_public_net.behaviour_mut().app.clone();

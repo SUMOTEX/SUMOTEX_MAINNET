@@ -7,9 +7,6 @@ use libp2p::swarm::Swarm;
 use log::error;
 use crate::public_app::App as PubApp;
 use crate::public_block::Block;
-use crate::smart_contract;
-use crate::public_swarm;
-use pretty_env_logger::env_logger;
 type MySwarm = Swarm<AppBehaviour>;
 
 

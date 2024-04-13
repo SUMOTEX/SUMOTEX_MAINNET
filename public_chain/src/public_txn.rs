@@ -127,10 +127,10 @@ impl Txn {
             //TODO: To do verification on the transactions and store in another place.
             let mut verkle_tree = VerkleTree::new();
             let mut array_of_txn:Vec<String>=Vec::new();
-            let mut hashed_root= hex::decode(&root_hash).expect("Failed to decode hex");
-            let hash_array: [u8; 32] = hashed_root.try_into().expect("Slice has incorrect length");
+            let hashed_root= hex::decode(&root_hash).expect("Failed to decode hex");
+            let _hash_array: [u8; 32] = hashed_root.try_into().expect("Slice has incorrect length");
             let mut sorted_items = BTreeMap::new();
-            for (inner_key, inner_value) in txn_hash.iter() {
+            for (_inner_key, inner_value) in txn_hash.iter() {
                 let deserialized_data:PublicTxn = serde_json::from_str(&inner_value).expect("Deserialization failed");
                 sorted_items.insert(deserialized_data.nonce, deserialized_data);
             }
@@ -206,7 +206,7 @@ impl Txn {
     
                 let txn_hash = Sha256::digest(txn_data.as_bytes());
                 let txn_hash_hex = format!("{:x}", txn_hash);
-                let serialized_txn = serde_json::to_string(&txn_data);
+                let _serialized_txn = serde_json::to_string(&txn_data);
                 let path = "./transactions/db";
                 // Open the database and handle the Result
                 let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
@@ -228,7 +228,7 @@ impl Txn {
                 let serialized_txn: Result<String, serde_json::Error> = serde_json::to_string(&new_txn);
                 match serialized_txn {
                     Ok(json_string) => {
-                        let transaction = rock_storage::put_to_db(&db_handle, txn_hash_hex.clone(),&json_string);
+                        let _transaction = rock_storage::put_to_db(&db_handle, txn_hash_hex.clone(),&json_string);
                         Ok((txn_hash_hex, gas_cost, new_txn))
                     },
                     Err(e) => {
@@ -252,7 +252,7 @@ impl Txn {
         // Open the database and handle the Result
         let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
 
-        let mut transaction_serialize_string = rock_storage::get_from_db(&db_handle, txn_hash_hex.clone())
+        let transaction_serialize_string = rock_storage::get_from_db(&db_handle, txn_hash_hex.clone())
         .ok_or("Transaction not found")?;  // Replace with an
         println!("{}",transaction_serialize_string);
         let deserialized_txn: Result<PublicTxn, serde_json::Error> = serde_json::from_str(&transaction_serialize_string);
@@ -369,7 +369,7 @@ impl Txn {
             current_timestamp,
             transaction_type.as_str() // Convert the enum to a string representation or similar
         );
-        let serialized_txn = serde_json::to_string(&txn_data);
+        let _serialized_txn = serde_json::to_string(&txn_data);
         let path = "./transactions/db";
         // Open the database and handle the Result
         let db_handle = rock_storage::open_db(path).map_err(|_| "Failed to open database")?;
@@ -399,7 +399,7 @@ impl Txn {
         let serialized_txn: Result<String, serde_json::Error> = serde_json::to_string(&new_txn);
         match serialized_txn {
             Ok(json_string) => {
-                let transaction = rock_storage::put_to_db(&db_handle, txn_hash_hex.clone(),&json_string);
+                let _transaction = rock_storage::put_to_db(&db_handle, txn_hash_hex.clone(),&json_string);
                 Ok((txn_hash_hex, gas_cost, new_txn))
             },
             Err(e) => {

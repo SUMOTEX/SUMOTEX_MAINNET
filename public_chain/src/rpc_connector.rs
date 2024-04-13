@@ -3,9 +3,8 @@ use rocket::routes;
 use rocket::launch;
 use rocket::serde::json::Json;
 use serde_json::json;
-use rocket::http::{Header, ContentType, Method,Status};
+use rocket::http::{Header, Method,Status};
 use rocket::{Request, Response};
-use rocket::fairing::AdHoc;
 use std::sync::{Arc, Mutex};
 use rocket::fairing::{Fairing, Info, Kind};
 use log::error;
@@ -412,7 +411,7 @@ fn get_receiver_transactions(post_data: Json<ReadAccountInfo>)-> Json<serde_json
 #[post("/transfer-token",data="<post_data>")]
 fn transfer_token(post_data: Json<TransferTokenInfo>)-> Json<serde_json::Value> {
     let from_address = &post_data.from_address;
-    let from_priv_address = &post_data.from_private_key;
+    let _from_priv_address = &post_data.from_private_key;
     let to_address = &post_data.to_address;
     let amount = &post_data.amount;
     match account::Account::transfer(from_address,to_address,*amount) {
@@ -429,7 +428,7 @@ fn transfer_token(post_data: Json<TransferTokenInfo>)-> Json<serde_json::Value> 
 #[post("/transfer-nft",data="<post_data>")]
 fn transfer_nft(post_data: Json<TransferTokenInfo>)-> Json<serde_json::Value> {
     let from_address = &post_data.from_address;
-    let from_priv_address = &post_data.from_private_key;
+    let _from_priv_address = &post_data.from_private_key;
     let to_address = &post_data.to_address;
     let amount = &post_data.amount;
     match account::Account::transfer(from_address,to_address,*amount) {
@@ -457,7 +456,7 @@ fn complete_transaction(transaction_info: Json<TransactionSignedInfo>) -> Json<s
                 "result": "Transaction completed successfully"
             }))
         },
-        Err(e) => {
+        Err(_e) => {
             Json(json!({
                 "jsonrpc": "1.0",
                 "error": "Transaction completion failed"
@@ -669,7 +668,7 @@ fn healthcheck() -> Json<serde_json::Value> {
     // Perform any necessary health checks here. For simplicity, this example
     // will just return a success message.
 
-    let response_body = json!({
+    let _response_body = json!({
         "status": "OK",
         "message": "Service is up and running"
     });

@@ -50,7 +50,7 @@ impl From<Secp256k1Error> for SigningError {
     }
 }
 impl From<serde_json::Error> for StakingError {
-    fn from(err: serde_json::Error) -> Self {
+    fn from(_err: serde_json::Error) -> Self {
         // Here you can map serde_json::Error to an appropriate variant of StakingError
         StakingError::SerializationError
     }
@@ -199,7 +199,7 @@ impl NodeStaking {
                     }
                 }
             }
-            Err(e) => {
+            Err(_e) => {
                 return Err(StakingError::DatabaseError);
             }
         }
@@ -208,8 +208,8 @@ impl NodeStaking {
         let db_path = "./node/db";
         let node_path = rock_storage::open_db(db_path);
         let key = format!("node_staking:{}", node_address);
-        let mut rewards_distributed: u128 = 0;
-        let foundation_rewards = (total_rewards * FOUNDATION_RATIO) / RATIO_BASE;
+        let _rewards_distributed: u128 = 0;
+        let _foundation_rewards = (total_rewards * FOUNDATION_RATIO) / RATIO_BASE;
         let node_rewards = (total_rewards * NODE_RATIO) / RATIO_BASE;
         match node_path {
             Ok(db_handle) => {
@@ -271,7 +271,7 @@ impl NodeStaking {
                                 staker_address.to_string(),
                                 balance_u64 as u128,
                         ) {
-                            Ok((txn_hash_hex, gas_cost, _)) => {
+                            Ok((txn_hash_hex, _gas_cost, _)) => {
                                 let private_key_bytes = match hex::decode(&staker_key) {
                                     Ok(bytes) => bytes,
                                     Err(_) => {

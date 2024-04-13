@@ -19,7 +19,7 @@ const ACCOUNT_DB_PATH: &str = "./account/db";
 const CONTRACT_DB_PATH: &str = "./contract/db";
 const NODE_DB_PATH: &str = "./node/db";
 impl StoragePath {
-    pub fn new(block_path:DB,txn_path:DB,account_path:DB,contract_path:DB,node_path:DB) -> Self {
+    pub fn new(_block_path:DB,_txn_path:DB,_account_path:DB,_contract_path:DB,_node_path:DB) -> Self {
         let blocks = match create_storage(BLOCKS_DB_PATH) {
             Ok(db) => db,
             Err(e) => {

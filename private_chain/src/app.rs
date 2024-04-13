@@ -14,7 +14,6 @@ impl App {
         Self { blocks: vec![]}
     }
     pub fn initialize_from_storage(&mut self) -> Result<(), Box<dyn std::error::Error>> {
-
         // Try to load the latest block from storage
         match block::get_latest_block_hash() {
             Ok(latest_block) => {

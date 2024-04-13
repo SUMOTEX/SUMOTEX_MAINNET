@@ -8,8 +8,11 @@ use libp2p::{
     swarm::{Swarm,SwarmBuilder},
 };
 use std::borrow::Cow;
+use std::hash::DefaultHasher;
+use std::hash::Hasher;
+use std::hash::Hash;
 use std::collections::HashSet;
-use libp2p::gossipsub::{Gossipsub, GossipsubConfig, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity};
+use libp2p::gossipsub::{Gossipsub, MessageId,GossipsubMessage,GossipsubConfig, GossipsubEvent,ValidationMode, IdentTopic as Topic,GossipsubConfigBuilder, MessageAuthenticity};
 use once_cell::sync::Lazy;
 use libp2p::kad::{Kademlia, KademliaConfig};
 use libp2p::kad::store::MemoryStore;
@@ -108,7 +111,31 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
         .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
         .boxed();
-    let behaviour = AppBehaviour::new(app.clone(),
+    let gossipsub_config = GossipsubConfigBuilder::default()
+    .validation_mode(ValidationMode::Anonymous) // Allows unsigned messages
+    .mesh_n(2)
+    .mesh_n_low(1) // Minimum number of peers in the mesh before adding more.
+    .mesh_n_high(100) // Maximum number of peers in the mesh before pruning some.
+    .mesh_outbound_min(1) // Minimum number of outbound peers in the mesh.
+    .message_id_fn(|message: &GossipsubMessage| {
+        // Use a custom function to generate a unique message ID
+        let mut s = DefaultHasher::new();
+        message.data.hash(&mut s);
+        message.sequence_number.unwrap_or_default().hash(&mut s);
+        // Convert the hash to a MessageId
+        let hash = s.finish();
+        let hash_bytes = hash.to_be_bytes(); // Convert the hash to a byte array
+        MessageId::from(hash_bytes.to_vec()) // Convert the byte array to a Vec<u8> and then to MessageId
+    })
+    .build()
+    .expect("Valid Gossipsub configuration");
+    let gossipsub = Gossipsub::new(
+        MessageAuthenticity::Anonymous, 
+        gossipsub_config
+    ).expect("Correct Gossipsub configuration");
+    let behaviour = AppBehaviour::new(
+                gossipsub,
+                app.clone(),
                 Txn::new(),
                 PBFTNode::new(PEER_ID.clone().to_string()),
                 storage,
@@ -123,7 +150,6 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
         .build();
     set_global_swarm_public_net(swarm);
     //swarm
-
 }
 
 pub async fn setup_node(

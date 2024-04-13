@@ -91,11 +91,11 @@ impl Account {
         Ok(secp.verify(&message, signature, &public_key).is_ok())
     }
     // Add a token to the account's ownership list
-    pub fn add_token(&mut self, contract_address: &str, token_id: u64) {
+    pub fn add_token(&mut self, contract_address: &str, _token_id: u64) {
         if self.owned_tokens.is_none() {
             self.owned_tokens = Some(HashMap::new()); // Initialize the HashMap if it's None
         }
-        let token_list = self.owned_tokens.as_mut().unwrap().entry(contract_address.to_string()).or_insert_with(Vec::new);
+        let _token_list = self.owned_tokens.as_mut().unwrap().entry(contract_address.to_string()).or_insert_with(Vec::new);
         
     }
     pub fn get_account(pub_key: &str, db_handle: &DB) -> Option<Account> {
@@ -210,7 +210,7 @@ pub fn get_account_by_private_key(private_key_str: &str) -> Result<Account, Box<
 
     Ok(account)
 }
-pub fn lookup_account_by_public_key(public_key_str: &str) -> Result<Account, Box<dyn std::error::Error>> {
+pub fn lookup_account_by_public_key(_public_key_str: &str) -> Result<Account, Box<dyn std::error::Error>> {
     // Your logic here to find and return the account based on the public key string or derived address
     Err("Not implemented".into())
 }

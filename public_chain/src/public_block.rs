@@ -115,7 +115,7 @@ pub fn pbft_pre_message_block_create_scheduler()->Result<(), Box<dyn std::error:
                         let mut hasher = Sha256::new();
                         hasher.update(&serialized_data);
                         let hash_result = hasher.finalize();
-                        let hash_hex_string = format!("{:x}", hash_result);
+                        let _hash_hex_string = format!("{:x}", hash_result);
                         // Insert transaction into verkle tree and prepare for broadcast
                         verkle_tree.insert(txn.txn_hash.as_bytes().to_vec(), hash_result.to_vec());
                         let mut dictionary_data = std::collections::HashMap::new();
@@ -173,7 +173,7 @@ pub fn handle_create_block_private_chain(app:App,private_hash:Option<String>,pri
         Some(root_acc),
         [" ".to_string()].to_vec(),
     );
-    let json = serde_json::to_string(&block).expect("can jsonify request");
+    let _json = serde_json::to_string(&block).expect("can jsonify request");
     block
 }
 pub fn get_latest_block_hash()-> Result<Block, Box<dyn std::error::Error>>{
@@ -198,7 +198,7 @@ impl Block {
     pub fn new(id: u64, previous_hash: String, txn:Vec<String>,private_node:Option<String>, private_hash: Option<String>,root:Option<String>,verified_node:Vec<String>) -> Self {
         let now = Utc::now();
         let txn_item = txn;
-        let root_acc = root.unwrap_or_else(|| "".to_string()); // Use default if None
+        let _root_acc = root.unwrap_or_else(|| "".to_string()); // Use default if None
         let private_hash = private_hash.unwrap_or_else(|| "".to_string()); // Use default if None
         let private_node = private_node.unwrap_or_else(|| "".to_string()); // Use default if None
         let (nonce, public_hash) = mine_block(id, now.timestamp(), &previous_hash);

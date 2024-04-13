@@ -107,7 +107,7 @@ fn get_transaction_type() -> TransactionType {
 impl PBFTNode {
     pub fn new(id:String) -> Self {
         let random_data: [u8; 32] = rand::thread_rng().gen();  // Generate 32 random bytes
-        let mut hasher = hex::encode(random_data);
+        let hasher = hex::encode(random_data);
         let hex = hasher.to_string();
         Self {
             id,
@@ -148,7 +148,7 @@ impl PBFTNode {
         println!("{:?}",self.view);
     }
 
-    pub fn get_txn(&mut self,id:String)->(String,Vec<String>){
+    pub fn get_txn(&mut self,_id:String)->(String,Vec<String>){
         return(self.root_hash.clone(),self.txn.clone());
 
     }

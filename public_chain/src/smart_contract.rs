@@ -1,7 +1,4 @@
 use std::collections::HashMap;
-use libp2p::{
-    swarm::{Swarm},
-};
 use log::{info, debug, error};
 use std::fs;
 use std::fs::File;
@@ -24,12 +21,8 @@ use wasmtime::Linker;
 use wasmtime::component::Type;
 use wasmtime_wasi::sync::WasiCtxBuilder;
 use bincode::{serialize, deserialize};
-use bincode::{ Error as BincodeError};
-use rocksdb::Error as RocksDBError;
-use anyhow::{Result, anyhow, Context};
-use wasm_bindgen::JsCast;
+use anyhow::{Result, Context};
 extern crate base64;
-use base64::{encode, decode};
 use crate::gas_calculator;
 use crate::public_txn;
 use crate::account;
@@ -195,9 +188,9 @@ impl WasmContract {
         let engine = Engine::default();
         let mut linker = Linker::new(&engine);
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-        let mut store = Store::new(&engine, wasi);
+        let _store = Store::new(&engine, wasi);
         let serialized_contract = rock_storage::get_from_db_vector(&contract_path, pub_key).unwrap_or_default();
-        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+        let contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
             .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
         let module = Module::new(&engine, &contract.wasm_file)
         .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
@@ -208,7 +201,7 @@ impl WasmContract {
         let link = linker.instantiate(&mut store, &module)?;
         // ... (Your operations using token_instance)
     
-        let wasm_memory = link.get_memory(&mut store, "memory")
+        let _wasm_memory = link.get_memory(&mut store, "memory")
             .ok_or_else(|| "Failed to find `memory` export")?;
         let instance = linker.instantiate(&mut store, &module)?;
         Ok(WasmContract {
@@ -222,7 +215,7 @@ impl WasmContract {
         &mut self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
         contract_info: &ContractInfo,
-        account_key: &String,
+        _account_key: &String,
         contract_address: &String,
         function_name:  &String,
         args_input_values:&String,
@@ -254,7 +247,7 @@ impl WasmContract {
         wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
 
         let data = wasm_memory.data(&mut store);
-        let byte_vector: Vec<u8> = data.to_vec();
+        let _byte_vector: Vec<u8> = data.to_vec();
         //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
         let input_types: Vec<Parameter> = serde_json::from_str(args_input)?;
         // Parse the output types from the JSON string
@@ -328,7 +321,7 @@ impl WasmContract {
             .ok_or_else(|| "Failed to find `memory` export")?;
     
         let data = wasm_memory.data(&mut store);
-        let byte_vector: Vec<u8> = data.to_vec();
+        let _byte_vector: Vec<u8> = data.to_vec();
     
         //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
     
@@ -365,10 +358,10 @@ impl WasmContract {
         let engine = Engine::default();
         let mut linker = Linker::new(&engine);
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-        let mut store = Store::new(&engine, wasi);
+        let _store = Store::new(&engine, wasi);
         
         let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
-        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+        let contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
             .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
         let module = Module::new(&engine, &contract.wasm_file)
         .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
@@ -402,17 +395,17 @@ impl WasmContract {
     pub fn read_numbers(
         &self,
         contract_path: &DBWithThreadMode<SingleThreaded>,
-        contract_info: &ContractInfo,
+        _contract_info: &ContractInfo,
         pub_key: &str,
         function_name: &str,
     ) -> Result<i64, Box<dyn std::error::Error>> {
         let engine = Engine::default();
         let mut linker = Linker::new(&engine);
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-        let mut store = Store::new(&engine, wasi);
+        let _store = Store::new(&engine, wasi);
         
         let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
-        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+        let contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
             .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
         let module = Module::new(&engine, &contract.wasm_file)
         .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
@@ -445,7 +438,7 @@ impl WasmContract {
     }
     
     pub fn test_write(&self, 
-        contract_path: &DBWithThreadMode<SingleThreaded>,
+        _contract_path: &DBWithThreadMode<SingleThreaded>,
         contract_info: &ContractInfo,
         pub_key: &str)-> Result<(), Box<dyn std::error::Error>>
         {   
@@ -469,10 +462,10 @@ impl WasmContract {
             }
             
             let input_string = "Hello, WebAssembly!";
-            let bytes = input_string.as_bytes();
+            let _bytes = input_string.as_bytes();
             
             // Assuming the start of your static memory is where you want to write
-            let offset = 0;
+            let _offset = 0;
 
             println!("Attempting to read from WebAssembly memory...");
             let offset_func = link.get_typed_func::<(), i32>(&mut store, "get_string_offset")?;
@@ -555,7 +548,7 @@ impl WasmContract {
         println!("Attempting to instantiate the WebAssembly module...");
         wasmtime_wasi::add_to_linker(&mut linker, |s| s)?;
         let link = linker.instantiate(&mut store, &module)?;
-        let instance = linker.instantiate(&mut store, &module)?;
+        let _instance = linker.instantiate(&mut store, &module)?;
         // ... (Your operations using token_instance)
     
         println!("Fetching WebAssembly memory...");
@@ -695,7 +688,7 @@ impl WasmContract {
         match mint_result {
             Ok(token_id) => {
                 let updated_data = wasm_memory.data(&mut store);
-                let updated_byte_vector: Vec<u8> = updated_data.to_vec();
+                let _updated_byte_vector: Vec<u8> = updated_data.to_vec();
                 if saved_data == updated_data.to_vec() {
                     println!("No change in the WebAssembly memory after mint operation.");
                 } else {
@@ -840,9 +833,9 @@ impl WasmContract {
         let engine = Engine::default();
         let mut linker = Linker::new(&engine);
         let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
-        let mut store = Store::new(&engine, wasi);
+        let _store = Store::new(&engine, wasi);
         let serialized_contract = rock_storage::get_from_db_vector(contract_path, pub_key).unwrap_or_default();
-        let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+        let contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
             .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
         let module = Module::new(&engine, &contract.wasm_file)
         .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
@@ -989,7 +982,7 @@ pub fn check_data_to_memory(
     // Check if the end position exceeds the current memory size in bytes
     if end_position > current_memory_size_bytes {
         let required_pages = ((end_position + (65536 - 1)) / 65536) as u64;
-        let additional_pages_needed = required_pages.saturating_sub(current_pages);
+        let _additional_pages_needed = required_pages.saturating_sub(current_pages);
         Ok((offset, input_bytes.len() as i32, required_pages as u64)) // Cast to u32, assuming it's safe to do so
     } else {
         Ok((offset, input_bytes.len() as i32, 0))
@@ -1010,7 +1003,7 @@ pub struct ContractInfo {
     pub pub_key: String,
 }
 
-pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, pub_key: String) -> Result<(), Box<dyn std::error::Error>> {
+pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, _pub_key: String) -> Result<(), Box<dyn std::error::Error>> {
     let mut contract = WasmContract::new(module_path,path)?;
 
     println!("Contract successfully created.");
@@ -1037,14 +1030,14 @@ pub fn read_wasm_file(module_path: &str,path:&DBWithThreadMode<SingleThreaded>, 
         Val::I64(1000000),
     ];
 
-    let args: Vec<ParamValue> = vals.into_iter().map(val_to_param_value).collect();
+    let _args: Vec<ParamValue> = vals.into_iter().map(val_to_param_value).collect();
     // Commented out the below call as it seems unfinished, uncomment and complete when ready
     // let result = contract.call(&pub_key, "initialize", args); 
     Ok(())
 }
 pub fn create_contract_official(
     call_address: &str,
-    private_key: &str,
+    _private_key: &str,
     contract_name: &str,
     contract_symbol: &str,
     base64_wasm_data: &str, // Add base64-encoded Wasm data parameter
@@ -1107,10 +1100,10 @@ pub fn create_contract_official(
                 the_gas_cost);
             // Return the values from your function
             match result {
-                Ok((txn_hash, gas_cost,body)) => {
+                Ok((txn_hash, gas_cost,_body)) => {
                 
                     let data = the_memory.data(&mut store);
-                    let byte_vector: Vec<u8> = data.to_vec();
+                    let _byte_vector: Vec<u8> = data.to_vec();
                 
                     //rock_storage::put_to_db(&contract_path, &contract_info.pub_key, &byte_vector)?;
                 
@@ -1158,14 +1151,14 @@ pub fn read_total_token_erc721(contract_address:&String)->Result<i64, Box<dyn st
             panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
         }
     };
-    let acc_path = match rock_storage::open_db(a_path) {
+    let _acc_path = match rock_storage::open_db(a_path) {
         Ok(path) => path,
         Err(e) => {
             // Handle the error, maybe log it, and then decide what to do next
             panic!("Failed to open database: {:?}", e); // or use some default value or error handling logic
         }
     };
-    let mut contract = WasmContract::new("./sample721.wasm",&contract_path)?;
+    let contract = WasmContract::new("./sample721.wasm",&contract_path)?;
     let contract_info = ContractInfo {
         module_path: "./sample721.wasm".to_string(),
         pub_key:contract_address.to_string(),
@@ -1201,7 +1194,7 @@ pub fn mint_token_official(contract_address:&String,
         pub_key:contract_address.to_string(),
     };
 
-    let the_memory = create_memory(contract.get_store())?;
+    let _the_memory = create_memory(contract.get_store())?;
     // let the_gas_cost = match gas_calculator::calculate_gas_for_contract_creation(&contract_info.wasm) {
     //     Ok(gas_cost) => gas_cost as u128, // Convert u64 to u128
     //     Err(e) => {
@@ -1214,7 +1207,7 @@ pub fn mint_token_official(contract_address:&String,
     contract_address.to_string(),
     1000);
     match txn {
-        Ok((txn_hash,gas_cost,new_txn)) => {
+        Ok((txn_hash,gas_cost,_new_txn)) => {
         let private_key_bytes = match hex::decode(&private_key) {
         Ok(bytes) => bytes,
         Err(e) => {
@@ -1264,11 +1257,11 @@ pub fn read_id(contract_address:&String,id:&i32)->Result<(String,String,String,S
     let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
     let mut store = Store::new(&engine, wasi);
     let serialized_contract = rock_storage::get_from_db_vector(&contract_path, contract_address).unwrap_or_default();
-    let mut contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
+    let contract: PublicSmartContract = serde_json::from_slice(&serialized_contract[..])
         .map_err(|e| format!("Failed to deserialize contract: {:?}", e))?;
     let module = Module::new(&engine, &contract.wasm_file)
     .map_err(|e| format!("Failed to create WASM module from binary data: {:?}", e))?;
-    let wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
+    let _wasi = WasiCtxBuilder::new().inherit_stdio().inherit_args()?.build();
     // Assuming `module` is successfully created as shown in your provided code.
     // for export in module.exports() {
     //     if let ExternType::Func(func_type) = export.ty() {
@@ -1307,7 +1300,7 @@ pub fn read_id(contract_address:&String,id:&i32)->Result<(String,String,String,S
         return Err("Saved data is larger than the available WASM memory.".into());
     }
     wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data); 
-    let memory_data = wasm_memory.data(&store);
+    let _memory_data = wasm_memory.data(&store);
     // // Assuming the memory content is ASCII text
     // if let Ok(text) = std::str::from_utf8(&memory_data) {
     //     println!("Memory Contents: {}", text);
@@ -1439,7 +1432,7 @@ pub fn call_contract_function(
     function_name: &String,
     args_input_values: &[Value],
 ) -> Result<String, Box<dyn std::error::Error>> {
-    let a_path = "./account/db";
+    let _a_path = "./account/db";
     let c_path = "./contract/db";
     let contract_path = match rock_storage::open_db(c_path) {
         Ok(path) => path,
@@ -1483,7 +1476,7 @@ pub fn call_contract_function(
     // After ensuring the memory is large enough, copy the saved data into the WebAssembly memory within bounds
     wasm_memory.data_mut(&mut store)[..saved_data.len()].copy_from_slice(&saved_data);
     let the_data_offset = saved_data.len() as i32;
-    let mut current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
+    let _current_memory_size_bytes = wasm_memory.data_size(&store) as i32; // Size in bytes
     let func = instance.get_func(&mut store, function_name)
         .ok_or_else(|| format!("Function '{}' not found", function_name))?;
 
@@ -1497,7 +1490,7 @@ pub fn call_contract_function(
             match func.call(&mut store, &args, &mut results) {
                 Ok(_) => {
                     let updated_data = wasm_memory.data(&mut store).to_vec();
-                    let updated_byte_vector = updated_data.clone();
+                    let _updated_byte_vector = updated_data.clone();
                     // Calculate the gas cost after converting memory_bytes_used to u64
                     let the_gas_cost: u128 = gas_calculator::calculate_gas_for_contract_interaction(required_memory_size_bytes as u64) as u128;
                     // Create and prepare the transaction
@@ -1540,7 +1533,7 @@ pub fn call_contract_function(
             match func.call(&mut store, &args, &mut results) {
                 Ok(_) => {
                     let updated_data = wasm_memory.data(&mut store).to_vec();
-                    let updated_byte_vector = updated_data.clone();
+                    let _updated_byte_vector = updated_data.clone();
                     contract.wasm_memory = wasm_memory.data(&mut store).to_vec(); // Update this only if the WASM memory state is relevant
                     let updated_serialized_contract = serde_json::to_vec(&contract)?;
                     rock_storage::put_to_db(&contract_path, &contract_address, &updated_serialized_contract)?;      
@@ -1555,7 +1548,7 @@ pub fn call_contract_function(
     }   
 }
 fn args_input_values_to_wasm_vals(
-    instance: &Instance,
+    _instance: &Instance,
     store: &mut Store<WasiCtx>,
     wasm_memory: &Memory,
     data_offset: i32,
@@ -1586,7 +1579,7 @@ fn args_input_values_to_wasm_vals(
                 }
             },
             Value::Null => {}, // Handle Null case
-            Value::Bool(val) => {}, // Handle Bool case
+            Value::Bool(_val) => {}, // Handle Bool case
             Value::Array(_) => {}, // Handle Array case
             _ => {}, // Handle any other cases here
         }
