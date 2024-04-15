@@ -3,6 +3,7 @@ use rocket::routes;
 use rocket::launch;
 use rocket::serde::json::Json;
 use serde_json::json;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use rocket::http::{Header, Method,Status};
 use rocket::{Request, Response};
 use std::sync::{Arc, Mutex};
@@ -15,7 +16,9 @@ use crate::account;
 use crate::public_txn;
 use crate::public_block;
 use crate::staking;
+use std::time::{Duration, Instant};
 use crate::p2p::TRANSACTION_COUNT;
+use crate::p2p::LAST_MEASURED_TIME;
 use crate::public_block::Block;
 use crate::public_txn::TransactionType;
 use crate::public_app::App as PubApp;
@@ -642,8 +645,22 @@ fn claim_reward(node_info: Json<ClaimRewardsInfo>) -> Json<serde_json::Value> {
 
 #[get("/tps")]
 async fn get_tps() ->  Json<serde_json::Value> {
-    let tps =&TRANSACTION_COUNT;
-    Json(json!({"tps":tps}))
+    let current_time = Instant::now();
+    let mut last_measured_time = LAST_MEASURED_TIME.lock().unwrap();
+    let duration = current_time.duration_since(*last_measured_time).as_secs_f32();
+    
+    if duration == 0.0 {
+        return Json(json!({"error": "Zero duration, cannot compute TPS"}));
+    }
+
+    let current_count = TRANSACTION_COUNT.load(Ordering::Relaxed);
+    let tps = current_count as f32 / duration;
+
+    // Optionally reset the count here if you only want to measure TPS since last call
+    TRANSACTION_COUNT.store(0, Ordering::Relaxed);
+    *last_measured_time = current_time;
+
+    Json(json!({"tps": tps}))
 }
 
 

@@ -12,6 +12,8 @@ use libp2p::kad::store::MemoryStore;
 use tokio::{
     sync::mpsc,
 };
+use std::sync::Mutex;
+use std::time::Instant;
 use std::collections::hash_map::DefaultHasher;
 use std::hash::{Hash, Hasher};
 use sha2::{Digest, Sha256};
@@ -54,6 +56,8 @@ static TXN_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_co
 static ACCOUNT_CREATION_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("account_creation"));
 
 pub static TRANSACTION_COUNT: AtomicUsize = AtomicUsize::new(0);
+pub static LAST_MEASURED_TIME: Lazy<Mutex<Instant>> = Lazy::new(|| Mutex::new(Instant::now()));
+
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChainResponse {
