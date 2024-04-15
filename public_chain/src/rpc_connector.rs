@@ -15,7 +15,7 @@ use crate::account;
 use crate::public_txn;
 use crate::public_block;
 use crate::staking;
-
+use crate::p2p::TRANSACTION_COUNT;
 use crate::public_block::Block;
 use crate::public_txn::TransactionType;
 use crate::public_app::App as PubApp;
@@ -640,27 +640,11 @@ fn claim_reward(node_info: Json<ClaimRewardsInfo>) -> Json<serde_json::Value> {
     }
 }
 
-// #[post("/add-peer", format = "json", data = "<peer_info>")]
-// async fn add_peer(peer_info: Json<AddPeerInfo>) -> Json<serde_json::Value> {
-//     let peer_addr = &peer_info.peer_address;
-
-//     // Basic validation/logging
-//     if peer_addr.is_empty() {
-//         return Json(json!({"error": "Peer address is empty"}));
-//     }
-//     log::info!("Adding listener on address: {}", peer_addr);
-
-//     match public_swarm::add_listener(peer_addr.to_string()).await {
-//         Ok(_) => {
-//             log::info!("Successfully added listener on {}", peer_addr);
-//             Json(json!({"jsonrpc": "1.0", "result": peer_addr}))
-//         },
-//         Err(e) => {
-//             log::error!("Error adding listener on {}: {}", peer_addr, e);
-//             Json(json!({"error": e.to_string()}))
-//         },
-//     }
-// }
+#[get("/tps")]
+async fn get_tps() ->  Json<serde_json::Value> {
+    let tps =&TRANSACTION_COUNT;
+    Json(json!({"tps":tps}))
+}
 
 
 #[get("/healthcheck")]
@@ -744,6 +728,7 @@ pub async fn start_rpc() {
                         claim_reward,
                         add_stake,
                         get_latest_block,
+                        get_tps,
                         //add_peer,
                         healthcheck])
     .launch()

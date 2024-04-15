@@ -5,6 +5,8 @@ use libp2p::{
     NetworkBehaviour, PeerId,
     swarm::{Swarm,NetworkBehaviourEventProcess},
 };
+use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::Arc;
 use libp2p::gossipsub::{Gossipsub,MessageId,GossipsubMessage, GossipsubConfig,GossipsubConfigBuilder,ValidationMode, GossipsubEvent, IdentTopic as Topic, MessageAuthenticity};
 use libp2p::kad::store::MemoryStore;
 use tokio::{
@@ -50,6 +52,8 @@ static BLOCK_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("block_pbf
 static TXN_PBFT_PREPARED_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_prepared"));
 static TXN_PBFT_COMMIT_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("txn_pbft_commit"));
 static ACCOUNT_CREATION_TOPIC: Lazy<Topic> = Lazy::new(|| Topic::new("account_creation"));
+
+pub static TRANSACTION_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct ChainResponse {
@@ -139,6 +143,8 @@ pub struct AppBehaviour {
     pub pbft: PBFTNode,
     #[behaviour(ignore)]
     pub storage_path: StoragePath,
+    #[behaviour(ignore)]
+    pub transaction_count: Arc<AtomicUsize>,
 }
 
 impl AppBehaviour {
@@ -157,6 +163,7 @@ impl AppBehaviour {
         let identify = Identify::new(
             IdentifyConfig::new("/sumotex/1.0.0".to_string(), KEYS.public()).with_agent_version("SUMOTEX v1.0".to_string())
         );
+        let transaction_count = Arc::new(AtomicUsize::new(0));
         let mut behaviour = Self {
             app,
             txn,
@@ -167,6 +174,7 @@ impl AppBehaviour {
             identify,
             response_sender,
             init_sender,
+            transaction_count
         };
         behaviour
     }
@@ -272,6 +280,7 @@ impl AppBehaviour {
                                     let mut mempool = txn_pool::Mempool::get_instance().lock().unwrap();
                                     mempool.add_transaction(txn.clone());
                                     println!("Transaction added to Mempool: {:?}", txn.clone().txn_hash.to_string());
+                                    TRANSACTION_COUNT.fetch_add(1, Ordering::Relaxed);
                                     Ok(()) // Ensure this is the returned value from the function
                                 },
                                 Err(e) => {
