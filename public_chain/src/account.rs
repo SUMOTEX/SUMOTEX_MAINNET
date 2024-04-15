@@ -26,7 +26,6 @@ pub struct Account {
     pub nonce: i64,
     pub contract_address: Option<Vec<String>>,
     pub owned_tokens:  Option<HashMap<String, Vec<u64>>>, // Contract address to list of token IDs
-    pub created_time:u64
 }
 #[derive(Debug)]
 pub enum SigningError {
@@ -51,7 +50,6 @@ impl Account {
             nonce: 1,
             contract_address: Some(Vec::new()),
             owned_tokens: None::<HashMap<String, Vec<u64>>>, // Initially, the account does not own any tokens
-            created_time:timestamp
         }
     }
 

@@ -86,6 +86,6 @@ server {
 Need to create https server port 443
 
 
-ls node /ip4/192.168.1.87/tcp/8100 12D3KooWCyukoXAA82EYPUHmZZKGm9bjTNKyqZLstLFsbZbYVZUB
-ls node /ip4/192.168.1.87/tcp/8101 12D3KooWG9C9kdQF6mvJoLSuLsi1fagBrbDtSxbTz7dj95FLpz9z
+ls node /ip4/54.169.145.214/tcp/8101 12D3KooWHPJtnmwwt56zxPTuJnfSVFX1fVv4Quf4ZeXqEP5syJjC
+ls node /ip4/13.215.205.24/tcp/8100 12D3KooWRk8FsJpXzBi7sxJafU6gmsE8Xg49qtBD2D9eyaqYWdRz
 ls node /ip4/192.168.1.87/tcp/8102 12D3KooWPNFYBZp7N7kqwyzm2uY8hgUa1wrStqnWd7EsC8FpLEng
