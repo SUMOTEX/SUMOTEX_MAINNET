@@ -223,7 +223,7 @@ async fn main() {
         }
         loop {
             // if let Some(port) = whitelisted_peers.pop() {
-                let address_str = format!("/ip4/{}/tcp/8101",(my_local_ip.to_string()));
+                let address_str = format!("/ip4/{}/tcp/8100",(my_local_ip.to_string()));
                 let the_address = Multiaddr::from_str(&address_str).expect("Failed to parse multiaddr");  
                 println!("{}",the_address);      
                 //Loop  to listen
@@ -263,10 +263,11 @@ async fn main() {
                         Some(p2p::EventType::LocalChainResponse(response.expect("response exists")))
                     },
                     event = swarm_public_net.select_next_some() => {
+                        let api_app =swarm_public_net.behaviour_mut().app.clone();
+                        rpc_connector::add_api_blocks(api_app.clone());
                         match event {
                             SwarmEvent::Behaviour(app_event) => {
-                                let api_app =swarm_public_net.behaviour_mut().app.clone();
-                                rpc_connector::add_api_blocks(api_app.clone());
+                              
                                 println!("Received network behaviour event: {:?}", app_event);
                                 match app_event {
                                     AppEvent::AccountCreation { propagation_source, message_id, data } => {
