@@ -202,6 +202,7 @@ async fn main() {
     //let binding = my_local_ip.to_string();
     if let Some(swarm_public_net) = &mut *swarm_public_net_guard {
         //rpc_connector::set_global_swarm_public_net(swarm_public_net);
+        swarm_public_net.behaviour_mut().app.genesis();
         loop {
             if let Some(port) = whitelisted_listener.pop() {
                 match TcpListener::bind(&port).await {
@@ -336,7 +337,7 @@ async fn main() {
                     match event {
                         p2p::EventType::Init => {
                             // let peers = p2p::get_list_peers(&swarm_public_net);
-                            swarm_public_net.behaviour_mut().app.genesis();
+                            
                             // info!("Connected nodes: {}", peers.len());
                             // if !peers.is_empty() {
                             //     let req = p2p::LocalChainRequest {
