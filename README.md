@@ -2,7 +2,7 @@ SUMOTEX MAINNET
 == OFFICIAL MAINNET ====
 COPYRIGHT AND OWN BY SUMOTEX HOLDING
 
-
+Update copyrights
 RUST_LOG=info cargo run
 
 Update to this if you are getting error for libp2p-noise on v0.39
