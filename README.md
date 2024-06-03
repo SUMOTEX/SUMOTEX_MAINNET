@@ -1,6 +1,4 @@
-SUMOTEX MAINNET
-== OFFICIAL MAINNET ====
+SUMOTEX MAINNET <br/>
+=== OFFICIAL MAINNET ==== <br/>
 COPYRIGHT AND OWN BY SUMOTEX HOLDING
 
-
-TPS current time = 500 txn per second. 
