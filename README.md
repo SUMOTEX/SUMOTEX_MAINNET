@@ -16,3 +16,5 @@ Advanced Verification: Utilizes Verkle trees for enhanced data verification over
 
 <h2>Technical Paper</h2>
 https://docs.sumotex.co/SUMOTEX_YELLOW_PAPER_v1.pdf
+<h2>Cybersecurity Partnership</h2>
+https://www.linkedin.com/pulse/sumotex-cybersecurity-malaysia-forge-strategic-alliance-elevate-q3i9c/
