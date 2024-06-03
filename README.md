@@ -14,5 +14,5 @@ Open Source: Transparent and secure, with no hidden vulnerabilities.
 <br/>
 Advanced Verification: Utilizes Verkle trees for enhanced data verification over traditional Merkle trees.
 
-<h2>Link</h2>
-- https://docs.sumotex.co/SUMOTEX_YELLOW_PAPER_v1.pdf
+<h2>Technical Paper</h2>
+https://docs.sumotex.co/SUMOTEX_YELLOW_PAPER_v1.pdf
