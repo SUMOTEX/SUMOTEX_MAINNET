@@ -1,53 +1,55 @@
 use libp2p::{
-    gossipsub::{IdentTopic as Topic},
-    kad::KademliaEvent,
-    swarm::{Swarm, SwarmEvent},
-    Multiaddr,
+    swarm::{Swarm,SwarmEvent}
 };
+use libp2p::gossipsub::{IdentTopic as Topic};
 use local_ip_address::local_ip;
 use log::{error, info};
-use std::collections::HashMap;
-use std::fs;
-use std::path::Path;
-use std::str::FromStr;
-use std::sync::{Arc, RwLock};
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
 use tokio::{
     io::{stdin, AsyncBufReadExt, BufReader},
-    net::TcpListener,
     select, spawn,
-    sync::{mpsc, Notify},
-    time::sleep,
+    sync::mpsc,
+    time::sleep
 };
-use tokio::signal;
-
-mod account;
-mod api;
-mod bridge;
-mod gas_calculator;
+use libp2p::kad::KademliaEvent;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::path::Path;
+use std::time::UNIX_EPOCH;
+use std::time::SystemTime;
+use std::collections::HashMap;
+use std::fs;
+use libp2p::Multiaddr;
+use std::str::FromStr;
+use tokio::time::{Duration};
+use libp2p::futures::StreamExt;
+mod verkle_tree;
 mod p2p;
+mod public_swarm;
+mod publisher;
+mod public_block;
 mod pbft;
 mod public_app;
-mod public_block;
-mod public_swarm;
 mod public_txn;
-mod publisher;
+mod bridge;
 mod rock_storage;
-mod rpc_connector;
+mod api;
+mod account;
 mod smart_contract;
-mod staking;
-mod token;
+mod rpc_connector;
+mod gas_calculator;
 mod txn_pool;
-mod verkle_tree;
-
+mod token;
+mod staking;
 use p2p::AppEvent;
 use bridge::accept_loop;
-use public_app::App;
+use crate::public_app::App;
+use std::sync::{RwLock, Arc};
 use publisher::Publisher;
-use public_swarm::AppBehaviour;
-use rock_storage::StoragePath;
-use rocksdb::{DBWithThreadMode, SingleThreaded};
+use tokio::net::TcpListener;
+use tokio::signal;
+use tokio::sync::Notify;
+use crate::p2p::AppBehaviour;
+use rocksdb::DBWithThreadMode;
+use rocksdb::SingleThreaded;
 type MySwarm = Swarm<AppBehaviour>;
 
 
@@ -107,20 +109,26 @@ fn open_or_create_storage(path: &str) -> Result<DBWithThreadMode<SingleThreaded>
 fn db_extract(db: Arc<RwLock<DBWithThreadMode<SingleThreaded>>>) -> DBWithThreadMode<SingleThreaded> {
     Arc::try_unwrap(db).unwrap().into_inner().unwrap()
 }
-
 pub fn remove_lock_file() {
-    let lock_paths = [
-        "./public_blockchain/LOCK",
-        "./account/LOCK",
-        "./contract/LOCK",
-        "./transactions/LOCK",
-        "./node/LOCK",
-    ];
-
-    for lock_path in &lock_paths {
-        if let Err(e) = fs::remove_file(lock_path) {
-            eprintln!("Error removing lock file {:?}: {:?}", lock_path, e);
-        }
+    let lock_path = "./public_blockchain/LOCK";
+    if let Err(e) = fs::remove_file(lock_path) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+    let lock_path_2 = "./account/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_2) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+    let lock_path_3 = "./contract/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_3) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+    let lock_path_4 = "./transactions/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_4) {
+        eprintln!("Error removing lock file: {:?}", e);
+    }
+    let lock_path_5 = "./node/LOCK";
+    if let Err(e) = fs::remove_file(lock_path_5) {
+        eprintln!("Error removing lock file: {:?}", e);
     }
 }
 
@@ -138,11 +146,7 @@ async fn block_producer() {
 #[tokio::main]
 async fn main() {
     pretty_env_logger::init();
-    //     let mut whitelisted_peers = vec![
-    //     "/ip4/46.137.235.97/tcp/8081",
-    //     "/ip4/13.228.172.186/tcp/8082",
-    //     // Add more whitelisted peers as needed
-    // ];
+
 
     let mut whitelisted_listener = vec![
         "127.0.0.1:8089",
