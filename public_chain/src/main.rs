@@ -1,55 +1,53 @@
 use libp2p::{
-    swarm::{Swarm,SwarmEvent}
+    gossipsub::{IdentTopic as Topic},
+    kad::KademliaEvent,
+    swarm::{Swarm, SwarmEvent},
+    Multiaddr,
 };
-use libp2p::gossipsub::{IdentTopic as Topic};
 use local_ip_address::local_ip;
 use log::{error, info};
-use tokio::{
-    io::{stdin, AsyncBufReadExt, BufReader},
-    select, spawn,
-    sync::mpsc,
-    time::sleep
-};
-use libp2p::kad::KademliaEvent;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::path::Path;
-use std::time::UNIX_EPOCH;
-use std::time::SystemTime;
 use std::collections::HashMap;
 use std::fs;
-use libp2p::Multiaddr;
+use std::path::Path;
 use std::str::FromStr;
-use tokio::time::{Duration};
-use libp2p::futures::StreamExt;
-mod verkle_tree;
+use std::sync::{Arc, RwLock};
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use tokio::{
+    io::{stdin, AsyncBufReadExt, BufReader},
+    net::TcpListener,
+    select, spawn,
+    sync::{mpsc, Notify},
+    time::sleep,
+};
+use tokio::signal;
+
+mod account;
+mod api;
+mod bridge;
+mod gas_calculator;
 mod p2p;
-mod public_swarm;
-mod publisher;
-mod public_block;
 mod pbft;
 mod public_app;
+mod public_block;
+mod public_swarm;
 mod public_txn;
-mod bridge;
+mod publisher;
 mod rock_storage;
-mod api;
-mod account;
-mod smart_contract;
 mod rpc_connector;
-mod gas_calculator;
-mod txn_pool;
-mod token;
+mod smart_contract;
 mod staking;
+mod token;
+mod txn_pool;
+mod verkle_tree;
+
 use p2p::AppEvent;
 use bridge::accept_loop;
-use crate::public_app::App;
-use std::sync::{RwLock, Arc};
+use public_app::App;
 use publisher::Publisher;
-use tokio::net::TcpListener;
-use tokio::signal;
-use tokio::sync::Notify;
-use crate::p2p::AppBehaviour;
-use rocksdb::DBWithThreadMode;
-use rocksdb::SingleThreaded;
+use public_swarm::AppBehaviour;
+use rock_storage::StoragePath;
+use rocksdb::{DBWithThreadMode, SingleThreaded};
 type MySwarm = Swarm<AppBehaviour>;
 
 
@@ -109,26 +107,20 @@ fn open_or_create_storage(path: &str) -> Result<DBWithThreadMode<SingleThreaded>
 fn db_extract(db: Arc<RwLock<DBWithThreadMode<SingleThreaded>>>) -> DBWithThreadMode<SingleThreaded> {
     Arc::try_unwrap(db).unwrap().into_inner().unwrap()
 }
+
 pub fn remove_lock_file() {
-    let lock_path = "./public_blockchain/LOCK";
-    if let Err(e) = fs::remove_file(lock_path) {
-        eprintln!("Error removing lock file: {:?}", e);
-    }
-    let lock_path_2 = "./account/LOCK";
-    if let Err(e) = fs::remove_file(lock_path_2) {
-        eprintln!("Error removing lock file: {:?}", e);
-    }
-    let lock_path_3 = "./contract/LOCK";
-    if let Err(e) = fs::remove_file(lock_path_3) {
-        eprintln!("Error removing lock file: {:?}", e);
-    }
-    let lock_path_4 = "./transactions/LOCK";
-    if let Err(e) = fs::remove_file(lock_path_4) {
-        eprintln!("Error removing lock file: {:?}", e);
-    }
-    let lock_path_5 = "./node/LOCK";
-    if let Err(e) = fs::remove_file(lock_path_5) {
-        eprintln!("Error removing lock file: {:?}", e);
+    let lock_paths = [
+        "./public_blockchain/LOCK",
+        "./account/LOCK",
+        "./contract/LOCK",
+        "./transactions/LOCK",
+        "./node/LOCK",
+    ];
+
+    for lock_path in &lock_paths {
+        if let Err(e) = fs::remove_file(lock_path) {
+            eprintln!("Error removing lock file {:?}: {:?}", lock_path, e);
+        }
     }
 }
 
