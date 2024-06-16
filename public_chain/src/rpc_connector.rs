@@ -711,7 +711,7 @@ pub async fn start_rpc() {
     println!("Starting RPC server...");
     let rocket_config = Config {
         address: std::net::IpAddr::V4(std::net::Ipv4Addr::new(0, 0, 0, 0)),
-        port: 8000, // or 8545 for dev
+        port: 80, // or 8545 for dev
         limits: Limits::new()
             .limit("json",ByteUnit::Megabyte(32)), // 32 MiB in bytes
         ..Config::default()
