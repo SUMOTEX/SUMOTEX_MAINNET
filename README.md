@@ -20,3 +20,5 @@ https://docs.sumotex.co/SUMOTEX_YELLOW_PAPER_v1.pdf
 https://www.linkedin.com/pulse/sumotex-cybersecurity-malaysia-forge-strategic-alliance-elevate-q3i9c/
 
 Start at: RUST_LOG=info cargo run
+
+ls node /ip4/54.169.145.214/tcp/8101 12D3KooWHiDFv2LnmE4HoompUvveUoX8Jh8cGgGbkBabewrSe1nT
