@@ -107,6 +107,7 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
     let kademlia = Kademlia::with_config(*PEER_ID, store, cfg);
 
     let transp = TokioTcpConfig::new()
+    .nodelay(true)
         .upgrade(upgrade::Version::V1)
         .authenticate(NoiseConfig::xx(auth_keys).into_authenticated())
         .multiplex(mplex::MplexConfig::new())
