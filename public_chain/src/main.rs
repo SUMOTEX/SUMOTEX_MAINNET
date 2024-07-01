@@ -264,7 +264,6 @@ async fn main() {
                         rpc_connector::add_api_blocks(api_app.clone());
                         match event {
                             SwarmEvent::Behaviour(app_event) => {
-                              
                                 println!("Received network behaviour event: {:?}", app_event);
                                 match app_event {
                                     AppEvent::AccountCreation { propagation_source, message_id, data } => {
