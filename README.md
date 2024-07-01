@@ -21,6 +21,6 @@ https://www.linkedin.com/pulse/sumotex-cybersecurity-malaysia-forge-strategic-al
 
 Start at: RUST_LOG=info cargo run
 
-ls node /ip4/172.26.13.79/tcp/8100 12D3KooWKyKmXgTK2ztGTrJCSRjMSEs9uZbNVBtVC5dQfGriC68A
-ls node /ip4/172.26.7.97/tcp/8101 12D3KooWRXEiwH7ZLsksTzuuFZHymKMXVRaS12mXtVH66CPjixo4
-ls node /ip4/172.26.9.135/tcp/8102 12D3KooWS2JkLKZ37Dohy1MiSYbsqFG8Dp9ei3SjCdrgejgXPUvy
+ls node /ip4/172.26.13.79/tcp/8100 12D3KooWRDzVfAXpR8tS8SFayXVsYpCVufHapsN9QnYc4vTTP9sP
+ls node /ip4/172.26.7.97/tcp/8101 12D3KooWRRyDGbaE95LQFkFji7FTRkP3hG1t3TEAdGdNF271214R
+ls node /ip4/172.26.9.135/tcp/8102 12D3KooWCXipzWfbJ7yc9Yi9uf1o5ntk9NrzktmZqDkVija1gMQ7
