@@ -148,7 +148,6 @@ pub async fn create_public_swarm(app: App,storage:StoragePath) {
         .executor(Box::new(|fut| {
             spawn(fut);
         }))
-        .keep_alive(KeepAlive::Yes)
         .build();
     set_global_swarm_public_net(swarm);
     //swarm
